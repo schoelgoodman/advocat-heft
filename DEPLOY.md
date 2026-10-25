@@ -1,26 +1,16 @@
 # Deploy auf Neo
 
-Anleitung für Hermes auf dem Homeserver. Drei Teile: das Image, das Plugin, der Inhalt. Die Reihenfolge einhalten.
+Anleitung für Hermes auf dem Homeserver. Zwei Teile: das Plugin, der Inhalt. Die Reihenfolge einhalten.
 
 Repo: `github.com/schoelgoodman/advocat-heft` (öffentlich, kein Token nötig).
 
-## 1. Image bauen
-
-Das Plugin zeigt auf das lokale Image `advocat-heft:local`. Es muss existieren, bevor der Dienst startet.
-
-```sh
-git clone https://github.com/schoelgoodman/advocat-heft.git ~/advocat-heft
-cd ~/advocat-heft
-docker build -t advocat-heft:local .
-```
-
-Das Image enthält nur den Setzer und die Redaktion, kein Markdown. Nach einem Code-Update: `git pull`, neu bauen, `systemctl restart docker-advocat`.
-
-## 2. Plugin eintragen
+## 1. Plugin eintragen
 
 1. Neo web → **Settings → core → plugins** → `github:schoelgoodman/advocat-heft` hinzufügen.
 2. Speichern, Apply.
 3. **Services → Advocat Finanz** und **Services → Advocat Redaktion** einschalten. Apply.
+
+Das Image baut Nix beim Apply aus dem Plugin (nix2container). Die Unit `advocat-image` lädt es als `advocat-heft:<hash>` in Docker, danach startet `docker-advocat`. Kein `docker build`, kein Clone nötig. Nach einem Code-Update reicht es, den Plugin-Input in Neo zu aktualisieren und Apply.
 
 Advocat Redaktion ist nur der Name `redaktion.<domain>` mit tinyauth davor. Er hat keinen eigenen Prozess und zeigt darum keine Units. Ohne Advocat Finanz bricht Apply mit einer Meldung ab.
 
@@ -33,7 +23,7 @@ Beim ersten Start legt der Dienst zwei leere Ordner an:
 
 `<appdata>` ist `neo.core.volumes.appdata` in der Neo-Konfiguration. Den echten Pfad dort nachsehen, nicht raten.
 
-## 3. Inhalt einspielen
+## 2. Inhalt einspielen
 
 Der Inhalt hängt als `advocat-content.zip` am Release `content-2026-10-25`. Das Zip enthält den Inhalt von `dev-content/` direkt (kein Oberordner), samt `.git`. Das `.git` muss mit: die Redaktion schreibt dort ihre Fassungen.
 
@@ -64,8 +54,9 @@ Besitzer und Rechte wie die anderen Ordner unter `<appdata>/advocat` setzen (Neo
 
 `site/` nicht anfassen. Ist es leer, baut der Dienst das HTML beim Start.
 
-## 4. Prüfen
+## 3. Prüfen
 
+- `systemctl status advocat-image` ist `active (exited)`, `docker image ls advocat-heft` zeigt genau einen Tag.
 - `systemctl status docker-advocat` läuft, `docker logs advocat` ohne Fehler.
 - `https://advocat.<domain>` zeigt die Startseite mit Bildern.
 - `https://advocat.<domain>/redaktion` antwortet 404. Das ist richtig.

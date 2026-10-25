@@ -1,17 +1,41 @@
 # Advocat-Heft: öffentliche Seite und Redaktion, ein Container.
-{...}: {
+{withSystem, ...}: {
   flake.modules.nixos.advocat-option = {
     config,
     lib,
+    pkgs,
     ...
   }:
     with lib;
-    with {inherit (lib.neo) mkOption mkEnableOption;}; {
+    with {inherit (lib.neo) mkOption mkEnableOption;}; let
+      image = withSystem pkgs.stdenv.hostPlatform.system ({config, ...}: config.packages.advocat-heft-image);
+    in {
       options.neo.services.advocat = mkOption {
         type = types.submodule {
           options =
             {
               enabled = mkEnableOption "Advocat Finanz" {rank = 0;};
+              telegram = {
+                botToken = mkOption {
+                  type = types.str;
+                  default = "";
+                  rank = 10;
+                  description = ''
+                    Token des Telegram-Bots (von @BotFather). Jede Anfrage aus dem Kontaktformular
+                    kommt dann als Nachricht. Leer: keine Nachricht, die Anfrage liegt trotzdem unter
+                    <appdata>/advocat/anfragen.
+                  '';
+                };
+                chatId = mkOption {
+                  type = types.str;
+                  default = "";
+                  rank = 20;
+                  description = ''
+                    Chat, in den der Bot schreibt: eine Benutzer-ID oder eine Gruppen-ID (beginnt mit -).
+                    Dem Bot vorher einmal schreiben bzw. ihn in die Gruppe aufnehmen, sonst darf er nicht.
+                  '';
+                };
+              };
             }
             // neo.mkReverseProxyOptions {
               subdomain = "advocat";
@@ -24,9 +48,10 @@
               ports = [4321];
             }
             // lib.neo.mkContainerDefinitions {
-              # Auf dem Homeserver bauen: docker build -t advocat-heft:local .
+              # Von diesem Flake gebaut, geladen von advocat-image.service.
               # Das Image enthält nur den Setzer, kein Markdown.
-              advocat = "advocat-heft:local";
+              advocat = image.imageRefUnsafe;
+              extraUnits = ["advocat-image"];
             }
             // lib.neo.mkAppdata "${config.neo.core.volumes.appdata}/advocat"
             // lib.neo.mkServiceMeta {

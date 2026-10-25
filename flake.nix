@@ -14,6 +14,7 @@
       url = "github:madebydamo/neo";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    nix2container.url = "github:nlewo/nix2container";
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
   };
 }
