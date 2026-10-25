@@ -8,18 +8,14 @@ import { repoRoot, siteDir, contentDir } from "../paths.ts";
 import { markdownToHtml } from "./crepe.ts";
 
 const FONTS: Record<string, string> = {
-  "inter-400.woff2": "@fontsource/inter/files/inter-latin-400-normal.woff2",
-  "inter-500.woff2": "@fontsource/inter/files/inter-latin-500-normal.woff2",
-  "inter-600.woff2": "@fontsource/inter/files/inter-latin-600-normal.woff2",
-  "inter-700.woff2": "@fontsource/inter/files/inter-latin-700-normal.woff2",
-  "inter-800.woff2": "@fontsource/inter/files/inter-latin-800-normal.woff2",
-  "newsreader-400.woff2": "@fontsource/newsreader/files/newsreader-latin-400-normal.woff2",
-  "newsreader-500.woff2": "@fontsource/newsreader/files/newsreader-latin-500-normal.woff2",
-  "newsreader-400-italic.woff2": "@fontsource/newsreader/files/newsreader-latin-400-italic.woff2",
-  "open-sans-400.woff2": "@fontsource/open-sans/files/open-sans-latin-400-normal.woff2",
-  "open-sans-500.woff2": "@fontsource/open-sans/files/open-sans-latin-500-normal.woff2",
-  "open-sans-600.woff2": "@fontsource/open-sans/files/open-sans-latin-600-normal.woff2",
-  "open-sans-700.woff2": "@fontsource/open-sans/files/open-sans-latin-700-normal.woff2",
+  "manrope-400.woff2": "@fontsource/manrope/files/manrope-latin-400-normal.woff2",
+  "manrope-500.woff2": "@fontsource/manrope/files/manrope-latin-500-normal.woff2",
+  "manrope-600.woff2": "@fontsource/manrope/files/manrope-latin-600-normal.woff2",
+  "manrope-700.woff2": "@fontsource/manrope/files/manrope-latin-700-normal.woff2",
+  "manrope-800.woff2": "@fontsource/manrope/files/manrope-latin-800-normal.woff2",
+  "cormorant-500.woff2": "@fontsource/cormorant-garamond/files/cormorant-garamond-latin-500-normal.woff2",
+  "cormorant-600.woff2": "@fontsource/cormorant-garamond/files/cormorant-garamond-latin-600-normal.woff2",
+  "cormorant-500-italic.woff2": "@fontsource/cormorant-garamond/files/cormorant-garamond-latin-500-italic.woff2",
 };
 
 function pageFile(site: string, href: string): string {
