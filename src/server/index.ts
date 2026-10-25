@@ -3,11 +3,13 @@ import http from "node:http";
 import path from "node:path";
 import { watch } from "chokidar";
 import { createServer as createVite, type ViteDevServer } from "vite";
-import { parseDocument, serializeDocument, type Art, type ContentDocument } from "../content/document.ts";
+import { parseDocument, redirectTarget, serializeDocument, type Art, type ContentDocument } from "../content/document.ts";
 import { loadDocuments } from "../content/load.ts";
+import { notFoundPage } from "../design/page.ts";
 import { commitIfChanged, ensureContentGit, logFile, restoreFile, showFile } from "../git/history.ts";
-import { contentDir, repoRoot, siteDir } from "../paths.ts";
-import { buildSite, rebuildDocuments } from "../render/build.ts";
+import { anfragenDir, contentDir, repoRoot, siteDir } from "../paths.ts";
+import { buildSite, copyAssets, rebuildDocuments } from "../render/build.ts";
+import { handleAnfrage } from "./anfrage.ts";
 
 const PORT = Number(process.env.PORT ?? 4321);
 const ARTS: readonly Art[] = ["brief", "kapitel", "recht"];
@@ -290,8 +292,9 @@ async function main(): Promise<void> {
   await ensureContentGit();
   try {
     await fs.access(path.join(siteDir(), "index.html"));
+    await copyAssets();
   } catch {
-    console.log("Setze das Heft zum ersten Mal …");
+    console.log("Setze die Seiten zum ersten Mal …");
     await buildSite();
   }
 
@@ -300,7 +303,10 @@ async function main(): Promise<void> {
     : await createVite({
         root: repoRoot,
         appType: "custom",
-        server: { middlewareMode: true },
+        server: {
+          middlewareMode: true,
+          watch: { ignored: ["**/site/**", "**/dev-content/**", "**/dist/**"] },
+        },
       });
   const server = http.createServer((req, res) => {
     const host = req.headers.host ?? "";
@@ -340,10 +346,23 @@ async function main(): Promise<void> {
       });
       return;
     }
+    if (req.method === "POST" && (url.pathname === "/kontakt" || url.pathname === "/kontakt/")) {
+      void handleAnfrage(req, res).catch((error: unknown) => {
+        console.error("Anfrage:", error instanceof Error ? error.message : error);
+        if (!res.headersSent) sendJson(res, 500, { error: "Fehler" });
+      });
+      return;
+    }
+    const target = redirectTarget(url.pathname);
+    if (target) {
+      res.writeHead(301, { location: target + url.search });
+      res.end();
+      return;
+    }
     void serveStatic(url.pathname, res).then((ok) => {
       if (!ok && !res.headersSent) {
-        res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
-        res.end("Nicht gefunden");
+        res.writeHead(404, { "content-type": "text/html; charset=utf-8" });
+        res.end(notFoundPage());
       }
     });
   });
@@ -375,6 +394,10 @@ async function main(): Promise<void> {
   server.listen(PORT, () => {
     console.log(`Heft auf http://127.0.0.1:${PORT}`);
     console.log(`Redaktion auf http://127.0.0.1:${PORT}/redaktion`);
+    console.log(`Anfragen nach ${anfragenDir()}`);
+    if (!process.env.TELEGRAM_BOT_TOKEN || !process.env.TELEGRAM_CHAT_ID) {
+      console.log("Telegram aus: TELEGRAM_BOT_TOKEN und TELEGRAM_CHAT_ID fehlen.");
+    }
   });
 }
 

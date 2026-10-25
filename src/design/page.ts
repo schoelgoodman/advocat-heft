@@ -1,6 +1,3 @@
-import { publicPath, type ContentDocument } from "../content/document.ts";
-import type { RegisterLink } from "../content/load.ts";
-
 function esc(value: string): string {
   return value
     .replaceAll("&", "&amp;")
@@ -9,93 +6,72 @@ function esc(value: string): string {
     .replaceAll('"', "&quot;");
 }
 
-function formatDatum(iso: string): string {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return "";
-  return new Intl.DateTimeFormat("de-CH", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    timeZone: "Europe/Zurich",
-  }).format(new Date(`${iso}T12:00:00+01:00`));
+const NAV: Array<[string, string]> = [
+  ["/", "Home"],
+  ["/angebot", "Unser Angebot"],
+  ["/ueber-uns", "Über uns"],
+  ["/neuigkeiten", "Neuigkeiten"],
+];
+
+function current(href: string, here: string): boolean {
+  if (href === "/") return here === "/";
+  return here === href || here.startsWith(`${href}/`);
 }
 
-function kicker(doc: ContentDocument): string {
-  const datum = formatDatum(doc.datum);
-  if (doc.art === "brief") {
-    const nummer = doc.nummer != null ? `Nr. ${doc.nummer}` : "Brief";
-    return datum ? `${nummer} · ${datum}` : nummer;
-  }
-  if (doc.art === "recht") return datum ? `Recht · ${datum}` : "Recht";
-  return datum ? `Kapitel · ${datum}` : "Kapitel";
-}
-
-function tree(): string {
-  return `<svg class="signet" viewBox="0 0 32 40" aria-hidden="true">
-    <path d="M16 38 V18" fill="none" stroke="currentColor" stroke-width="1.4"/>
-    <circle cx="16" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.4"/>
-    <path d="M16 16 v6 M12 22 h8" fill="none" stroke="currentColor" stroke-width="1.2"/>
-  </svg>`;
-}
-
-export function heftPage(options: {
-  doc: ContentDocument;
-  bodyHtml: string;
-  register: RegisterLink[];
-  briefs: ContentDocument[];
-  currentHref: string;
-}): string {
-  const { doc, bodyHtml, register, briefs, currentHref } = options;
-  const nav = register
-    .map((link) => {
-      const current = link.href === currentHref ? ' aria-current="page"' : "";
-      return `<a href="${esc(link.href)}"${current}>${esc(link.label)}</a>`;
-    })
-    .join("");
-  const legal = [
-    ["impressum", "Impressum"],
-    ["datenschutz", "Datenschutz"],
-    ["disclaimer", "Disclaimer"],
-  ]
-    .map(([slug, label]) => `<a href="/${slug}">${label}</a>`)
-    .join("");
-  const archive =
-    doc.rel === "kapitel/neuigkeiten.md"
-      ? `<section class="archiv"><h2>Ausgaben</h2><ol>${briefs
-          .map((brief) => {
-            const datum = formatDatum(brief.datum);
-            const nr = brief.nummer != null ? `Nr. ${brief.nummer}` : "Brief";
-            return `<li><a href="${esc(publicPath(brief.rel))}"><span>${esc(nr)}</span> ${esc(brief.titel)}</a><time>${esc(datum)}</time></li>`;
-          })
-          .join("")}</ol></section>`
-      : "";
-
+export function pageShell(options: { title: string; here: string; main: string }): string {
+  const year = new Date().getFullYear();
+  const links = NAV.map(([href, label]) => {
+    const mark = current(href, options.here) ? ' aria-current="page"' : "";
+    return `<a href="${href}"${mark}>${label}</a>`;
+  }).join("");
   return `<!DOCTYPE html>
 <html lang="de">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${esc(doc.titel)} · Advocat Finanz</title>
+  <title>${esc(options.title)}</title>
+  <link rel="icon" href="/brand/favicon.png" type="image/png" sizes="32x32">
   <link rel="stylesheet" href="/heft.css">
+  <script>try{if(localStorage.getItem("advocat-cookie")==="1")document.documentElement.classList.add("cookie-ok")}catch(e){}</script>
 </head>
 <body>
-  <div class="heft">
-    <aside class="register">
-      <a class="wortmarke" href="/">Advocat Finanz</a>
-      <p class="anspruch">Vermögen und Recht, ein Leben lang</p>
-      <nav>${nav}</nav>
-      ${tree()}
-    </aside>
-    <article>
-      <header>
-        <p class="kicker">${esc(kicker(doc))}</p>
-        <h1>${esc(doc.titel)}</h1>
-      </header>
-      <div class="satz">${bodyHtml}</div>
-      ${archive}
-    </article>
+  <header class="kopf">
+    <div class="kopf-innen">
+      <a class="logo" href="/"><img src="/media/Logo_Advocat_Finanz_2c.png" alt="Advocat Finanz" width="231" height="50"></a>
+      <nav id="menu" class="nav" aria-label="Hauptnavigation">
+        ${links}
+        <a class="btn btn-solid kontakt-mobil" href="/kontakt">Kontakt</a>
+      </nav>
+      <a class="btn btn-solid kontakt-desktop" href="/kontakt">Kontakt</a>
+      <button class="burger" type="button" aria-expanded="false" aria-controls="menu" aria-label="Menü"><span></span><span></span><span></span></button>
+    </div>
+  </header>
+  <main>${options.main}</main>
+  <footer class="fuss">
+    <div class="fuss-innen">
+      <div class="fuss-text">
+        <p><strong>Advocat Finanz AG</strong><br>
+        <a href="https://maps.app.goo.gl/poLBfgcPVnj2UWaW9">Rosenbergstrasse 50 | CH-9000 St. Gallen</a> | <a href="tel:+41712423030">Tel. +41 71 242 30 30</a> | <a href="mailto:office@advocat-finanz.ch">office@advocat-finanz.ch</a></p>
+        <p class="copy">©${year} Advocat Finanz AG | <a href="/impressum">Impressum</a> | <a href="/disclaimer">Disclaimer</a> | <a href="/datenschutz">Datenschutz</a></p>
+      </div>
+      <a class="fuss-claim" href="/"><img src="/brand/claim-footer.png" alt="Vermögen und Recht – ein Leben lang"></a>
+    </div>
+  </footer>
+  <div id="cookie-notice" class="cookies" role="dialog" aria-label="Cookie Compliance">
+    <p>Diese Website benutzt Cookies. Wenn Sie die Website weiter nutzen, gehen wir von Ihrem Einverständnis aus.</p>
+    <button type="button" class="cookie-ok">OK</button>
+    <button type="button" class="cookie-x" aria-label="Schliessen">×</button>
   </div>
-  <footer class="schluss">${legal}</footer>
+  <script src="/site.js" defer></script>
 </body>
 </html>
 `;
+}
+
+export function notFoundPage(): string {
+  return pageShell({
+    title: "Seite nicht gefunden – Advocat Finanz",
+    here: "",
+    main: `<div class="inhalt prosa"><h1>Seite nicht gefunden</h1><p>Diese Seite gibt es nicht.</p><p class="aktionen"><a class="btn btn-ghost" href="/">Zur Startseite</a></p></div>`,
+  });
 }

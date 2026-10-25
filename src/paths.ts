@@ -17,3 +17,11 @@ export function contentDir(): string {
 export function siteDir(): string {
   return path.resolve(process.env.SITE_DIR ?? path.join(repoRoot, "site"));
 }
+
+/**
+ * Anfragen aus dem Kontaktformular, eine JSON-Datei pro Anfrage.
+ * Bewusst nicht im Inhalts-Git: Personendaten gehören nicht in die Fassungen.
+ */
+export function anfragenDir(): string {
+  return path.resolve(process.env.ANFRAGEN_DIR ?? path.join(repoRoot, "dev-anfragen"));
+}
