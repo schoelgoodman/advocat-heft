@@ -32,6 +32,8 @@ export interface Revision {
   rev: string;
   date: string;
   message: string;
+  /** Wie die Datei in dieser Fassung hiess. Ein Newsletter bekommt beim Veröffentlichen einen neuen Namen. */
+  path: string;
 }
 
 /** Commitet nur die genannten Pfade. Eine handgeänderte andere Datei bleibt aussen vor. */
@@ -39,7 +41,14 @@ export async function commitIfChanged(message: string, files: string[]): Promise
   if (files.length === 0) return null;
   await ensureContentGit();
   const repo = git();
-  await repo.add(files);
+  // Ein gelöschter Entwurf, der nie eine Fassung hatte, ist für git kein Pfad.
+  const tracked = new Set((await repo.raw(["ls-files", "--", ...files])).split("\n").filter(Boolean));
+  const present = await Promise.all(
+    files.map((file) => fs.stat(path.join(contentDir(), file)).then(() => true, () => false)),
+  );
+  const known = files.filter((file, i) => present[i] || tracked.has(file));
+  if (known.length === 0) return null;
+  await repo.add(known);
   const staged = (await repo.diff(["--cached", "--name-only"])).trim();
   if (!staged) return null;
   const result = await repo.commit(message);
@@ -49,14 +58,15 @@ export async function commitIfChanged(message: string, files: string[]): Promise
 export async function logFile(rel: string): Promise<Revision[]> {
   await ensureContentGit();
   const repo = git();
-  const result = await repo.raw(["log", "--follow", "--format=%H%x09%aI%x09%s", "--", rel]);
+  const result = await repo.raw(["log", "--follow", "--name-only", "--format=%x1e%H%x09%aI%x09%s", "--", rel]);
   return result
-    .split("\n")
-    .map((line) => line.trim())
+    .split("\x1e")
+    .map((entry) => entry.trim())
     .filter(Boolean)
-    .map((line) => {
-      const [rev, date, ...rest] = line.split("\t");
-      return { rev: rev ?? "", date: date ?? "", message: rest.join("\t") };
+    .map((entry) => {
+      const [head = "", ...files] = entry.split("\n").map((line) => line.trim()).filter(Boolean);
+      const [rev, date, ...rest] = head.split("\t");
+      return { rev: rev ?? "", date: date ?? "", message: rest.join("\t"), path: files.at(-1) ?? rel };
     })
     .filter((item) => item.rev);
 }
@@ -68,8 +78,8 @@ export async function showFile(rel: string, rev: string): Promise<string> {
   return git().show([`${rev}:${rel}`]);
 }
 
-export async function restoreFile(rel: string, rev: string): Promise<void> {
-  const raw = await showFile(rel, rev);
+export async function restoreFile(rel: string, rev: string, from = rel): Promise<void> {
+  const raw = await showFile(from, rev);
   const file = path.join(contentDir(), rel);
   await fs.mkdir(path.dirname(file), { recursive: true });
   await fs.writeFile(file, raw.endsWith("\n") ? raw : `${raw}\n`, "utf8");

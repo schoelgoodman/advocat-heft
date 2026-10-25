@@ -3,12 +3,12 @@ import http from "node:http";
 import path from "node:path";
 import { watch } from "chokidar";
 import { createServer as createVite, type ViteDevServer } from "vite";
-import { parseDocument, redirectTarget, serializeDocument, type Art, type ContentDocument } from "../content/document.ts";
-import { loadDocuments } from "../content/load.ts";
+import { parseDocument, publicPath, redirectTarget, serializeDocument, type Art, type ContentDocument } from "../content/document.ts";
+import { editorOrder, loadDocuments } from "../content/load.ts";
 import { notFoundPage } from "../design/page.ts";
 import { commitIfChanged, ensureContentGit, logFile, restoreFile, showFile } from "../git/history.ts";
 import { anfragenDir, contentDir, repoRoot, siteDir } from "../paths.ts";
-import { buildSite, rebuildDocuments } from "../render/build.ts";
+import { buildSite, previewPage, rebuildDocuments } from "../render/build.ts";
 import { handleAnfrage } from "./anfrage.ts";
 
 const PORT = Number(process.env.PORT ?? 4321);
@@ -40,9 +40,50 @@ async function flushPending(): Promise<string | null> {
 
 function commitMessage(doc: Pick<ContentDocument, "art" | "titel" | "nummer">): string {
   const titel = doc.titel.replace(/[\r\n]/g, " ").slice(0, 120);
-  if (doc.art === "brief" && doc.nummer != null) return `Ausgabe ${doc.nummer}: ${titel}`;
+  if (doc.art === "brief") return titel;
   if (doc.art === "recht") return `Recht: ${titel}`;
   return `Kapitel: ${titel}`;
+}
+
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/ä/g, "ae")
+    .replace(/ö/g, "oe")
+    .replace(/ü/g, "ue")
+    .replace(/ß/g, "ss")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 60);
+}
+
+/** Das Thema ist der Titel ohne „Newsletter 36:“. */
+function thema(titel: string): string {
+  return titel.replace(/^Newsletter\s+\d+\s*:?\s*/i, "").trim();
+}
+
+async function readDoc(rel: string): Promise<ContentDocument> {
+  return parseDocument(await fs.readFile(path.join(contentDir(), rel), "utf8"), rel);
+}
+
+async function writeDoc(doc: ContentDocument): Promise<void> {
+  const file = path.join(contentDir(), doc.rel);
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  await fs.writeFile(file, serializeDocument(doc), "utf8");
+}
+
+function summary(doc: ContentDocument) {
+  return {
+    rel: doc.rel,
+    titel: doc.titel,
+    art: doc.art,
+    datum: doc.datum,
+    nummer: doc.nummer,
+    entwurf: doc.entwurf,
+    href: publicPath(doc.rel),
+  };
 }
 
 function safeRel(value: string): string {
@@ -120,16 +161,18 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     const rel = url.searchParams.get("rel");
     if (!rel) {
       const docs = await loadDocuments();
-      sendJson(res, 200, {
-        pages: docs
-          .map((doc) => ({ rel: doc.rel, titel: doc.titel, art: doc.art, datum: doc.datum, nummer: doc.nummer }))
-          .sort((a, b) => a.rel.localeCompare(b.rel, "de")),
-      });
+      sendJson(res, 200, { pages: editorOrder(docs).map(summary) });
       return;
     }
-    const file = path.join(contentDir(), safeRel(rel));
-    const doc = parseDocument(await fs.readFile(file, "utf8"), safeRel(rel));
-    sendJson(res, 200, doc);
+    const doc = await readDoc(safeRel(rel));
+    sendJson(res, 200, { ...doc, href: publicPath(doc.rel) });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/preview") {
+    const doc = await readDoc(safeRel(url.searchParams.get("rel") ?? ""));
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    res.end(await previewPage(doc));
     return;
   }
 
@@ -137,18 +180,19 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     const payload = JSON.parse((await readBody(req)).toString("utf8")) as ContentDocument;
     const rel = safeRel(payload.rel);
     if (!ARTS.includes(payload.art)) throw new Error("Unbekannte Art");
+    // Veröffentlichen und Zurückziehen haben eigene Wege. Ein spätes Speichern ändert den Stand nie.
+    const before = await readDoc(rel).catch(() => null);
     const doc: ContentDocument = {
       rel,
       art: payload.art,
       titel: String(payload.titel ?? "").trim() || "Ohne Titel",
       datum: String(payload.datum ?? ""),
       nummer: payload.nummer == null || payload.nummer === ("" as unknown) ? null : Number(payload.nummer),
+      entwurf: before?.entwurf ?? false,
       body: String(payload.body ?? ""),
     };
     if (doc.nummer != null && !Number.isFinite(doc.nummer)) doc.nummer = null;
-    const file = path.join(contentDir(), rel);
-    await fs.mkdir(path.dirname(file), { recursive: true });
-    await fs.writeFile(file, serializeDocument(doc), "utf8");
+    await writeDoc(doc);
     await rebuildDocuments([rel]);
     scheduleCommit(commitMessage(doc), rel);
     console.log(`schreibt ${rel}`);
@@ -157,30 +201,68 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
   }
 
   if (req.method === "POST" && url.pathname === "/api/briefs") {
-    const payload = JSON.parse((await readBody(req)).toString("utf8")) as { titel?: string };
     const docs = await loadDocuments();
     const nummer = Math.max(0, ...docs.map((doc) => doc.nummer ?? 0)) + 1;
-    const titel = (payload.titel ?? "").trim() || `Ausgabe ${nummer}`;
-    const slug = titel
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 60) || "ausgabe";
-    const rel = `briefe/${String(nummer).padStart(4, "0")}-${slug}.md`;
+    // Der Dateiname bekommt das Thema erst beim Veröffentlichen.
     const doc: ContentDocument = {
-      rel,
+      rel: `briefe/${String(nummer).padStart(4, "0")}-newsletter-${nummer}.md`,
       art: "brief",
-      titel,
+      titel: `Newsletter ${nummer}`,
       datum: new Date().toISOString().slice(0, 10),
       nummer,
-      body: "Schreiben Sie hier.\n",
+      entwurf: true,
+      body: "",
     };
-    await fs.writeFile(path.join(contentDir(), rel), serializeDocument(doc), "utf8");
+    await writeDoc(doc);
+    scheduleCommit(`Entwurf: Newsletter ${nummer}`, doc.rel);
+    sendJson(res, 200, { ...doc, href: publicPath(doc.rel) });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/publish") {
+    const payload = JSON.parse((await readBody(req)).toString("utf8")) as { rel?: string };
+    const oldRel = safeRel(payload.rel ?? "");
+    await flushPending();
+    const doc = await readDoc(oldRel);
+    if (doc.art === "brief" && !thema(doc.titel)) throw new Error("Bitte zuerst ein Thema eingeben.");
+    let rel = oldRel;
+    const stem = `${String(doc.nummer ?? 0).padStart(4, "0")}-newsletter-${doc.nummer}`;
+    const slug = slugify(thema(doc.titel));
+    if (doc.art === "brief" && path.posix.basename(oldRel, ".md") === stem && slug) {
+      const next = `briefe/${stem}-${slug}.md`;
+      const taken = await fs.stat(path.join(contentDir(), next)).then(() => true, () => false);
+      if (!taken) rel = next;
+    }
+    const published: ContentDocument = { ...doc, rel, entwurf: false };
+    await writeDoc(published);
+    if (rel !== oldRel) await fs.rm(path.join(contentDir(), oldRel), { force: true });
+    await rebuildDocuments([oldRel, rel]);
+    await commitIfChanged(`Veröffentlicht: ${published.titel}`, [oldRel, rel]);
+    sendJson(res, 200, { ...published, href: publicPath(rel) });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/unpublish") {
+    const payload = JSON.parse((await readBody(req)).toString("utf8")) as { rel?: string };
+    const rel = safeRel(payload.rel ?? "");
+    await flushPending();
+    const doc: ContentDocument = { ...(await readDoc(rel)), entwurf: true };
+    await writeDoc(doc);
     await rebuildDocuments([rel]);
-    scheduleCommit(commitMessage(doc), rel);
-    sendJson(res, 200, doc);
+    await commitIfChanged(`Zurückgezogen: ${doc.titel}`, [rel]);
+    sendJson(res, 200, { ...doc, href: publicPath(rel) });
+    return;
+  }
+
+  if (req.method === "DELETE" && url.pathname === "/api/pages") {
+    const rel = safeRel(url.searchParams.get("rel") ?? "");
+    const doc = await readDoc(rel);
+    if (!doc.entwurf) throw new Error("Nur Entwürfe lassen sich löschen.");
+    pendingFiles.delete(rel);
+    await flushPending();
+    await fs.rm(path.join(contentDir(), rel), { force: true });
+    await commitIfChanged(`Entwurf gelöscht: ${doc.titel}`, [rel]);
+    sendJson(res, 200, { ok: true });
     return;
   }
 
@@ -215,8 +297,9 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
       sendJson(res, 200, { revisions: await logFile(rel) });
       return;
     }
-    const raw = await showFile(rel, rev);
-    const doc = parseDocument(raw, rel);
+    const from = safeRel(url.searchParams.get("path") ?? rel);
+    const raw = await showFile(from, rev);
+    const doc = parseDocument(raw, from);
     const { markdownToHtml } = await import("../render/crepe.ts");
     const { publishHtml } = await import("../render/build.ts");
     sendJson(res, 200, { body: doc.body, html: publishHtml(await markdownToHtml(doc.body)), titel: doc.titel });
@@ -224,15 +307,18 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
   }
 
   if (req.method === "POST" && url.pathname === "/api/restore") {
-    const payload = JSON.parse((await readBody(req)).toString("utf8")) as { rel?: string; rev?: string };
+    const payload = JSON.parse((await readBody(req)).toString("utf8")) as { rel?: string; rev?: string; path?: string };
     const rel = safeRel(payload.rel ?? "");
+    const from = safeRel(payload.path ?? rel);
     const rev = payload.rev ?? "";
-    await restoreFile(rel, rev);
+    await flushPending();
+    const before = await readDoc(rel);
+    await restoreFile(rel, rev, from);
+    // Nur der Text kommt zurück. Ob die Seite online ist, bleibt, wie es war.
+    const doc: ContentDocument = { ...(await readDoc(rel)), rel, entwurf: before.entwurf };
+    await writeDoc(doc);
     await rebuildDocuments([rel]);
-    const raw = await fs.readFile(path.join(contentDir(), rel), "utf8");
-    const doc = parseDocument(raw, rel);
     const message = `Wiederhergestellt: ${doc.titel}`;
-    pendingFiles.delete(rel);
     await commitIfChanged(message, [rel]);
     sendJson(res, 200, { ok: true, doc });
     return;

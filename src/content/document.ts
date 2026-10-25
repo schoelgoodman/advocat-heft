@@ -7,6 +7,8 @@ export interface DocumentMeta {
   art: Art;
   titel: string;
   nummer: number | null;
+  /** Ein Entwurf liegt nur in der Redaktion. Der Setzer lässt ihn aus. */
+  entwurf: boolean;
   /** Pfad relativ zu CONTENT_DIR, mit Schrägstrichen. */
   rel: string;
 }
@@ -37,6 +39,7 @@ export function serializeDocument(doc: ContentDocument): string {
     `titel: ${yamlQuote(doc.titel)}`,
   ];
   if (doc.nummer != null) lines.push(`nummer: ${doc.nummer}`);
+  if (doc.entwurf) lines.push("entwurf: true");
   lines.push("---", "", doc.body.trim(), "");
   return lines.join("\n");
 }
@@ -64,6 +67,7 @@ export function parseDocument(raw: string, rel: string): ContentDocument {
     art: art as Art,
     titel: unquote(fields.get("titel") ?? ""),
     nummer: nummer != null && Number.isFinite(nummer) ? nummer : null,
+    entwurf: unquote(fields.get("entwurf") ?? "") === "true",
     body: match[2].trim(),
   };
 }

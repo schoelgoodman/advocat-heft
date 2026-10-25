@@ -411,6 +411,7 @@ async function main(): Promise<void> {
       art: "brief",
       titel: title,
       nummer,
+      entwurf: false,
       body,
     });
   }
@@ -433,6 +434,7 @@ async function main(): Promise<void> {
       art: target.art,
       titel: target.titel ?? decodeText(page.title.rendered),
       nummer: null,
+      entwurf: false,
       body,
     };
     await writeDoc(dir, doc);

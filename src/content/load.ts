@@ -83,3 +83,16 @@ export function registerLinks(docs: ContentDocument[]): RegisterLink[] {
   }
   return links;
 }
+
+/** Reihenfolge in der Redaktion: Newsletter, Entwürfe zuoberst, dann die Seiten wie im Register, zuletzt Recht. */
+export function editorOrder(docs: ContentDocument[]): ContentDocument[] {
+  const briefs = docs
+    .filter((doc) => doc.art === "brief")
+    .sort((a, b) => Number(b.entwurf) - Number(a.entwurf) || (b.nummer ?? 0) - (a.nummer ?? 0));
+  const byRel = new Map(docs.map((doc) => [doc.rel, doc]));
+  const kapitel = registerLinks(docs).flatMap((link) => byRel.get(link.rel) ?? []);
+  const recht = docs
+    .filter((doc) => doc.art === "recht")
+    .sort((a, b) => a.titel.localeCompare(b.titel, "de"));
+  return [...briefs, ...kapitel, ...recht];
+}

@@ -97,8 +97,21 @@ async function writeDocument(site: string, doc: ContentDocument, teasers: Teaser
   await writePage(site, view.here, pageShell({ title: view.title, here: view.here, main: view.main }));
 }
 
+/** Was auf der Seite steht. Entwürfe bleiben in der Redaktion. */
+async function publishedDocuments(): Promise<ContentDocument[]> {
+  return (await loadDocuments()).filter((doc) => !doc.entwurf);
+}
+
+/** Eine Seite so, wie sie veröffentlicht aussähe. Für die Vorschau eines Entwurfs. */
+export async function previewPage(doc: ContentDocument): Promise<string> {
+  const teasers = teasersFor(briefsNewestFirst(await publishedDocuments()));
+  const html = publishHtml(await markdownToHtml(doc.body));
+  const view = renderDocument({ ...doc, html, teasers });
+  return pageShell({ title: view.title, here: view.here, main: view.main });
+}
+
 export async function buildSite(): Promise<{ pages: number; index: string }> {
-  const docs = await loadDocuments();
+  const docs = await publishedDocuments();
   const briefs = briefsNewestFirst(docs);
   const teasers = teasersFor(briefs);
   const site = siteDir();
@@ -122,7 +135,7 @@ export async function buildSite(): Promise<{ pages: number; index: string }> {
 
 /** Baut nur die geänderten Seiten neu. Ein Brief erneuert auch Startseite und Archiv. */
 export async function rebuildDocuments(rels: string[]): Promise<void> {
-  const docs = await loadDocuments();
+  const docs = await publishedDocuments();
   const teasers = teasersFor(briefsNewestFirst(docs));
   const site = siteDir();
   await fs.mkdir(site, { recursive: true });
