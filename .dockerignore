@@ -1,0 +1,7 @@
+node_modules
+dev-content
+site
+dist
+.git
+*.md
+!src/**/*.md

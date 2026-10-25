@@ -1,0 +1,197 @@
+@font-face {
+  font-family: "Newsreader";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/newsreader-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Newsreader";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/newsreader-400-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Newsreader";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/newsreader-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/inter-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/inter-500.woff2") format("woff2");
+}
+
+:root {
+  --paper: #f4f0e6;
+  --ink: #1c1915;
+  --olive: #5f6b45;
+  --rule: rgba(28, 25, 21, 0.16);
+  --sans: "Inter", "Helvetica Neue", sans-serif;
+  --serif: "Newsreader", "Iowan Old Style", "Palatino Linotype", serif;
+}
+
+* { box-sizing: border-box; }
+html { background: var(--paper); color: var(--ink); }
+body {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 1.15rem;
+  line-height: 1.55;
+}
+::selection { background: #e1e4d4; }
+a { color: var(--olive); }
+img { max-width: 100%; height: auto; }
+
+.heft {
+  display: grid;
+  grid-template-columns: 13.5rem minmax(0, 38rem);
+  column-gap: 4.5rem;
+  max-width: 62rem;
+  margin: 0 auto;
+  padding: 3.2rem 1.6rem 4rem;
+}
+
+.register {
+  position: sticky;
+  top: 2rem;
+  align-self: start;
+  font-family: var(--sans);
+}
+.wortmarke {
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+.anspruch {
+  margin: 0.4rem 0 1.4rem;
+  color: rgba(28, 25, 21, 0.72);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+.register nav { display: flex; flex-direction: column; gap: 0.15rem; }
+.register nav a {
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 0.92rem;
+  padding: 0.18rem 0;
+  border-top: 1px solid transparent;
+}
+.register nav a[aria-current="page"] { color: var(--olive); }
+.signet {
+  display: block;
+  width: 1.6rem;
+  height: 2rem;
+  margin-top: 2.4rem;
+  color: var(--olive);
+}
+
+article header { margin-bottom: 1.6rem; }
+.kicker {
+  margin: 0 0 0.6rem;
+  font-family: var(--sans);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--olive);
+}
+h1 {
+  margin: 0;
+  font-size: 2.35rem;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.satz { max-width: 38rem; }
+.satz > :first-child { margin-top: 0; }
+.satz p { margin: 0 0 1rem; }
+.satz h2, .satz h3, .satz h4 {
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 1.8rem 0 0.6rem;
+}
+.satz h2 { font-size: 1.55rem; }
+.satz h3 { font-size: 1.25rem; }
+.satz a { text-underline-offset: 0.15em; }
+.satz ul, .satz ol { margin: 0 0 1rem; padding-left: 1.2rem; }
+.satz li { margin: 0.2rem 0; }
+.satz img { display: block; margin: 1.2rem 0; }
+
+.satz blockquote {
+  margin: 0.4rem 0 1rem;
+  padding: 0;
+  border: 0;
+  font-style: italic;
+  color: rgba(28, 25, 21, 0.86);
+}
+.satz blockquote p { margin: 0; }
+
+.archiv { margin-top: 2.4rem; border-top: 1px solid var(--rule); padding-top: 1.2rem; }
+.archiv h2 { font-size: 1.3rem; margin: 0 0 0.8rem; }
+.archiv ol { list-style: none; margin: 0; padding: 0; }
+.archiv li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.8rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--sans);
+  font-size: 0.95rem;
+}
+.archiv a { color: var(--ink); text-decoration: none; }
+.archiv a span { color: var(--olive); margin-right: 0.4rem; }
+.archiv time { color: rgba(28, 25, 21, 0.62); }
+
+.schluss {
+  max-width: 62rem;
+  margin: 0 auto;
+  padding: 0 1.6rem 3rem;
+  display: flex;
+  gap: 1.2rem;
+  font-family: var(--sans);
+  font-size: 0.82rem;
+}
+.schluss a { color: rgba(28, 25, 21, 0.72); }
+
+@media (min-width: 980px) {
+  .satz blockquote {
+    float: right;
+    clear: right;
+    width: 11rem;
+    margin: 0.2rem -13.5rem 0.8rem 1.2rem;
+    font-size: 0.98rem;
+    line-height: 1.4;
+  }
+}
+
+@media (max-width: 800px) {
+  .heft {
+    grid-template-columns: 1fr;
+    row-gap: 1.6rem;
+    padding-top: 1.6rem;
+  }
+  .register { position: static; }
+  .register nav { flex-direction: row; flex-wrap: wrap; gap: 0.4rem 0.9rem; }
+  .signet { margin-top: 1rem; }
+  h1 { font-size: 1.85rem; }
+  .satz blockquote {
+    margin: 0.8rem 0 1rem 1rem;
+    padding-left: 0.8rem;
+    border-left: 1px solid var(--olive);
+  }
+  .archiv li { grid-template-columns: 1fr; gap: 0.15rem; }
+}

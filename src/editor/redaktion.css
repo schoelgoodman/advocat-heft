@@ -1,0 +1,73 @@
+@font-face {
+  font-family: "Newsreader";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/newsreader-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Newsreader";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/newsreader-400-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/inter-400.woff2") format("woff2");
+}
+
+:root {
+  --paper: #f4f0e6;
+  --ink: #1c1915;
+  --olive: #5f6b45;
+  --sans: "Inter", "Helvetica Neue", sans-serif;
+  --serif: "Newsreader", Palatino, serif;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+}
+.redaktion {
+  display: grid;
+  grid-template-columns: 18rem minmax(0, 42rem);
+  gap: 2rem;
+  max-width: 68rem;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+aside .wort { margin: 0 0 0.8rem; letter-spacing: 0.04em; }
+#neu, aside button, .felder select, input {
+  font: inherit;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid rgba(28, 25, 21, 0.25);
+  border-radius: 0;
+  padding: 0.35rem 0.5rem;
+}
+#liste { display: flex; flex-direction: column; gap: 0.25rem; margin: 1rem 0; }
+#liste button { text-align: left; }
+#liste button[aria-current="true"] { color: var(--olive); border-color: var(--olive); }
+aside h2 { font-size: 0.95rem; margin: 1.4rem 0 0.4rem; }
+#fassungen { list-style: none; padding: 0; margin: 0; font-size: 0.82rem; }
+#fassungen li { display: grid; gap: 0.2rem; padding: 0.45rem 0; border-top: 1px solid rgba(28, 25, 21, 0.12); }
+#vorschau {
+  margin-top: 0.8rem;
+  font-family: var(--serif);
+  font-size: 0.95rem;
+}
+label { display: grid; gap: 0.2rem; font-size: 0.82rem; margin-bottom: 0.7rem; }
+.felder { display: grid; grid-template-columns: 1fr 8rem 9rem; gap: 0.6rem; }
+.status { min-height: 1.2rem; color: var(--olive); font-size: 0.85rem; }
+#editor { min-height: 60vh; font-family: var(--serif); font-size: 1.15rem; }
+.milkdown { background: transparent; }
+@media (max-width: 800px) {
+  .redaktion { grid-template-columns: 1fr; }
+  .felder { grid-template-columns: 1fr; }
+}
