@@ -14,8 +14,8 @@
     "dev": "tsx src/server/index.ts"
   },
   "dependencies": {
-    "@fontsource/cormorant-garamond": "^5.3.0",
     "@fontsource/manrope": "^5.3.0",
+    "@fontsource/marcellus": "^5.3.0",
     "@milkdown/crepe": "^7.18.0",
     "chokidar": "^4.0.3",
     "happy-dom": "^20.0.11",

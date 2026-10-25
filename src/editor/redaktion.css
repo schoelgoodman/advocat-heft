@@ -1,16 +1,9 @@
 @font-face {
-  font-family: "Cormorant Garamond";
+  font-family: Marcellus;
   font-style: normal;
-  font-weight: 500;
+  font-weight: 400;
   font-display: swap;
-  src: url("/fonts/cormorant-500.woff2") format("woff2");
-}
-@font-face {
-  font-family: "Cormorant Garamond";
-  font-style: italic;
-  font-weight: 500;
-  font-display: swap;
-  src: url("/fonts/cormorant-500-italic.woff2") format("woff2");
+  src: url("/fonts/marcellus-400.woff2") format("woff2");
 }
 @font-face {
   font-family: Manrope;
@@ -35,7 +28,7 @@
   --quiet: rgba(28, 25, 21, 0.6);
   --rot: #9a3b2a;
   --sans: Manrope, "Helvetica Neue", sans-serif;
-  --serif: "Cormorant Garamond", Garamond, Georgia, serif;
+  --serif: Marcellus, Georgia, serif;
 }
 * { box-sizing: border-box; }
 body {
@@ -184,7 +177,7 @@ textarea.titel:focus { outline: none; border-bottom-color: var(--olive); }
   --crepe-font-title: var(--serif);
   --crepe-font-default: var(--sans);
 }
-.milkdown h1, .milkdown h2, .milkdown h3 { font-weight: 500; font-variant-numeric: lining-nums; }
+.milkdown h1, .milkdown h2, .milkdown h3 { font-weight: 400; font-variant-numeric: lining-nums; }
 .tipp { font-size: 0.8rem; color: var(--quiet); margin: 0.5rem 0 2rem; }
 kbd { font-family: var(--sans); border: 1px solid var(--line); padding: 0 0.3rem; background: #fff; }
 

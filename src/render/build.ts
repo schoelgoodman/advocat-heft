@@ -13,9 +13,7 @@ const FONTS: Record<string, string> = {
   "manrope-600.woff2": "@fontsource/manrope/files/manrope-latin-600-normal.woff2",
   "manrope-700.woff2": "@fontsource/manrope/files/manrope-latin-700-normal.woff2",
   "manrope-800.woff2": "@fontsource/manrope/files/manrope-latin-800-normal.woff2",
-  "cormorant-500.woff2": "@fontsource/cormorant-garamond/files/cormorant-garamond-latin-500-normal.woff2",
-  "cormorant-600.woff2": "@fontsource/cormorant-garamond/files/cormorant-garamond-latin-600-normal.woff2",
-  "cormorant-500-italic.woff2": "@fontsource/cormorant-garamond/files/cormorant-garamond-latin-500-italic.woff2",
+  "marcellus-400.woff2": "@fontsource/marcellus/files/marcellus-latin-400-normal.woff2",
 };
 
 function pageFile(site: string, href: string): string {
