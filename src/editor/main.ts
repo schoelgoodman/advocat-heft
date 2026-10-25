@@ -55,6 +55,8 @@ let crepe: CrepeEditor | null = null;
 let current: Doc | null = null;
 let saveTimer: number | null = null;
 let armed = false;
+let alleBriefe: PageSummary[] = [];
+let sichtbar = 10;
 
 root.innerHTML = `
   <div class="redaktion">
@@ -63,6 +65,7 @@ root.innerHTML = `
       <button type="button" class="haupt" data-neu>+ Neuer Newsletter</button>
       <h2>Newsletter</h2>
       <nav id="briefe"></nav>
+      <button type="button" class="leise mehr" id="mehr" hidden></button>
       <details id="seiten-gruppe">
         <summary>Übrige Seiten</summary>
         <nav id="seiten"></nav>
@@ -114,6 +117,7 @@ root.innerHTML = `
 
 const briefe = root.querySelector<HTMLElement>("#briefe")!;
 const seiten = root.querySelector<HTMLElement>("#seiten")!;
+const mehr = root.querySelector<HTMLButtonElement>("#mehr")!;
 const seitenGruppe = root.querySelector<HTMLDetailsElement>("#seiten-gruppe")!;
 const start = root.querySelector<HTMLElement>("#start")!;
 const form = root.querySelector<HTMLFormElement>("#blatt")!;
@@ -313,8 +317,19 @@ function listItem(page: PageSummary): HTMLButtonElement {
 async function loadList(): Promise<void> {
   const response = await fetch("/api/pages");
   const json = (await response.json()) as { pages: PageSummary[] };
-  briefe.replaceChildren(...json.pages.filter((page) => page.art === "brief").map(listItem));
+  alleBriefe = json.pages.filter((page) => page.art === "brief");
   seiten.replaceChildren(...json.pages.filter((page) => page.art !== "brief").map(listItem));
+  renderBriefe();
+}
+
+/** Zeigt die neuesten Newsletter, ältere erst auf Wunsch. */
+function renderBriefe(): void {
+  const offen = alleBriefe.findIndex((page) => page.rel === current?.rel);
+  if (offen >= sichtbar) sichtbar = Math.ceil((offen + 1) / 10) * 10;
+  briefe.replaceChildren(...alleBriefe.slice(0, sichtbar).map(listItem));
+  const rest = alleBriefe.length - sichtbar;
+  mehr.hidden = rest <= 0;
+  mehr.textContent = `Ältere anzeigen (noch ${rest})`;
   markCurrent();
 }
 
@@ -408,7 +423,7 @@ async function openPage(rel: string): Promise<void> {
   setSaved("");
   renderStand();
   history.replaceState(null, "", `#${current.rel}`);
-  markCurrent();
+  renderBriefe();
   await mountEditor(current.body);
   void loadHistory(current.rel);
   if (brief && current.entwurf && !titelInput.value) titelInput.focus();
@@ -653,6 +668,10 @@ window.addEventListener("beforeunload", (event) => {
 for (const element of root.querySelectorAll<HTMLButtonElement>("[data-neu]")) {
   element.addEventListener("click", () => void newBrief());
 }
+mehr.addEventListener("click", () => {
+  sichtbar += 10;
+  renderBriefe();
+});
 
 const info = (await fetch("/api/info").then((response) => response.json()).catch(() => ({}))) as { publicUrl?: string };
 publicOrigin = info.publicUrl ?? "";

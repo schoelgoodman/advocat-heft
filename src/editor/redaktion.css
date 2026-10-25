@@ -214,3 +214,4 @@ dialog p { margin: 0 0 1.4rem; line-height: 1.5; }
 dialog .aktionen { justify-content: flex-end; }
 .haupt.gefahr { background: var(--rot); border-color: var(--rot); }
 .haupt.gefahr:hover { background: var(--ink); border-color: var(--ink); }
+aside .mehr { display: block; margin: 0.3rem 0 0; font-size: 0.82rem; }
