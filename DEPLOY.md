@@ -1,0 +1,80 @@
+# Deploy auf Neo
+
+Anleitung für Hermes auf dem Homeserver. Drei Teile: das Image, das Plugin, der Inhalt. Die Reihenfolge einhalten.
+
+Repo: `github.com/schoelgoodman/advocat-heft` (privat).
+
+## 0. Zugang zu GitHub
+
+Das Repo ist privat. Neo holt Plugins mit der Git-Identität der Maschine (**Settings → core → git**). Eine der zwei Varianten:
+
+- SSH: den **Git SSH public key** aus der Core-Seite als Deploy Key (nur lesen) im Repo eintragen. Plugin-URL dann `git+ssh://git@github.com/schoelgoodman/advocat-heft`.
+- Token: unter `[core.git.tokens]` einen fine-grained Token für `github.com` eintragen, nur `Contents: read` auf diesem Repo. Plugin-URL dann `github:schoelgoodman/advocat-heft`.
+
+Derselbe Zugang reicht für Klonen und für den Release-Download unten.
+
+## 1. Image bauen
+
+Das Plugin zeigt auf das lokale Image `advocat-heft:local`. Es muss existieren, bevor der Dienst startet.
+
+```sh
+git clone git@github.com:schoelgoodman/advocat-heft.git ~/advocat-heft
+cd ~/advocat-heft
+docker build -t advocat-heft:local .
+```
+
+Das Image enthält nur den Setzer und die Redaktion, kein Markdown. Nach einem Code-Update: `git pull`, neu bauen, `systemctl restart docker-advocat`.
+
+## 2. Plugin eintragen
+
+1. Neo web → **Settings → core → plugins** → die URL aus Schritt 0 hinzufügen.
+2. Speichern, Apply.
+3. **Services → Advocat Finanz** einschalten. Apply.
+
+Beim ersten Start legt der Dienst zwei leere Ordner an:
+
+```
+<appdata>/advocat/content   ← Markdown, Bilder, Git der Fassungen
+<appdata>/advocat/site      ← erzeugtes HTML, wird beim Start gefüllt
+```
+
+`<appdata>` ist `neo.core.volumes.appdata` in der Neo-Konfiguration. Den echten Pfad dort nachsehen, nicht raten.
+
+## 3. Inhalt einspielen
+
+Der Inhalt hängt als `advocat-content.zip` am Release `content-2026-10-25`. Das Zip enthält den Inhalt von `dev-content/` direkt (kein Oberordner), samt `.git`. Das `.git` muss mit: die Redaktion schreibt dort ihre Fassungen.
+
+```sh
+gh release download content-2026-10-25 -R schoelgoodman/advocat-heft -p advocat-content.zip -D /tmp
+echo "900dde296f56c3b5d50316e7784dcd9501aa2e8715a6ee8c8a5dd410ff75ac96  /tmp/advocat-content.zip" | sha256sum -c
+
+systemctl stop docker-advocat
+unzip -q /tmp/advocat-content.zip -d <appdata>/advocat/content
+systemctl start docker-advocat
+```
+
+Danach muss es so aussehen:
+
+```
+<appdata>/advocat/content/
+├── .git/
+├── README.md
+├── briefe/     35 Newsletter
+├── kapitel/    9 feste Seiten
+├── media/      Bilder
+└── recht/      Impressum, Datenschutz, Disclaimer
+```
+
+Liegt dort ein Ordner `dev-content/` oder `advocat-content/` statt `briefe/` usw., ist eine Ebene zu viel entpackt. Den Inhalt eine Ebene hochschieben.
+
+Besitzer und Rechte wie die anderen Ordner unter `<appdata>/advocat` setzen (Neo legt sie im `preStart` an). Ist `content` nicht leer, wenn der Zip kommt, nichts überschreiben und Bescheid geben.
+
+`site/` nicht anfassen. Ist es leer, baut der Dienst das HTML beim Start.
+
+## 4. Prüfen
+
+- `systemctl status docker-advocat` läuft, `docker logs advocat` ohne Fehler.
+- `https://advocat.<domain>` zeigt die Startseite mit Bildern.
+- `https://advocat.<domain>/redaktion` antwortet 404. Das ist richtig.
+- `https://redaktion.<domain>` verlangt tinyauth und zeigt danach die Redaktion. Braucht einen DNS-Eintrag, falls kein Wildcard da ist; sonst den Namen in den Custom Domains des Dienstes eintragen.
+- `git -C <appdata>/advocat/content log --oneline` zeigt `Übernahme aus WordPress`.

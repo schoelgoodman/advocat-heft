@@ -13,7 +13,7 @@ Die Seite ist dann auf `http://127.0.0.1:4321`, die Redaktion auf `http://127.0.
 
 ## Neo
 
-Das Plugin ist die Flake in diesem Repo. Auf dem Homeserver:
+Das Plugin ist die Flake in diesem Repo. Die ausführliche Anleitung für den Server steht in `DEPLOY.md`. Kurz:
 
 1. `docker build -t advocat-heft:local .`
 2. Das Plugin eintragen und den Dienst `advocat` einschalten.
