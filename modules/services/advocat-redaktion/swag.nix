@@ -1,4 +1,4 @@
-# Redaktion: alles hinter tinyauth. Die Wurzel springt auf /redaktion.
+# Redaktion: alles hinter tinyauth. Die Wurzel ist die Redaktion.
 {...}: {
   flake.modules.nixos.advocat-redaktion-swag = {
     config,
@@ -15,9 +15,6 @@
         include /config/nginx/ssl.conf;
         include /config/nginx/geo-access.conf;
         client_max_body_size 32m;
-
-        # return läuft vor auth_request. Der Sprung verrät nichts, /redaktion prüft dann.
-        location = / { return 302 /redaktion; }
 
         location / {
           ${lib.optionalString (!(cfg.auth.enabled && config.neo.services.tinyauth.enabled)) "return 403;"}

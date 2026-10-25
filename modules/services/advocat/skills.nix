@@ -52,7 +52,7 @@
         - `docker-advocat` is active
         - `GET https://${cfg.subdomain}.<domain>/` returns 200 without login
         - `GET https://${cfg.subdomain}.<domain>/redaktion` returns 404
-        - `https://${redaktion.subdomain}.<domain>` redirects to tinyauth, then shows the editor
+        - `https://${redaktion.subdomain}.<domain>/` redirects to tinyauth, then shows the editor at the root (`/redaktion` there redirects to `/`)
       '';
     };
   };

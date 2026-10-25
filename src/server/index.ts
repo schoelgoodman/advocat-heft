@@ -264,9 +264,9 @@ function inside(root: string, file: string): boolean {
   return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
 }
 
-async function serveEditor(urlPath: string, res: http.ServerResponse): Promise<boolean> {
+/** `index.html` für den Einstieg, sonst ein Pfad unter `assets/`. */
+async function serveEditor(rel: string, res: http.ServerResponse): Promise<boolean> {
   if (!productionEditor) return false;
-  const rel = urlPath === "/redaktion" || urlPath === "/redaktion/" ? "index.html" : urlPath.replace(/^\//, "");
   if (rel !== "index.html" && !rel.startsWith("assets/")) return false;
   const file = path.join(editorDist, rel);
   if (!inside(editorDist, file)) return false;
@@ -308,8 +308,11 @@ async function main(): Promise<void> {
   const server = http.createServer((req, res) => {
     const host = req.headers.host ?? "";
     const url = new URL(req.url ?? "/", `http://${host || "localhost"}`);
-    if (host.startsWith("redaktion.") && (url.pathname === "/" || url.pathname === "")) {
-      res.writeHead(302, { location: "/redaktion" });
+    const aufRedaktion = host.startsWith("redaktion.");
+    const unterRedaktion = url.pathname === "/redaktion" || url.pathname === "/redaktion/";
+    // Auf redaktion.<domain> ist die Redaktion die Wurzel. Lokal gibt es nur einen Namen, dort bleibt /redaktion.
+    if (aufRedaktion && unterRedaktion) {
+      res.writeHead(301, { location: "/" + url.search });
       res.end();
       return;
     }
@@ -320,9 +323,10 @@ async function main(): Promise<void> {
       });
       return;
     }
-    if (url.pathname === "/redaktion" || url.pathname === "/redaktion/" || url.pathname.startsWith("/assets/")) {
+    const einstieg = aufRedaktion ? url.pathname === "/" : unterRedaktion;
+    if (einstieg || url.pathname.startsWith("/assets/")) {
       if (productionEditor) {
-        void serveEditor(url.pathname, res).then((ok) => {
+        void serveEditor(einstieg ? "index.html" : url.pathname.slice(1), res).then((ok) => {
           if (!ok && !res.headersSent) {
             res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
             res.end("Redaktion ist nicht gebaut.");
@@ -330,7 +334,7 @@ async function main(): Promise<void> {
         });
         return;
       }
-      if (url.pathname === "/redaktion" || url.pathname === "/redaktion/") {
+      if (einstieg) {
         res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
         res.end(editorHtml());
         return;

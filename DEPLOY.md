@@ -60,5 +60,5 @@ Besitzer und Rechte wie die anderen Ordner unter `<appdata>/advocat` setzen (Neo
 - `systemctl status docker-advocat` läuft, `docker logs advocat` ohne Fehler.
 - `https://advocat.<domain>` zeigt die Startseite mit Bildern.
 - `https://advocat.<domain>/redaktion` antwortet 404. Das ist richtig.
-- `https://redaktion.<domain>` verlangt tinyauth und zeigt danach die Redaktion. `redaktion.<domain>` nicht in die Custom Domains eintragen.
+- `https://redaktion.<domain>/` verlangt tinyauth und zeigt danach die Redaktion direkt an der Wurzel (`/redaktion` springt auf `/`). `redaktion.<domain>` nicht in die Custom Domains eintragen.
 - `git -C <appdata>/advocat/content log --oneline` zeigt `Übernahme aus WordPress`.
