@@ -20,7 +20,7 @@
           ${lib.optionalString (!(cfg.auth.enabled && config.neo.services.tinyauth.enabled)) "return 403;"}
           include /config/nginx/proxy.conf;
           include /config/nginx/resolver.conf;
-          set $upstream_app advocat;
+          set $upstream_app advocat-redaktion;
           set $upstream_port 4321;
           set $upstream_proto http;
           proxy_pass $upstream_proto://$upstream_app:$upstream_port;

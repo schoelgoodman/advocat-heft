@@ -21,7 +21,9 @@
         The Advocat Finanz website, the Redaktion editor, content updates, restoring an old version, rebuilding the image.
 
         ## Architecture notes
-        - One container: `advocat` (image `advocat-heft:<nix-hash>`, built by the plugin flake with nix2container, port 4321). Code: https://github.com/schoelgoodman/advocat-heft
+        - Two containers from one image (`advocat-heft:<nix-hash>`, built by the plugin flake with nix2container, port 4321). Code: https://github.com/schoelgoodman/advocat-heft
+          - `advocat` (`ROLLE=seite`): renders and serves the public site, takes contact requests, watches `content/` and re-renders changed pages. The only writer of `site/`
+          - `advocat-redaktion` (`ROLLE=redaktion`, service `advocat-redaktion`): editor and API. Writes `content/` and its git only; `site/` is mounted read-only
         - The image holds only the renderer and the editor. No Markdown is baked in
         - `${appdata}/content` is mounted at `/content`: Markdown (`briefe/`, `kapitel/`, `recht/`), `media/` and its own `.git`
         - `${appdata}/site` is mounted at `/site`: generated HTML. Fully re-rendered on every start, rebuilt per page on change
@@ -29,11 +31,12 @@
         - Telegram: options `telegram.botToken` and `telegram.chatId` (currently ${if cfg.telegram.botToken != "" && cfg.telegram.chatId != "" then "set" else "not set"}). Without both, requests are only stored
         - The container runs as `neo.core.uid:gid`. Files under appdata must stay owned by that user
         - Public site: `${cfg.subdomain}.<domain>`. `/redaktion` and `/api/` return 404 there
-        - Redaktion: separate Neo service `advocat-redaktion` at `${redaktion.subdomain}.<domain>`, behind tinyauth (currently ${if redaktion.enabled then "enabled" else "disabled"}). Same container, no units of its own, so it shows no processes in the UI. Stop and restart through `advocat`
+        - Redaktion: separate Neo service `advocat-redaktion` at `${redaktion.subdomain}.<domain>`, behind tinyauth (currently ${if redaktion.enabled then "enabled" else "disabled"}). Unit `docker-advocat-redaktion`. Stopping it leaves the public site up
+        - New newsletters start as drafts (`entwurf: true` in the frontmatter). Drafts are not rendered until published in the Redaktion
         - Every save in the Redaktion becomes a commit in `content/.git` after about 20 seconds of quiet. Restore writes the old file back as a new commit `Wiederhergestellt: …`
 
         ## Procedures
-        1. Health-check unit `docker-advocat`, then `docker logs advocat --tail 100`
+        1. Health-check units `docker-advocat` and `docker-advocat-redaktion`, then `docker logs advocat --tail 100` (rendering, contact form) or `docker logs advocat-redaktion --tail 100` (saves, publishing, errors from the editor)
         2. Code update: update the plugin input in Neo and apply. `advocat-image.service` loads the new image, then `docker-advocat` restarts
         3. Content history: `git -C ${appdata}/content log --oneline`
         4. Full re-render: restart the unit
@@ -49,7 +52,7 @@
         - A custom domain proxies to the public site only. The Redaktion is never reachable on it
 
         ## Verification
-        - `docker-advocat` is active
+        - `docker-advocat` and `docker-advocat-redaktion` are active
         - `GET https://${cfg.subdomain}.<domain>/` returns 200 without login
         - `GET https://${cfg.subdomain}.<domain>/redaktion` returns 404
         - `https://${redaktion.subdomain}.<domain>/` redirects to tinyauth, then shows the editor at the root (`/redaktion` there redirects to `/`)

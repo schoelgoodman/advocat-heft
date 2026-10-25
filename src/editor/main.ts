@@ -151,10 +151,8 @@ function ask(options: { titel: string; text: string; ja: string; nein?: string; 
   });
 }
 
-/** Auf redaktion.<domain> liegt die Seite unter advocat.<domain>. Lokal ist es derselbe Server. */
-const publicOrigin = location.hostname.startsWith("redaktion.")
-  ? `${location.protocol}//advocat.${location.host.slice("redaktion.".length)}`
-  : "";
+/** Die öffentliche Adresse kommt vom Server (PUBLIC_URL). Lokal ist es derselbe Server. */
+let publicOrigin = "";
 
 const dateFormat = new Intl.DateTimeFormat("de-CH", { day: "numeric", month: "short", year: "numeric" });
 
@@ -656,6 +654,8 @@ for (const element of root.querySelectorAll<HTMLButtonElement>("[data-neu]")) {
   element.addEventListener("click", () => void newBrief());
 }
 
+const info = (await fetch("/api/info").then((response) => response.json()).catch(() => ({}))) as { publicUrl?: string };
+publicOrigin = info.publicUrl ?? "";
 await loadList();
 const wanted = decodeURIComponent(location.hash.slice(1));
 if (wanted) await openPage(wanted);

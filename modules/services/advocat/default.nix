@@ -51,6 +51,8 @@
           environment = {
             TZ = config.neo.core.timeZone;
             NODE_ENV = "production";
+            # Nur die Seite. Die Redaktion ist der Container von advocat-redaktion.
+            ROLLE = "seite";
             CONTENT_DIR = "/content";
             SITE_DIR = "/site";
             ANFRAGEN_DIR = "/anfragen";

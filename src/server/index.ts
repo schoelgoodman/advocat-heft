@@ -12,6 +12,25 @@ import { buildSite, previewPage, rebuildDocuments } from "../render/build.ts";
 import { handleAnfrage } from "./anfrage.ts";
 
 const PORT = Number(process.env.PORT ?? 4321);
+
+/**
+ * Auf Neo laufen zwei Container aus demselben Image.
+ * `seite`: setzt und liefert die öffentliche Seite, nimmt Anfragen an. Schreibt als einziger nach SITE_DIR.
+ * `redaktion`: Editor und API. Schreibt nur Inhalt und Fassungen; die Seite merkt die Änderung an den Dateien.
+ * Ohne ROLLE (lokal) macht ein Prozess beides.
+ */
+const ROLLE = process.env.ROLLE ?? "beide";
+if (!["seite", "redaktion", "beide"].includes(ROLLE)) throw new Error(`Unbekannte ROLLE "${ROLLE}"`);
+const setztSeite = ROLLE !== "redaktion";
+const hatRedaktion = ROLLE !== "seite";
+
+/** Die öffentliche Adresse, für „Auf der Website ansehen“. Leer: derselbe Server. */
+const PUBLIC_URL = (process.env.PUBLIC_URL ?? "").replace(/\/+$/, "");
+
+/** Setzt geänderte Seiten neu, wenn dieser Prozess die Seite setzt. Sonst tut es der Container `seite`. */
+async function updateSite(rels: string[]): Promise<void> {
+  if (setztSeite) await rebuildDocuments(rels);
+}
 const ARTS: readonly Art[] = ["brief", "kapitel", "recht"];
 
 let commitTimer: NodeJS.Timeout | null = null;
@@ -131,14 +150,19 @@ async function serveStatic(urlPath: string, res: http.ServerResponse): Promise<b
   if (stat?.isDirectory() || !path.extname(decoded)) {
     file = path.join(file, "index.html");
   }
-  try {
-    const data = await fs.readFile(file);
-    res.writeHead(200, { "content-type": MIME[path.extname(file)] ?? "application/octet-stream" });
-    res.end(data);
-    return true;
-  } catch {
-    return false;
+  // Ein frisch hochgeladenes Bild liegt im Inhalt, bevor die Seite es kopiert hat.
+  const fallback = decoded.startsWith("/media/") ? path.join(contentDir(), decoded) : null;
+  for (const candidate of fallback ? [file, fallback] : [file]) {
+    try {
+      const data = await fs.readFile(candidate);
+      res.writeHead(200, { "content-type": MIME[path.extname(candidate)] ?? "application/octet-stream" });
+      res.end(data);
+      return true;
+    } catch {
+      // Nächster Ort.
+    }
   }
+  return false;
 }
 
 function editorHtml(): string {
@@ -169,6 +193,11 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     return;
   }
 
+  if (req.method === "GET" && url.pathname === "/api/info") {
+    sendJson(res, 200, { publicUrl: PUBLIC_URL });
+    return;
+  }
+
   if (req.method === "GET" && url.pathname === "/api/preview") {
     const doc = await readDoc(safeRel(url.searchParams.get("rel") ?? ""));
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
@@ -193,7 +222,7 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     };
     if (doc.nummer != null && !Number.isFinite(doc.nummer)) doc.nummer = null;
     await writeDoc(doc);
-    await rebuildDocuments([rel]);
+    await updateSite([rel]);
     scheduleCommit(commitMessage(doc), rel);
     console.log(`schreibt ${rel}`);
     sendJson(res, 200, { ok: true, message: commitMessage(doc) });
@@ -215,6 +244,7 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     };
     await writeDoc(doc);
     scheduleCommit(`Entwurf: Newsletter ${nummer}`, doc.rel);
+    console.log(`neuer Entwurf ${doc.rel}`);
     sendJson(res, 200, { ...doc, href: publicPath(doc.rel) });
     return;
   }
@@ -236,8 +266,9 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     const published: ContentDocument = { ...doc, rel, entwurf: false };
     await writeDoc(published);
     if (rel !== oldRel) await fs.rm(path.join(contentDir(), oldRel), { force: true });
-    await rebuildDocuments([oldRel, rel]);
+    await updateSite([oldRel, rel]);
     await commitIfChanged(`Veröffentlicht: ${published.titel}`, [oldRel, rel]);
+    console.log(`veröffentlicht ${rel}`);
     sendJson(res, 200, { ...published, href: publicPath(rel) });
     return;
   }
@@ -248,8 +279,9 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     await flushPending();
     const doc: ContentDocument = { ...(await readDoc(rel)), entwurf: true };
     await writeDoc(doc);
-    await rebuildDocuments([rel]);
+    await updateSite([rel]);
     await commitIfChanged(`Zurückgezogen: ${doc.titel}`, [rel]);
+    console.log(`zurückgezogen ${rel}`);
     sendJson(res, 200, { ...doc, href: publicPath(rel) });
     return;
   }
@@ -262,6 +294,7 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     await flushPending();
     await fs.rm(path.join(contentDir(), rel), { force: true });
     await commitIfChanged(`Entwurf gelöscht: ${doc.titel}`, [rel]);
+    console.log(`Entwurf gelöscht ${rel}`);
     sendJson(res, 200, { ok: true });
     return;
   }
@@ -283,8 +316,7 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     const media = path.join(contentDir(), "media", name);
     await fs.mkdir(path.dirname(media), { recursive: true });
     await fs.writeFile(media, bytes);
-    await fs.mkdir(path.join(siteDir(), "media"), { recursive: true });
-    await fs.copyFile(media, path.join(siteDir(), "media", name));
+    if (setztSeite) await copyMediaFile(media);
     pendingFiles.add(`media/${name}`);
     sendJson(res, 200, { url: `../media/${name}` });
     return;
@@ -317,9 +349,10 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     // Nur der Text kommt zurück. Ob die Seite online ist, bleibt, wie es war.
     const doc: ContentDocument = { ...(await readDoc(rel)), rel, entwurf: before.entwurf };
     await writeDoc(doc);
-    await rebuildDocuments([rel]);
+    await updateSite([rel]);
     const message = `Wiederhergestellt: ${doc.titel}`;
     await commitIfChanged(message, [rel]);
+    console.log(`wiederhergestellt ${rel} aus ${rev.slice(0, 7)}`);
     sendJson(res, 200, { ok: true, doc });
     return;
   }
@@ -374,12 +407,42 @@ async function copyMediaFile(file: string): Promise<void> {
   await fs.copyFile(file, dest);
 }
 
+function watchContent(): void {
+  watch(contentDir(), {
+    ignoreInitial: true,
+    // Bind-Mounts auf dem Neo-Volume melden inotify oft nicht. Polling sieht die Datei trotzdem.
+    usePolling: true,
+    interval: 300,
+    ignored: /(^|[/\\])\.git([/\\]|$)/,
+    awaitWriteFinish: { stabilityThreshold: 200, pollInterval: 100 },
+  }).on("error", (error: unknown) => {
+    console.error(error instanceof Error ? error.message : error);
+  }).on("all", (event, file) => {
+    const rel = path.relative(contentDir(), file).replaceAll("\\", "/");
+    if (rel.startsWith("media/") && (event === "add" || event === "change")) {
+      void copyMediaFile(file).catch((error: unknown) => {
+        console.error(error instanceof Error ? error.message : error);
+      });
+      return;
+    }
+    if (!rel.endsWith(".md") || rel.includes("..")) return;
+    if (!rel.startsWith("briefe/") && !rel.startsWith("kapitel/") && !rel.startsWith("recht/")) return;
+    console.log(`setzt ${rel}`);
+    void rebuildDocuments([rel]).catch((error: unknown) => {
+      console.error(error instanceof Error ? error.message : error);
+    });
+  });
+}
+
 async function main(): Promise<void> {
-  await ensureContentGit();
-  // Immer neu setzen: nach einem Code-Update passt altes HTML nicht zum neuen heft.css.
-  console.log("Setze die Seiten …");
-  const built = await buildSite();
-  console.log(`${built.pages} Seiten gesetzt.`);
+  console.log(`Rolle: ${ROLLE}`);
+  if (hatRedaktion) await ensureContentGit();
+  if (setztSeite) {
+    // Immer neu setzen: nach einem Code-Update passt altes HTML nicht zum neuen heft.css.
+    console.log("Setze die Seiten …");
+    const built = await buildSite();
+    console.log(`${built.pages} Seiten gesetzt.`);
+  }
 
   const vite: ViteDevServer | null = productionEditor
     ? null
@@ -394,7 +457,8 @@ async function main(): Promise<void> {
   const server = http.createServer((req, res) => {
     const host = req.headers.host ?? "";
     const url = new URL(req.url ?? "/", `http://${host || "localhost"}`);
-    const aufRedaktion = host.startsWith("redaktion.");
+    // Der Container `redaktion` hat nur den einen Namen, dort ist die Redaktion immer die Wurzel.
+    const aufRedaktion = ROLLE === "redaktion" || host.startsWith("redaktion.");
     const unterRedaktion = url.pathname === "/redaktion" || url.pathname === "/redaktion/";
     // Auf redaktion.<domain> ist die Redaktion die Wurzel. Lokal gibt es nur einen Namen, dort bleibt /redaktion.
     if (aufRedaktion && unterRedaktion) {
@@ -410,6 +474,11 @@ async function main(): Promise<void> {
       return;
     }
     const einstieg = aufRedaktion ? url.pathname === "/" : unterRedaktion;
+    if (!hatRedaktion && (einstieg || url.pathname.startsWith("/assets/") || url.pathname.startsWith("/api/"))) {
+      res.writeHead(404, { "content-type": "text/html; charset=utf-8" });
+      res.end(notFoundPage());
+      return;
+    }
     if (einstieg || url.pathname.startsWith("/assets/")) {
       if (productionEditor) {
         void serveEditor(einstieg ? "index.html" : url.pathname.slice(1), res).then((ok) => {
@@ -429,11 +498,12 @@ async function main(): Promise<void> {
     if (url.pathname.startsWith("/api/")) {
       void handleApi(req, res, url).catch((error: unknown) => {
         const message = error instanceof Error ? error.message : "Fehler";
+        console.error(`${req.method} ${url.pathname}: ${message}`);
         if (!res.headersSent) sendJson(res, 400, { error: message });
       });
       return;
     }
-    if (req.method === "POST" && (url.pathname === "/kontakt" || url.pathname === "/kontakt/")) {
+    if (setztSeite && req.method === "POST" && (url.pathname === "/kontakt" || url.pathname === "/kontakt/")) {
       void handleAnfrage(req, res).catch((error: unknown) => {
         console.error("Anfrage:", error instanceof Error ? error.message : error);
         if (!res.headersSent) sendJson(res, 500, { error: "Fehler" });
@@ -454,33 +524,12 @@ async function main(): Promise<void> {
     });
   });
 
-  watch(contentDir(), {
-    ignoreInitial: true,
-    // Bind-Mounts auf dem Neo-Volume melden inotify oft nicht. Polling sieht die Datei trotzdem.
-    usePolling: true,
-    interval: 300,
-    ignored: /(^|[/\\])\.git([/\\]|$)/,
-    awaitWriteFinish: { stabilityThreshold: 200, pollInterval: 100 },
-  }).on("error", (error: unknown) => {
-    console.error(error instanceof Error ? error.message : error);
-  }).on("all", (event, file) => {
-    const rel = path.relative(contentDir(), file).replaceAll("\\", "/");
-    if (rel.startsWith("media/") && (event === "add" || event === "change")) {
-      void copyMediaFile(file).catch((error: unknown) => {
-        console.error(error instanceof Error ? error.message : error);
-      });
-      return;
-    }
-    if (!rel.endsWith(".md") || rel.includes("..")) return;
-    if (!rel.startsWith("briefe/") && !rel.startsWith("kapitel/") && !rel.startsWith("recht/")) return;
-    void rebuildDocuments([rel]).catch((error: unknown) => {
-      console.error(error instanceof Error ? error.message : error);
-    });
-  });
+  if (setztSeite) watchContent();
 
   server.listen(PORT, () => {
-    console.log(`Heft auf http://127.0.0.1:${PORT}`);
-    console.log(`Redaktion auf http://127.0.0.1:${PORT}/redaktion`);
+    if (setztSeite) console.log(`Heft auf http://127.0.0.1:${PORT}`);
+    if (hatRedaktion) console.log(`Redaktion auf http://127.0.0.1:${PORT}${ROLLE === "redaktion" ? "/" : "/redaktion"}`);
+    if (!setztSeite) return;
     console.log(`Anfragen nach ${anfragenDir()}`);
     if (!process.env.TELEGRAM_BOT_TOKEN || !process.env.TELEGRAM_CHAT_ID) {
       console.log("Telegram aus: TELEGRAM_BOT_TOKEN und TELEGRAM_CHAT_ID fehlen.");

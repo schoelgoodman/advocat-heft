@@ -31,6 +31,16 @@ export function publishHtml(html: string): string {
   return html.replace(/(src|href)="(?:\.\.\/)+media\//g, '$1="/media/');
 }
 
+/**
+ * Kopiert als neue, beschreibbare Datei. `fs.copyFile` übernimmt die Rechte, und aus dem
+ * Nix-Store ist alles 0444: dann scheitert das nächste Überschreiben mit EACCES.
+ */
+async function copyWritable(from: string, to: string): Promise<void> {
+  const data = await fs.readFile(from);
+  await fs.rm(to, { force: true });
+  await fs.writeFile(to, data);
+}
+
 async function copyDir(from: string, to: string): Promise<void> {
   await fs.mkdir(to, { recursive: true });
   const entries = await fs.readdir(from, { withFileTypes: true });
@@ -38,7 +48,7 @@ async function copyDir(from: string, to: string): Promise<void> {
     const src = path.join(from, entry.name);
     const dest = path.join(to, entry.name);
     if (entry.isDirectory()) await copyDir(src, dest);
-    else if (entry.isFile()) await fs.copyFile(src, dest);
+    else if (entry.isFile()) await copyWritable(src, dest);
   }
 }
 
@@ -60,16 +70,16 @@ export async function copyAssets(): Promise<void> {
   const site = siteDir();
   await fs.mkdir(path.join(site, "fonts"), { recursive: true });
   await fs.mkdir(path.join(site, "brand"), { recursive: true });
-  await fs.copyFile(path.join(repoRoot, "src/design/heft.css"), path.join(site, "heft.css"));
-  await fs.copyFile(path.join(repoRoot, "src/design/site.js"), path.join(site, "site.js"));
+  await copyWritable(path.join(repoRoot, "src/design/heft.css"), path.join(site, "heft.css"));
+  await copyWritable(path.join(repoRoot, "src/design/site.js"), path.join(site, "site.js"));
   for (const [name, rel] of Object.entries(FONTS)) {
-    await fs.copyFile(path.join(repoRoot, "node_modules", rel), path.join(site, "fonts", name));
+    await copyWritable(path.join(repoRoot, "node_modules", rel), path.join(site, "fonts", name));
   }
   const brand = path.join(repoRoot, "src/design/brand");
   const names = await fs.readdir(brand);
   for (const name of names) {
     const src = path.join(brand, name);
-    if ((await fs.stat(src)).isFile()) await fs.copyFile(src, path.join(site, "brand", name));
+    if ((await fs.stat(src)).isFile()) await copyWritable(src, path.join(site, "brand", name));
   }
 }
 

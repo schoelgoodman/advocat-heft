@@ -12,7 +12,7 @@ Repo: `github.com/schoelgoodman/advocat-heft` (öffentlich, kein Token nötig).
 
 Das Image baut Nix beim Apply aus dem Plugin (nix2container). Die Unit `advocat-image` lädt es als `advocat-heft:<hash>` in Docker, danach startet `docker-advocat`. Kein `docker build`, kein Clone nötig. Nach einem Code-Update reicht es, den Plugin-Input in Neo zu aktualisieren und Apply.
 
-Advocat Redaktion ist nur der Name `redaktion.<domain>` mit tinyauth davor. Er hat keinen eigenen Prozess und zeigt darum keine Units. Ohne Advocat Finanz bricht Apply mit einer Meldung ab.
+Advocat Redaktion ist ein eigener Container (`docker-advocat-redaktion`) aus demselben Image, unter `redaktion.<domain>` mit tinyauth davor. Neo zeigt seine Units und Logs beim Dienst Advocat Redaktion. Er schreibt nur in `content/`; die Seite setzt `docker-advocat` neu, sobald sich dort etwas ändert. Ohne Advocat Finanz bricht Apply mit einer Meldung ab.
 
 Beim ersten Start legt der Dienst zwei leere Ordner an:
 

@@ -26,7 +26,7 @@ Das Plugin ist die Flake in diesem Repo. Sie baut das Image selbst (`modules/pac
 1. Das Plugin eintragen und die Dienste `advocat` und `advocat-redaktion` einschalten.
 2. `dev-content/` inklusive `.git` nach `<appdata>/advocat/content` kopieren. `<appdata>/advocat/site` ist das erzeugte HTML; der Server setzt es bei jedem Start neu.
 
-Die öffentliche Seite heisst `advocat.<domain>`. Die Redaktion ist ein eigener Neo-Dienst, `advocat-redaktion`, unter `redaktion.<domain>` (an der Wurzel, `/redaktion` springt auf `/`) und verlangt tinyauth. Sie hat keinen eigenen Container und spricht mit dem von `advocat`. Auf dem öffentlichen Namen antworten `/redaktion` und `/api` mit 404.
+Die öffentliche Seite heisst `advocat.<domain>`. Die Redaktion ist ein eigener Neo-Dienst, `advocat-redaktion`, unter `redaktion.<domain>` (an der Wurzel, `/redaktion` springt auf `/`) und verlangt tinyauth. Beide laufen aus demselben Image, je als eigener Container: `advocat` mit `ROLLE=seite` setzt und liefert die Seite und schreibt als einziger nach `site/`; `advocat-redaktion` mit `ROLLE=redaktion` schreibt nur Inhalt und Fassungen und sieht `site/` nur lesend. Die Seite bemerkt jede Änderung am Inhalt und setzt die betroffenen Seiten neu. Stoppen der Redaktion lässt die Seite online. Auf dem öffentlichen Namen antworten `/redaktion` und `/api` mit 404. Lokal, ohne `ROLLE`, macht ein Prozess beides.
 
 Der eigene Dienst ist nötig, weil SWAG Zertifikate nur für die Subdomains der Dienste holt. `redaktion.<domain>` nie als Custom Domain eintragen: Neo leitet Custom Domains auf die öffentliche Seite, dort ist `/redaktion` 404. Eine eigene Domain wie `advocat-finanz.ch` kommt in die Custom Domains von `advocat`.
 
