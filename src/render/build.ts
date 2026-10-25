@@ -42,6 +42,14 @@ async function copyDir(from: string, to: string): Promise<void> {
   }
 }
 
+/** Leert den Ordner, lässt ihn aber stehen. Auf Neo ist SITE_DIR ein Bind-Mount, rmdir gibt dort EBUSY. */
+async function emptyDir(dir: string): Promise<void> {
+  await fs.mkdir(dir, { recursive: true });
+  for (const name of await fs.readdir(dir)) {
+    await fs.rm(path.join(dir, name), { recursive: true, force: true });
+  }
+}
+
 async function writePage(site: string, href: string, html: string): Promise<void> {
   const file = pageFile(site, href);
   await fs.mkdir(path.dirname(file), { recursive: true });
@@ -94,8 +102,7 @@ export async function buildSite(): Promise<{ pages: number; index: string }> {
   const briefs = briefsNewestFirst(docs);
   const teasers = teasersFor(briefs);
   const site = siteDir();
-  await fs.rm(site, { recursive: true, force: true });
-  await fs.mkdir(site, { recursive: true });
+  await emptyDir(site);
 
   const media = path.join(contentDir(), "media");
   try {

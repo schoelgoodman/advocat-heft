@@ -24,7 +24,7 @@
         - One container: `advocat` (image `advocat-heft:<nix-hash>`, built by the plugin flake with nix2container, port 4321). Code: https://github.com/schoelgoodman/advocat-heft
         - The image holds only the renderer and the editor. No Markdown is baked in
         - `${appdata}/content` is mounted at `/content`: Markdown (`briefe/`, `kapitel/`, `recht/`), `media/` and its own `.git`
-        - `${appdata}/site` is mounted at `/site`: generated HTML. Filled on start when empty, rebuilt per page on change
+        - `${appdata}/site` is mounted at `/site`: generated HTML. Fully re-rendered on every start, rebuilt per page on change
         - `${appdata}/anfragen` is mounted at `/anfragen`: one JSON file per contact-form request (`POST /kontakt`), named by UTC time. Personal data, not in any git. The field `telegram` says whether the bot message went out
         - Telegram: options `telegram.botToken` and `telegram.chatId` (currently ${if cfg.telegram.botToken != "" && cfg.telegram.chatId != "" then "set" else "not set"}). Without both, requests are only stored
         - The container runs as `neo.core.uid:gid`. Files under appdata must stay owned by that user
@@ -36,7 +36,7 @@
         1. Health-check unit `docker-advocat`, then `docker logs advocat --tail 100`
         2. Code update: update the plugin input in Neo and apply. `advocat-image.service` loads the new image, then `docker-advocat` restarts
         3. Content history: `git -C ${appdata}/content log --oneline`
-        4. Full re-render: stop the unit, empty `${appdata}/site`, start the unit
+        4. Full re-render: restart the unit
         5. Read contact requests: `ls -t ${appdata}/anfragen | head`, then `cat` the file
         6. First install of content: see DEPLOY.md in the repo, step 2
 

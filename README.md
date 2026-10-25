@@ -24,7 +24,7 @@ Die Chat-ID findet man so: dem Bot eine Nachricht schreiben, dann `https://api.t
 Das Plugin ist die Flake in diesem Repo. Sie baut das Image selbst (`modules/packages/advocat-heft.nix`, nix2container); `advocat-image.service` lädt es vor dem Container in Docker. Nach einer Änderung an `package-lock.json` muss `npmDepsHash` dort neu: `prefetch-npm-deps package-lock.json`. Die ausführliche Anleitung für den Server steht in `DEPLOY.md`. Kurz:
 
 1. Das Plugin eintragen und die Dienste `advocat` und `advocat-redaktion` einschalten.
-2. `dev-content/` inklusive `.git` nach `<appdata>/advocat/content` kopieren. `<appdata>/advocat/site` bleibt das erzeugte HTML und wird beim Start gefüllt, wenn es leer ist.
+2. `dev-content/` inklusive `.git` nach `<appdata>/advocat/content` kopieren. `<appdata>/advocat/site` ist das erzeugte HTML; der Server setzt es bei jedem Start neu.
 
 Die öffentliche Seite heisst `advocat.<domain>`. Die Redaktion ist ein eigener Neo-Dienst, `advocat-redaktion`, unter `redaktion.<domain>` und verlangt tinyauth. Sie hat keinen eigenen Container und spricht mit dem von `advocat`. Auf dem öffentlichen Namen antworten `/redaktion` und `/api` mit 404.
 

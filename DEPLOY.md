@@ -18,7 +18,7 @@ Beim ersten Start legt der Dienst zwei leere Ordner an:
 
 ```
 <appdata>/advocat/content   ← Markdown, Bilder, Git der Fassungen
-<appdata>/advocat/site      ← erzeugtes HTML, wird beim Start gefüllt
+<appdata>/advocat/site      ← erzeugtes HTML, bei jedem Start neu gesetzt
 ```
 
 `<appdata>` ist `neo.core.volumes.appdata` in der Neo-Konfiguration. Den echten Pfad dort nachsehen, nicht raten.
@@ -52,7 +52,7 @@ Liegt dort ein Ordner `dev-content/` oder `advocat-content/` statt `briefe/` usw
 
 Besitzer und Rechte wie die anderen Ordner unter `<appdata>/advocat` setzen (Neo legt sie im `preStart` an). Ist `content` nicht leer, wenn der Zip kommt, nichts überschreiben und Bescheid geben.
 
-`site/` nicht anfassen. Ist es leer, baut der Dienst das HTML beim Start.
+`site/` nicht anfassen. Der Dienst setzt das HTML bei jedem Start neu.
 
 ## 3. Prüfen
 

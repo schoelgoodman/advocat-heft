@@ -8,7 +8,7 @@ import { loadDocuments } from "../content/load.ts";
 import { notFoundPage } from "../design/page.ts";
 import { commitIfChanged, ensureContentGit, logFile, restoreFile, showFile } from "../git/history.ts";
 import { anfragenDir, contentDir, repoRoot, siteDir } from "../paths.ts";
-import { buildSite, copyAssets, rebuildDocuments } from "../render/build.ts";
+import { buildSite, rebuildDocuments } from "../render/build.ts";
 import { handleAnfrage } from "./anfrage.ts";
 
 const PORT = Number(process.env.PORT ?? 4321);
@@ -290,13 +290,10 @@ async function copyMediaFile(file: string): Promise<void> {
 
 async function main(): Promise<void> {
   await ensureContentGit();
-  try {
-    await fs.access(path.join(siteDir(), "index.html"));
-    await copyAssets();
-  } catch {
-    console.log("Setze die Seiten zum ersten Mal …");
-    await buildSite();
-  }
+  // Immer neu setzen: nach einem Code-Update passt altes HTML nicht zum neuen heft.css.
+  console.log("Setze die Seiten …");
+  const built = await buildSite();
+  console.log(`${built.pages} Seiten gesetzt.`);
 
   const vite: ViteDevServer | null = productionEditor
     ? null
