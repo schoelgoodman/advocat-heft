@@ -2,23 +2,14 @@
 
 Anleitung für Hermes auf dem Homeserver. Drei Teile: das Image, das Plugin, der Inhalt. Die Reihenfolge einhalten.
 
-Repo: `github.com/schoelgoodman/advocat-heft` (privat).
-
-## 0. Zugang zu GitHub
-
-Das Repo ist privat. Neo holt Plugins mit der Git-Identität der Maschine (**Settings → core → git**). Eine der zwei Varianten:
-
-- SSH: den **Git SSH public key** aus der Core-Seite als Deploy Key (nur lesen) im Repo eintragen. Plugin-URL dann `git+ssh://git@github.com/schoelgoodman/advocat-heft`.
-- Token: unter `[core.git.tokens]` einen fine-grained Token für `github.com` eintragen, nur `Contents: read` auf diesem Repo. Plugin-URL dann `github:schoelgoodman/advocat-heft`.
-
-Derselbe Zugang reicht für Klonen und für den Release-Download unten.
+Repo: `github.com/schoelgoodman/advocat-heft` (öffentlich, kein Token nötig).
 
 ## 1. Image bauen
 
 Das Plugin zeigt auf das lokale Image `advocat-heft:local`. Es muss existieren, bevor der Dienst startet.
 
 ```sh
-git clone git@github.com:schoelgoodman/advocat-heft.git ~/advocat-heft
+git clone https://github.com/schoelgoodman/advocat-heft.git ~/advocat-heft
 cd ~/advocat-heft
 docker build -t advocat-heft:local .
 ```
@@ -27,7 +18,7 @@ Das Image enthält nur den Setzer und die Redaktion, kein Markdown. Nach einem C
 
 ## 2. Plugin eintragen
 
-1. Neo web → **Settings → core → plugins** → die URL aus Schritt 0 hinzufügen.
+1. Neo web → **Settings → core → plugins** → `github:schoelgoodman/advocat-heft` hinzufügen.
 2. Speichern, Apply.
 3. **Services → Advocat Finanz** einschalten. Apply.
 
@@ -45,7 +36,7 @@ Beim ersten Start legt der Dienst zwei leere Ordner an:
 Der Inhalt hängt als `advocat-content.zip` am Release `content-2026-10-25`. Das Zip enthält den Inhalt von `dev-content/` direkt (kein Oberordner), samt `.git`. Das `.git` muss mit: die Redaktion schreibt dort ihre Fassungen.
 
 ```sh
-gh release download content-2026-10-25 -R schoelgoodman/advocat-heft -p advocat-content.zip -D /tmp
+curl -fL -o /tmp/advocat-content.zip https://github.com/schoelgoodman/advocat-heft/releases/download/content-2026-10-25/advocat-content.zip
 echo "900dde296f56c3b5d50316e7784dcd9501aa2e8715a6ee8c8a5dd410ff75ac96  /tmp/advocat-content.zip" | sha256sum -c
 
 systemctl stop docker-advocat

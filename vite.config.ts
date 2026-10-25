@@ -4,6 +4,12 @@ import { defineConfig } from "vite";
 
 /** Baut nur die Redaktion. Der Setzer bleibt TypeScript und läuft über tsx. */
 export default defineConfig({
+  server: {
+    watch: {
+      // Geschriebene Seiten und der Inhalt dürfen die Redaktion nicht neu laden.
+      ignored: ["**/site/**", "**/dev-content/**", "**/dist/**"],
+    },
+  },
   build: {
     outDir: "dist/redaktion",
     emptyOutDir: true,
