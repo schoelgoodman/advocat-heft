@@ -10,20 +10,23 @@
       appdata = "${config.neo.core.volumes.appdata}/advocat";
     in {
       config = mkIf cfg.enabled {
-        systemd.services.docker-advocat.preStart = lib.concatStringsSep "\n" [
-          (lib.neo.mkActivationScriptForDir config {dirPath = "${appdata}/content";})
-          (lib.neo.mkActivationScriptForDir config {dirPath = "${appdata}/site";})
+        systemd.services.docker-advocat.preStart = lib.neo.mkEnsureDirs config [
+          appdata
+          "${appdata}/content"
+          "${appdata}/site"
         ];
 
         virtualisation.oci-containers.containers.advocat = {
           environment = {
-            TZ = "Europe/Zurich";
+            TZ = config.neo.core.timeZone;
             NODE_ENV = "production";
             CONTENT_DIR = "/content";
             SITE_DIR = "/site";
             PORT = "4321";
           };
           image = cfg.containers.advocat;
+          # Gleiche Besitzer wie die Ordner aus preStart, sonst gehören neue Dateien root.
+          user = "${toString config.neo.core.uid}:${toString config.neo.core.gid}";
           autoStart = true;
           volumes = [
             "${appdata}/content:/content"

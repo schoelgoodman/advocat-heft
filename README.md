@@ -16,13 +16,13 @@ Die Seite ist dann auf `http://127.0.0.1:4321`, die Redaktion auf `http://127.0.
 Das Plugin ist die Flake in diesem Repo. Die ausführliche Anleitung für den Server steht in `DEPLOY.md`. Kurz:
 
 1. `docker build -t advocat-heft:local .`
-2. Das Plugin eintragen und den Dienst `advocat` einschalten.
+2. Das Plugin eintragen und die Dienste `advocat` und `advocat-redaktion` einschalten.
 3. `dev-content/` inklusive `.git` nach `<appdata>/advocat/content` kopieren. `<appdata>/advocat/site` bleibt das erzeugte HTML und wird beim Start gefüllt, wenn es leer ist.
 
-Die öffentliche Seite heisst `advocat.<domain>`. Die Redaktion heisst `redaktion.<domain>` und verlangt tinyauth. Auf dem öffentlichen Namen antworten `/redaktion` und `/api` mit 404.
+Die öffentliche Seite heisst `advocat.<domain>`. Die Redaktion ist ein eigener Neo-Dienst, `advocat-redaktion`, unter `redaktion.<domain>` und verlangt tinyauth. Sie hat keinen eigenen Container und spricht mit dem von `advocat`. Auf dem öffentlichen Namen antworten `/redaktion` und `/api` mit 404.
 
-`redaktion.<domain>` braucht einen DNS-Eintrag. Ein Wildcard-Zertifikat deckt den Namen. Sonst `redaktion.<domain>` bei den Custom Domains des Dienstes eintragen, sobald der Name auflöst. Eine eigene Domain wie `advocat-finanz.ch` kommt ebenfalls in die Custom Domains.
+Der eigene Dienst ist nötig, weil SWAG Zertifikate nur für die Subdomains der Dienste holt. `redaktion.<domain>` nie als Custom Domain eintragen: Neo leitet Custom Domains auf die öffentliche Seite, dort ist `/redaktion` 404. Eine eigene Domain wie `advocat-finanz.ch` kommt in die Custom Domains von `advocat`.
 
 Ein gespeicherter Satz erscheint ohne `neo activate`. Zurücksetzen schreibt die alte Datei zurück und macht einen neuen Commit `Wiederhergestellt: …`.
 
-Die Flake ist hier nicht ausgewertet: auf diesem Rechner liegt kein Nix, und die Vorlage baut für `x86_64-linux`.
+Die Flake ist gegen `github:madebydamo/neo` ausgewertet: ein Neo-System mit beiden Diensten ergibt ein Systemabbild ohne fehlgeschlagene Assertions. Gebaut und gestartet ist es nicht.

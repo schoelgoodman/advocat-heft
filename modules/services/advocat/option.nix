@@ -15,7 +15,8 @@
             }
             // neo.mkReverseProxyOptions {
               subdomain = "advocat";
-              auth.enabled = true;
+              # Die Seite ist öffentlich. Die Anmeldung gehört zu advocat-redaktion.
+              auth.available = false;
             }
             // neo.mkVpnOptions {
               containers = ["advocat"];
@@ -30,13 +31,16 @@
             // lib.neo.mkAppdata "${config.neo.core.volumes.appdata}/advocat"
             // lib.neo.mkServiceMeta {
               category = "Other";
+              icon = ./icon.png;
               description = ''
                 Das Heft von Advocat Finanz. Die öffentliche Seite steht unter dem
-                Subdomain-Namen. Die Redaktion steht unter redaktion.<domain>, hinter
+                Subdomain-Namen. Die Redaktion ist der Dienst Advocat Redaktion, hinter
                 tinyauth. Markdown und Bilder liegen auf dem Appdata-Volume, nicht im Image.
               '';
               projectUrl = "https://advocat-finanz.ch/";
-            };
+              githubUrl = "https://github.com/schoelgoodman/advocat-heft";
+            }
+            // lib.neo.mkSkillOptions {};
         };
         default = {};
         description = "Advocat Finanz: Heft, Redaktion und Fassungen";

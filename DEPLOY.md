@@ -20,7 +20,9 @@ Das Image enthält nur den Setzer und die Redaktion, kein Markdown. Nach einem C
 
 1. Neo web → **Settings → core → plugins** → `github:schoelgoodman/advocat-heft` hinzufügen.
 2. Speichern, Apply.
-3. **Services → Advocat Finanz** einschalten. Apply.
+3. **Services → Advocat Finanz** und **Services → Advocat Redaktion** einschalten. Apply.
+
+Advocat Redaktion ist nur der Name `redaktion.<domain>` mit tinyauth davor. Er hat keinen eigenen Prozess und zeigt darum keine Units. Ohne Advocat Finanz bricht Apply mit einer Meldung ab.
 
 Beim ersten Start legt der Dienst zwei leere Ordner an:
 
@@ -67,5 +69,5 @@ Besitzer und Rechte wie die anderen Ordner unter `<appdata>/advocat` setzen (Neo
 - `systemctl status docker-advocat` läuft, `docker logs advocat` ohne Fehler.
 - `https://advocat.<domain>` zeigt die Startseite mit Bildern.
 - `https://advocat.<domain>/redaktion` antwortet 404. Das ist richtig.
-- `https://redaktion.<domain>` verlangt tinyauth und zeigt danach die Redaktion. Braucht einen DNS-Eintrag, falls kein Wildcard da ist; sonst den Namen in den Custom Domains des Dienstes eintragen.
+- `https://redaktion.<domain>` verlangt tinyauth und zeigt danach die Redaktion. `redaktion.<domain>` nicht in die Custom Domains eintragen.
 - `git -C <appdata>/advocat/content log --oneline` zeigt `Übernahme aus WordPress`.
