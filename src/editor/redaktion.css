@@ -105,8 +105,19 @@ nav button {
   display: grid;
   gap: 0.15rem;
 }
-nav button:hover { background: rgba(28, 25, 21, 0.05); }
-nav button[aria-current] { border-left-color: var(--olive); background: rgba(95, 107, 69, 0.1); }
+nav .eintrag { display: flex; align-items: flex-start; border-left: 2px solid transparent; }
+nav .eintrag > button[data-rel] { flex: 1 1 auto; min-width: 0; border-left: 0; }
+nav .eintrag:hover { background: rgba(28, 25, 21, 0.05); }
+nav .eintrag:has(button[aria-current]) { border-left-color: var(--olive); background: rgba(95, 107, 69, 0.1); }
+nav .werkzeuge { display: flex; gap: 0.1rem; padding: 0.35rem 0.2rem 0 0; opacity: 0.35; }
+nav .eintrag:hover .werkzeuge, nav .werkzeuge:focus-within { opacity: 1; }
+nav button.werkzeug { display: block; border: 0; padding: 0.25rem; color: var(--quiet); line-height: 0; }
+nav button.werkzeug:hover { color: var(--ink); background: rgba(28, 25, 21, 0.08); }
+nav button.werkzeug svg { width: 1rem; height: 1rem; }
+nav .geloescht { align-items: center; justify-content: space-between; gap: 0.4rem; padding: 0.3rem 0 0.3rem 0.6rem; }
+nav .geloescht .thema { color: var(--quiet); }
+nav .geloescht button { display: inline-block; border: 0; font-size: 0.82rem; flex: none; }
+@media (hover: none) { nav .werkzeuge { opacity: 1; } }
 nav .kopfzeile { font-size: 0.75rem; color: var(--quiet); }
 nav .thema {
   font-size: 0.9rem;

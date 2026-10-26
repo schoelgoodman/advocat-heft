@@ -56,6 +56,7 @@ let current: Doc | null = null;
 let saveTimer: number | null = null;
 let armed = false;
 let alleBriefe: PageSummary[] = [];
+let alleSeiten: PageSummary[] = [];
 let sichtbar = 10;
 
 root.innerHTML = `
@@ -74,6 +75,11 @@ root.innerHTML = `
       <details id="seiten-gruppe">
         <summary>Übrige Seiten</summary>
         <nav id="seiten"></nav>
+      </details>
+      <details id="papierkorb-gruppe" hidden>
+        <summary>Papierkorb</summary>
+        <p class="leise">Gelöschte Entwürfe. Zurückgeholt sind sie wieder Entwürfe.</p>
+        <nav id="papierkorb"></nav>
       </details>
     </aside>
     <main>
@@ -120,6 +126,8 @@ const seiten = root.querySelector<HTMLElement>("#seiten")!;
 const mehr = root.querySelector<HTMLButtonElement>("#mehr")!;
 const briefeGruppe = root.querySelector<HTMLDetailsElement>("#briefe-gruppe")!;
 const seitenGruppe = root.querySelector<HTMLDetailsElement>("#seiten-gruppe")!;
+const papierkorb = root.querySelector<HTMLElement>("#papierkorb")!;
+const papierkorbGruppe = root.querySelector<HTMLDetailsElement>("#papierkorb-gruppe")!;
 const start = root.querySelector<HTMLElement>("#start")!;
 const form = root.querySelector<HTMLFormElement>("#blatt")!;
 const stand = root.querySelector<HTMLElement>("#stand")!;
@@ -176,7 +184,10 @@ function briefTitel(nummer: number | null, text: string): string {
   return text.trim() ? `${head}: ${text.trim()}` : head;
 }
 
-function isBrief(doc: ContentDocument | null): boolean {
+/** Die Startseite bleibt immer online. */
+const STARTSEITE = "kapitel/willkommen.md";
+
+function isBrief(doc: Pick<ContentDocument, "art"> | null | undefined): boolean {
   return doc?.art === "brief";
 }
 
@@ -294,33 +305,85 @@ async function mountEditor(markdown: string): Promise<void> {
   armed = true;
 }
 
-function listItem(page: PageSummary): HTMLButtonElement {
+const ICONS = {
+  kopieren:
+    '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="8.5" height="8.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M3 10.5V2.5h8" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>',
+  online:
+    '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8s-2.4 4.5-6.5 4.5S1.5 8 1.5 8z" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>',
+  entwurf:
+    '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8s-2.4 4.5-6.5 4.5S1.5 8 1.5 8z" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M2.5 13.5l11-11" stroke="currentColor" stroke-width="1.3"/></svg>',
+};
+
+function icon(svg: string, label: string, onClick: () => void): HTMLButtonElement {
+  const element = document.createElement("button");
+  element.type = "button";
+  element.className = "werkzeug";
+  element.title = label;
+  element.setAttribute("aria-label", label);
+  element.innerHTML = svg;
+  element.addEventListener("click", onClick);
+  return element;
+}
+
+function listItem(page: PageSummary): HTMLElement {
   const item = document.createElement("button");
   item.type = "button";
   item.dataset.rel = page.rel;
+  const head = document.createElement("span");
+  head.className = "kopfzeile";
+  const text = document.createElement("span");
+  text.className = "thema";
   if (page.art === "brief") {
-    const head = document.createElement("span");
-    head.className = "kopfzeile";
     head.innerHTML = page.entwurf
       ? `<span class="marke">Entwurf</span> Nr. ${page.nummer ?? ""}`
       : `Nr. ${page.nummer ?? ""} · ${esc(shortDate(page.datum))}`;
-    const text = document.createElement("span");
-    text.className = "thema";
     text.textContent = thema(page.titel) || "Noch ohne Thema";
     item.append(head, text);
   } else {
-    item.textContent = page.titel;
+    head.innerHTML = `<span class="marke">Entwurf</span>`;
+    text.textContent = page.titel;
+    item.append(...(page.entwurf ? [head, text] : [text]));
   }
   item.addEventListener("click", () => void openPage(page.rel));
-  return item;
+
+  const werkzeuge = document.createElement("span");
+  werkzeuge.className = "werkzeuge";
+  werkzeuge.append(icon(ICONS.kopieren, "Kopie anlegen", () => void copyPage(page.rel)));
+  if (page.rel !== STARTSEITE) {
+    werkzeuge.append(
+      page.entwurf
+        ? icon(ICONS.entwurf, "Entwurf · Veröffentlichen", () => void publish(page.rel))
+        : icon(ICONS.online, "Online · Von der Website nehmen", () => void unpublish(page.rel)),
+    );
+  }
+  const zeile = document.createElement("div");
+  zeile.className = "eintrag";
+  zeile.append(item, werkzeuge);
+  return zeile;
+}
+
+function trashItem(page: PageSummary): HTMLElement {
+  const zeile = document.createElement("div");
+  zeile.className = "eintrag geloescht";
+  const text = document.createElement("span");
+  text.className = "thema";
+  text.textContent = isBrief(page) ? `Nr. ${page.nummer ?? ""} · ${thema(page.titel) || "Ohne Thema"}` : page.titel;
+  zeile.append(text, button("Zurückholen", "leise", () => void restoreFromTrash(page.rel)));
+  return zeile;
 }
 
 async function loadList(): Promise<void> {
   const response = await fetch("/api/pages");
   const json = (await response.json()) as { pages: PageSummary[] };
+  alleSeiten = json.pages;
   alleBriefe = json.pages.filter((page) => page.art === "brief");
   seiten.replaceChildren(...json.pages.filter((page) => page.art !== "brief").map(listItem));
   renderBriefe();
+  const geloescht = (await fetch("/api/papierkorb")
+    .then((res) => res.json())
+    .catch(() => ({ pages: [] }))) as { pages: PageSummary[] };
+  papierkorb.replaceChildren(...geloescht.pages.map(trashItem));
+  papierkorbGruppe.hidden = geloescht.pages.length === 0;
 }
 
 /** Zeigt die neuesten Newsletter, ältere erst auf Wunsch. */
@@ -335,7 +398,7 @@ function renderBriefe(): void {
 }
 
 function markCurrent(): void {
-  for (const item of root!.querySelectorAll<HTMLButtonElement>("nav button")) {
+  for (const item of root!.querySelectorAll<HTMLButtonElement>("nav button[data-rel]")) {
     item.toggleAttribute("aria-current", item.dataset.rel === current?.rel);
   }
   if (current) (isBrief(current) ? briefeGruppe : seitenGruppe).open = true;
@@ -378,14 +441,16 @@ function renderStand(): void {
   if (doc.entwurf) {
     stand.innerHTML = `<span class="marke">Entwurf</span> Nur hier in der Redaktion sichtbar.`;
     aktionen.append(
-      button("Entwurf löschen", "leise", () => void deleteDraft()),
+      button("Löschen", "leise", () => void deleteDraft()),
+      button("Kopie anlegen", "leise", () => void copyPage(doc.rel)),
       button("Vorschau", "", () => void openPreview()),
       button("Veröffentlichen", "haupt", () => void publish()),
     );
     return;
   }
   stand.innerHTML = `<span class="marke online">Online</span> Änderungen erscheinen sofort auf der Website.`;
-  if (isBrief(doc)) aktionen.append(button("Zurückziehen", "leise", () => void unpublish()));
+  aktionen.append(button("Kopie anlegen", "leise", () => void copyPage(doc.rel)));
+  if (doc.rel !== STARTSEITE) aktionen.append(button("Zurückziehen", "leise", () => void unpublish()));
   const link = document.createElement("a");
   link.className = "knopf";
   link.href = viewHref(doc);
@@ -511,63 +576,115 @@ async function openPreview(): Promise<void> {
   else window.location.href = url;
 }
 
-async function publish(): Promise<void> {
-  if (!current) return;
-  if (isBrief(current) && !titelInput.value.trim()) {
-    titelInput.focus();
-    setSaved("Bitte zuerst ein Thema eingeben.", "fehler");
+/** Fehler beim offenen Blatt in der Leiste, sonst als Hinweis. */
+async function melde(offen: boolean, text: string): Promise<void> {
+  if (offen) setSaved(text, "fehler");
+  else await ask({ titel: "Das hat nicht geklappt", text, ja: "OK" });
+}
+
+/** Ohne `rel` das offene Blatt. Aus dem Verzeichnis auch jede andere Seite. */
+async function publish(rel = current?.rel): Promise<void> {
+  if (!rel) return;
+  const offen = current?.rel === rel;
+  if (offen) {
+    if (isBrief(current) && !titelInput.value.trim()) {
+      titelInput.focus();
+      setSaved("Bitte zuerst ein Thema eingeben.", "fehler");
+      return;
+    }
+    if (!(await saveNow())) return;
+  }
+  const page = offen ? current : alleSeiten.find((item) => item.rel === rel);
+  if (!page) return;
+  if (isBrief(page) && !thema(page.titel)) {
+    await ask({ titel: "Noch ohne Thema", text: "Bitte den Newsletter öffnen und zuerst ein Thema eingeben.", ja: "OK" });
     return;
   }
-  if (!(await saveNow())) return;
-  const titel = current.titel;
   const ja = await ask({
     titel: "Jetzt veröffentlichen?",
-    text: `„${titel}“ erscheint sofort auf der Website und auf der Startseite.`,
+    text: isBrief(page)
+      ? `„${page.titel}“ erscheint sofort auf der Website und auf der Startseite.`
+      : `„${page.titel}“ erscheint sofort auf der Website.`,
     ja: "Veröffentlichen",
     nein: "Noch nicht",
   });
   if (!ja) return;
-  setSaved("Veröffentlicht …", "busy");
-  const response = await post("/api/publish", { rel: current.rel });
+  if (offen) setSaved("Veröffentlicht …", "busy");
+  const response = await post("/api/publish", { rel });
   if (!response.ok) {
-    setSaved(await errorText(response, "Veröffentlichen fehlgeschlagen."), "fehler");
+    await melde(current?.rel === rel, await errorText(response, "Veröffentlichen fehlgeschlagen."));
     return;
   }
-  current = (await response.json()) as Doc;
-  history.replaceState(null, "", `#${current.rel}`);
-  renderStand();
-  setSaved("Veröffentlicht ✓");
+  const doc = (await response.json()) as Doc;
+  if (current?.rel === rel) {
+    current = doc;
+    history.replaceState(null, "", `#${current.rel}`);
+    renderStand();
+    setSaved("Veröffentlicht ✓");
+    void loadHistory(current.rel);
+  }
   await loadList();
-  void loadHistory(current.rel);
 }
 
-async function unpublish(): Promise<void> {
-  if (!current) return;
-  if (!(await saveNow())) return;
+async function unpublish(rel = current?.rel): Promise<void> {
+  if (!rel) return;
+  const offen = current?.rel === rel;
+  if (offen && !(await saveNow())) return;
+  const page = offen ? current : alleSeiten.find((item) => item.rel === rel);
+  if (!page) return;
   const ja = await ask({
     titel: "Von der Website nehmen?",
-    text: `„${current.titel}“ verschwindet von der Website. Der Text bleibt hier als Entwurf erhalten.`,
+    text: `„${page.titel}“ verschwindet von der Website. Der Text bleibt hier als Entwurf erhalten.`,
     ja: "Zurückziehen",
     nein: "Abbrechen",
   });
-  if (!ja || !current) return;
-  const response = await post("/api/unpublish", { rel: current.rel });
+  if (!ja) return;
+  const response = await post("/api/unpublish", { rel });
   if (!response.ok) {
-    setSaved(await errorText(response, "Zurückziehen fehlgeschlagen."), "fehler");
+    await melde(current?.rel === rel, await errorText(response, "Zurückziehen fehlgeschlagen."));
     return;
   }
-  current = (await response.json()) as Doc;
-  renderStand();
-  setSaved("Zurückgezogen. Jetzt nur noch als Entwurf hier.");
+  const doc = (await response.json()) as Doc;
+  if (current?.rel === rel) {
+    current = doc;
+    renderStand();
+    setSaved("Zurückgezogen. Jetzt nur noch als Entwurf hier.");
+    void loadHistory(current.rel);
+  }
   await loadList();
-  void loadHistory(current.rel);
+}
+
+/** Legt eine Kopie als Entwurf an und öffnet sie. Ein Newsletter bekommt die nächste Nummer. */
+async function copyPage(rel: string): Promise<void> {
+  if (current?.rel === rel && !(await saveNow())) return;
+  const response = await post("/api/copy", { rel });
+  if (!response.ok) {
+    await melde(current?.rel === rel, await errorText(response, "Die Kopie liess sich nicht anlegen."));
+    return;
+  }
+  const doc = (await response.json()) as Doc;
+  await loadList();
+  await openPage(doc.rel);
+  setSaved("Kopie angelegt ✓");
+}
+
+async function restoreFromTrash(rel: string): Promise<void> {
+  const response = await post("/api/zurueckholen", { rel });
+  if (!response.ok) {
+    await melde(false, await errorText(response, "Zurückholen fehlgeschlagen."));
+    return;
+  }
+  const doc = (await response.json()) as Doc;
+  await loadList();
+  await openPage(doc.rel);
+  setSaved("Aus dem Papierkorb zurückgeholt ✓");
 }
 
 async function deleteDraft(): Promise<void> {
   if (!current?.entwurf) return;
   const ja = await ask({
     titel: "Entwurf löschen?",
-    text: `„${current.titel}“ wird gelöscht.`,
+    text: `„${current.titel}“ kommt in den Papierkorb. Von dort lässt es sich zurückholen.`,
     ja: "Löschen",
     nein: "Abbrechen",
     gefahr: true,

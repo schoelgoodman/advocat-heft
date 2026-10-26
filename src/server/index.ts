@@ -4,7 +4,7 @@ import path from "node:path";
 import { watch } from "chokidar";
 import { createServer as createVite, type ViteDevServer } from "vite";
 import { parseDocument, publicPath, redirectTarget, serializeDocument, type Art, type ContentDocument } from "../content/document.ts";
-import { editorOrder, loadDocuments } from "../content/load.ts";
+import { editorOrder, loadDocuments, loadPapierkorb, PAPIERKORB } from "../content/load.ts";
 import { notFoundPage } from "../design/page.ts";
 import { commitIfChanged, ensureContentGit, logFile, restoreFile, showFile } from "../git/history.ts";
 import { anfragenDir, contentDir, repoRoot, siteDir } from "../paths.ts";
@@ -105,6 +105,40 @@ function summary(doc: ContentDocument) {
   };
 }
 
+/** Die Startseite bleibt immer online. */
+const STARTSEITE = "kapitel/willkommen.md";
+
+async function exists(rel: string): Promise<boolean> {
+  return fs.stat(path.join(contentDir(), rel)).then(() => true, () => false);
+}
+
+/** Der Pfad selbst, wenn er frei ist, sonst mit -2, -3 … */
+async function freeRel(rel: string): Promise<string> {
+  if (!(await exists(rel))) return rel;
+  const stem = rel.slice(0, -".md".length);
+  for (let i = 2; ; i += 1) {
+    const next = `${stem}-${i}.md`;
+    if (!(await exists(next))) return next;
+  }
+}
+
+/** Auch Newsletter im Papierkorb zählen, sonst bekäme ein neuer ihre Nummer. */
+async function nextNummer(): Promise<number> {
+  const docs = [...(await loadDocuments()), ...(await loadPapierkorb())];
+  return Math.max(0, ...docs.filter((doc) => doc.art === "brief").map((doc) => doc.nummer ?? 0)) + 1;
+}
+
+function briefRel(nummer: number): string {
+  return `briefe/${String(nummer).padStart(4, "0")}-newsletter-${nummer}.md`;
+}
+
+function trashRel(value: string): string {
+  const rel = path.posix.normalize(String(value));
+  if (!rel.startsWith(`${PAPIERKORB}/`)) throw new Error("Nicht im Papierkorb");
+  safeRel(rel.slice(PAPIERKORB.length + 1));
+  return rel;
+}
+
 function safeRel(value: string): string {
   const rel = path.normalize(value).replaceAll("\\", "/").replace(/^\.\//, "");
   if (!rel || rel.startsWith("..") || path.isAbsolute(rel) || !rel.endsWith(".md")) {
@@ -193,6 +227,13 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     return;
   }
 
+  if (req.method === "GET" && url.pathname === "/api/papierkorb") {
+    const docs = await loadPapierkorb();
+    docs.sort((a, b) => a.titel.localeCompare(b.titel, "de"));
+    sendJson(res, 200, { pages: docs.map(summary) });
+    return;
+  }
+
   if (req.method === "GET" && url.pathname === "/api/info") {
     sendJson(res, 200, { publicUrl: PUBLIC_URL });
     return;
@@ -230,11 +271,10 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
   }
 
   if (req.method === "POST" && url.pathname === "/api/briefs") {
-    const docs = await loadDocuments();
-    const nummer = Math.max(0, ...docs.map((doc) => doc.nummer ?? 0)) + 1;
+    const nummer = await nextNummer();
     // Der Dateiname bekommt das Thema erst beim Veröffentlichen.
     const doc: ContentDocument = {
-      rel: `briefe/${String(nummer).padStart(4, "0")}-newsletter-${nummer}.md`,
+      rel: await freeRel(briefRel(nummer)),
       art: "brief",
       titel: `Newsletter ${nummer}`,
       datum: new Date().toISOString().slice(0, 10),
@@ -245,6 +285,39 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     await writeDoc(doc);
     scheduleCommit(`Entwurf: Newsletter ${nummer}`, doc.rel);
     console.log(`neuer Entwurf ${doc.rel}`);
+    sendJson(res, 200, { ...doc, href: publicPath(doc.rel) });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/copy") {
+    const payload = JSON.parse((await readBody(req)).toString("utf8")) as { rel?: string };
+    await flushPending();
+    const source = await readDoc(safeRel(payload.rel ?? ""));
+    let doc: ContentDocument;
+    if (source.art === "brief") {
+      const nummer = await nextNummer();
+      const text = thema(source.titel);
+      doc = {
+        ...source,
+        rel: await freeRel(briefRel(nummer)),
+        nummer,
+        titel: text ? `Newsletter ${nummer}: ${text}` : `Newsletter ${nummer}`,
+        datum: new Date().toISOString().slice(0, 10),
+        entwurf: true,
+      };
+    } else {
+      // Die Kopie einer Kopie heisst nicht „-kopie-kopie“, sondern „-kopie-2“.
+      const stem = path.posix.basename(source.rel, ".md").replace(/-kopie(-\d+)?$/, "");
+      doc = {
+        ...source,
+        rel: await freeRel(`${path.posix.dirname(source.rel)}/${stem}-kopie.md`),
+        titel: `${source.titel.replace(/\s*\(Kopie\)$/, "")} (Kopie)`,
+        entwurf: true,
+      };
+    }
+    await writeDoc(doc);
+    await commitIfChanged(`Kopie: ${doc.titel}`, [doc.rel]);
+    console.log(`kopiert ${source.rel} nach ${doc.rel}`);
     sendJson(res, 200, { ...doc, href: publicPath(doc.rel) });
     return;
   }
@@ -276,6 +349,7 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
   if (req.method === "POST" && url.pathname === "/api/unpublish") {
     const payload = JSON.parse((await readBody(req)).toString("utf8")) as { rel?: string };
     const rel = safeRel(payload.rel ?? "");
+    if (rel === STARTSEITE) throw new Error("Die Startseite bleibt online.");
     await flushPending();
     const doc: ContentDocument = { ...(await readDoc(rel)), entwurf: true };
     await writeDoc(doc);
@@ -289,13 +363,30 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
   if (req.method === "DELETE" && url.pathname === "/api/pages") {
     const rel = safeRel(url.searchParams.get("rel") ?? "");
     const doc = await readDoc(rel);
-    if (!doc.entwurf) throw new Error("Nur Entwürfe lassen sich löschen.");
-    pendingFiles.delete(rel);
+    if (!doc.entwurf) throw new Error("Nur Entwürfe lassen sich löschen. Bitte zuerst zurückziehen.");
+    // Nicht endgültig: die Datei wandert in den Papierkorb und lässt sich zurückholen.
     await flushPending();
-    await fs.rm(path.join(contentDir(), rel), { force: true });
-    await commitIfChanged(`Entwurf gelöscht: ${doc.titel}`, [rel]);
-    console.log(`Entwurf gelöscht ${rel}`);
+    const ziel = await freeRel(`${PAPIERKORB}/${rel}`);
+    await fs.mkdir(path.dirname(path.join(contentDir(), ziel)), { recursive: true });
+    await fs.rename(path.join(contentDir(), rel), path.join(contentDir(), ziel));
+    await commitIfChanged(`In den Papierkorb: ${doc.titel}`, [rel, ziel]);
+    console.log(`Papierkorb ${rel}`);
     sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/zurueckholen") {
+    const payload = JSON.parse((await readBody(req)).toString("utf8")) as { rel?: string };
+    const from = trashRel(payload.rel ?? "");
+    const original = from.slice(PAPIERKORB.length + 1);
+    const raw = await fs.readFile(path.join(contentDir(), from), "utf8");
+    // Zurück kommt sie als Entwurf. Veröffentlichen ist ein eigener Schritt.
+    const doc: ContentDocument = { ...parseDocument(raw, original), rel: await freeRel(original), entwurf: true };
+    await writeDoc(doc);
+    await fs.rm(path.join(contentDir(), from), { force: true });
+    await commitIfChanged(`Zurückgeholt: ${doc.titel}`, [from, doc.rel]);
+    console.log(`zurückgeholt ${doc.rel}`);
+    sendJson(res, 200, { ...doc, href: publicPath(doc.rel) });
     return;
   }
 

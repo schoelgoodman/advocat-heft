@@ -29,11 +29,14 @@ const REGISTER_LABELS: Record<(typeof REGISTER_ORDER)[number], string> = {
   "kapitel/kontakt.md": "Kontakt",
 };
 
-export async function loadDocuments(): Promise<ContentDocument[]> {
+/** Gelöschte Seiten liegen hier, mit ihrem alten Pfad darunter. Der Setzer sieht sie nicht. */
+export const PAPIERKORB = "papierkorb";
+
+async function loadFrom(prefix: string): Promise<ContentDocument[]> {
   const root = contentDir();
   const docs: ContentDocument[] = [];
   for (const folder of FOLDERS) {
-    const dir = path.join(root, folder);
+    const dir = path.join(root, prefix, folder);
     let names: string[] = [];
     try {
       names = await fs.readdir(dir);
@@ -42,12 +45,20 @@ export async function loadDocuments(): Promise<ContentDocument[]> {
     }
     for (const name of names) {
       if (!name.endsWith(".md") || name === "README.md") continue;
-      const rel = `${folder}/${name}`;
+      const rel = path.posix.join(prefix, folder, name);
       const raw = await fs.readFile(path.join(dir, name), "utf8");
       docs.push(parseDocument(raw, rel));
     }
   }
   return docs;
+}
+
+export async function loadDocuments(): Promise<ContentDocument[]> {
+  return loadFrom("");
+}
+
+export async function loadPapierkorb(): Promise<ContentDocument[]> {
+  return loadFrom(PAPIERKORB);
 }
 
 export function briefsNewestFirst(docs: ContentDocument[]): ContentDocument[] {
