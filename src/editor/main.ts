@@ -61,11 +61,16 @@ let sichtbar = 10;
 root.innerHTML = `
   <div class="redaktion">
     <aside>
-      <p class="wort">Redaktion</p>
+      <button type="button" class="wort" id="heim" title="Zur Startseite">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 11 12 4l9 7M6 9.5V20h4.5v-5.5h3V20H18V9.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        Redaktion
+      </button>
       <button type="button" class="haupt" data-neu>+ Neuer Newsletter</button>
-      <h2>Newsletter</h2>
-      <nav id="briefe"></nav>
-      <button type="button" class="leise mehr" id="mehr" hidden></button>
+      <details id="briefe-gruppe" open>
+        <summary>Newsletter</summary>
+        <nav id="briefe"></nav>
+        <button type="button" class="leise mehr" id="mehr" hidden></button>
+      </details>
       <details id="seiten-gruppe">
         <summary>Übrige Seiten</summary>
         <nav id="seiten"></nav>
@@ -73,15 +78,10 @@ root.innerHTML = `
     </aside>
     <main>
       <section id="start">
-        <h1>Guten Tag.</h1>
+        <h1>Guten Tag, Patrick.</h1>
         <p>Was möchten Sie tun?</p>
         <button type="button" class="haupt gross" data-neu>Neuen Newsletter schreiben</button>
         <p class="leise">Oder links einen Newsletter zum Bearbeiten wählen.</p>
-        <ol class="schritte">
-          <li><strong>Thema</strong> eingeben</li>
-          <li><strong>Text</strong> schreiben. Er wird laufend gespeichert.</li>
-          <li><strong>Vorschau</strong> ansehen, dann <strong>Veröffentlichen</strong>.</li>
-        </ol>
       </section>
       <form id="blatt" hidden>
         <div class="leiste">
@@ -118,6 +118,7 @@ root.innerHTML = `
 const briefe = root.querySelector<HTMLElement>("#briefe")!;
 const seiten = root.querySelector<HTMLElement>("#seiten")!;
 const mehr = root.querySelector<HTMLButtonElement>("#mehr")!;
+const briefeGruppe = root.querySelector<HTMLDetailsElement>("#briefe-gruppe")!;
 const seitenGruppe = root.querySelector<HTMLDetailsElement>("#seiten-gruppe")!;
 const start = root.querySelector<HTMLElement>("#start")!;
 const form = root.querySelector<HTMLFormElement>("#blatt")!;
@@ -337,7 +338,7 @@ function markCurrent(): void {
   for (const item of root!.querySelectorAll<HTMLButtonElement>("nav button")) {
     item.toggleAttribute("aria-current", item.dataset.rel === current?.rel);
   }
-  if (current && !isBrief(current)) seitenGruppe.open = true;
+  if (current) (isBrief(current) ? briefeGruppe : seitenGruppe).open = true;
 }
 
 /** Hält das Thema im Verzeichnis gleich, während getippt wird. */
@@ -664,6 +665,10 @@ datumInput.addEventListener("input", () => scheduleSave());
 window.addEventListener("pagehide", () => void flushCommit());
 window.addEventListener("beforeunload", (event) => {
   if (saveTimer != null) event.preventDefault();
+});
+root.querySelector("#heim")!.addEventListener("click", async () => {
+  await flushCommit();
+  showStart();
 });
 for (const element of root.querySelectorAll<HTMLButtonElement>("[data-neu]")) {
   element.addEventListener("click", () => void newBrief());

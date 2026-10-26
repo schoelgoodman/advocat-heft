@@ -73,7 +73,19 @@ aside {
   overflow-y: auto;
   padding-right: 0.3rem;
 }
-aside .wort { margin: 0 0 1rem; letter-spacing: 0.04em; }
+aside .wort {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+  padding: 0.2rem 0;
+  border: 0;
+  letter-spacing: 0.04em;
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+}
+aside .wort svg { color: var(--olive); }
+aside .wort:hover, aside .wort:hover svg { color: var(--olive); }
 aside > .haupt { width: 100%; padding: 0.7rem; }
 aside h2, aside summary {
   font-size: 0.75rem;
@@ -120,12 +132,6 @@ nav .thema {
 #start { padding-top: 3rem; }
 #start h1 { font-family: var(--serif); font-weight: 400; font-size: 2.4rem; margin: 0 0 0.4rem; }
 #start > p:first-of-type { font-size: 1.1rem; margin: 0 0 1.5rem; }
-.schritte {
-  margin: 2.5rem 0 0;
-  padding: 1.2rem 1.2rem 1.2rem 2.6rem;
-  border: 1px solid var(--line);
-  line-height: 1.9;
-}
 
 /* Blatt */
 .leiste {
