@@ -651,7 +651,8 @@ export function renderDocument(input: RenderInput): PageView {
   };
   const window = new Window({ url: "https://advocat.local/" });
   try {
-    const doc = window.document;
+    // Die Helfer sind gegen die Browser-Typen geschrieben. happy-dom verhält sich gleich, hat aber eigene Typen.
+    const doc = window.document as unknown as Document;
     const root = doc.createElement("div");
     doc.body.appendChild(root);
     root.innerHTML = input.html.replaceAll("%22", "&quot;");
