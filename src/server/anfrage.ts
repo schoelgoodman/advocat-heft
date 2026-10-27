@@ -169,3 +169,69 @@ export async function handleAnfrage(req: http.IncomingMessage, res: http.ServerR
   await store(anfrage, file).catch(() => {});
   reply(res, 200, { ok: true });
 }
+
+/** Wie weit die Redaktion mit einer Anfrage ist. Ohne Eintrag ist sie neu. */
+export type AnfrageStatus = "neu" | "gelesen" | "erledigt";
+const STATUS: readonly AnfrageStatus[] = ["neu", "gelesen", "erledigt"];
+
+/**
+ * Der Stand aller Anfragen in einer eigenen Datei. Die schreibt nur die Redaktion,
+ * die Anfragen selbst nur die Seite. So schreiben nie zwei Prozesse in dieselbe Datei.
+ */
+const STATUS_FILE = "_status.json";
+
+type StatusMap = Record<string, { status: AnfrageStatus; seit: string }>;
+
+async function readStatus(): Promise<StatusMap> {
+  try {
+    return JSON.parse(await fs.readFile(path.join(anfragenDir(), STATUS_FILE), "utf8")) as StatusMap;
+  } catch {
+    return {};
+  }
+}
+
+const ID = /^[0-9TZ-]+-[0-9a-f]{6}$/;
+
+/** Alle gespeicherten Anfragen, die neueste zuerst. Für die Redaktion. */
+export async function listAnfragen(): Promise<(Anfrage & { id: string; status: AnfrageStatus; seit?: string })[]> {
+  const names = await fs.readdir(anfragenDir()).catch(() => [] as string[]);
+  const stand = await readStatus();
+  const list = await Promise.all(
+    names
+      .filter((name) => name.endsWith(".json") && ID.test(name.slice(0, -".json".length)))
+      .map(async (name) => {
+        const id = name.slice(0, -".json".length);
+        try {
+          const data = JSON.parse(await fs.readFile(path.join(anfragenDir(), name), "utf8")) as Anfrage;
+          return { ...data, id, status: stand[id]?.status ?? "neu", seit: stand[id]?.seit };
+        } catch {
+          // Halb geschrieben oder kaputt. Taucht beim nächsten Laden wieder auf.
+          return null;
+        }
+      }),
+  );
+  return list
+    .filter((item) => item != null)
+    .sort((a, b) => b.eingang.localeCompare(a.eingang));
+}
+
+// Nacheinander schreiben, sonst überholt ein schneller Klick den vorigen.
+let statusQueue: Promise<unknown> = Promise.resolve();
+
+export function setAnfrageStatus(id: string, status: string): Promise<void> {
+  if (!ID.test(id)) throw new Error("Unbekannte Anfrage");
+  if (!STATUS.includes(status as AnfrageStatus)) throw new Error("Unbekannter Stand");
+  const next = statusQueue.then(async () => {
+    await fs.access(path.join(anfragenDir(), `${id}.json`)).catch(() => {
+      throw new Error("Unbekannte Anfrage");
+    });
+    const stand = await readStatus();
+    if (status === "neu") delete stand[id];
+    else stand[id] = { status: status as AnfrageStatus, seit: new Date().toISOString() };
+    const file = path.join(anfragenDir(), STATUS_FILE);
+    await fs.writeFile(`${file}.tmp`, `${JSON.stringify(stand, null, 2)}\n`, "utf8");
+    await fs.rename(`${file}.tmp`, file);
+  });
+  statusQueue = next.catch(() => {});
+  return next;
+}

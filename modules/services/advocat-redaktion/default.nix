@@ -30,6 +30,7 @@
             appdata
             "${appdata}/content"
             "${appdata}/site"
+            "${appdata}/anfragen"
           ];
         };
 
@@ -40,6 +41,7 @@
             ROLLE = "redaktion";
             CONTENT_DIR = "/content";
             SITE_DIR = "/site";
+            ANFRAGEN_DIR = "/anfragen";
             PUBLIC_URL = optionalString (domain != null) "https://${seite.subdomain}.${domain}";
             PORT = "4321";
           };
@@ -50,6 +52,8 @@
             "${appdata}/content:/content"
             # Nur lesen: Schriften und Bilder für den Editor.
             "${appdata}/site:/site:ro"
+            # Die Anfragen schreibt die Seite. Die Redaktion schreibt daneben nur _status.json.
+            "${appdata}/anfragen:/anfragen"
           ];
           networks = ["internal"];
         };

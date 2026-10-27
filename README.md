@@ -19,6 +19,8 @@ Sind `TELEGRAM_BOT_TOKEN` und `TELEGRAM_CHAT_ID` gesetzt, schickt der Server jed
 
 Die Chat-ID findet man so: dem Bot eine Nachricht schreiben, dann `https://api.telegram.org/bot<TOKEN>/getUpdates` öffnen und `message.chat.id` ablesen. Für eine Gruppe den Bot hinzufügen, dort etwas schreiben, gleiche Abfrage (die ID beginnt mit `-`).
 
+Die Redaktion zeigt alle Anfragen unter „Kontaktaufnahme“ (`GET /api/anfragen`, neueste zuerst). Auf Neo bindet der Container `advocat-redaktion` den Ordner dafür nur lesend ein.
+
 ## Neo
 
 Das Plugin ist die Flake in diesem Repo. Sie baut das Image selbst (`modules/packages/advocat-heft.nix`, nix2container); `advocat-image.service` lädt es vor dem Container in Docker. Nach einer Änderung an `package-lock.json` muss `npmDepsHash` dort neu: `prefetch-npm-deps package-lock.json`. Die ausführliche Anleitung für den Server steht in `DEPLOY.md`. Kurz:

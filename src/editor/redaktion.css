@@ -59,7 +59,6 @@ button, .knopf { cursor: pointer; text-decoration: none; display: inline-block; 
 button:hover, .knopf:hover { border-color: var(--ink); }
 .haupt { background: var(--olive); border-color: var(--olive); color: var(--paper); }
 .haupt:hover { background: var(--ink); border-color: var(--ink); }
-.haupt.gross { font-size: 1.1rem; padding: 0.8rem 1.4rem; }
 button.leise { border-color: transparent; color: var(--quiet); padding-inline: 0.4rem; }
 button.leise:hover { color: var(--ink); border-color: transparent; text-decoration: underline; }
 p.leise { color: var(--quiet); font-size: 0.88rem; }
@@ -86,7 +85,6 @@ aside .wort {
 }
 aside .wort svg { color: var(--olive); }
 aside .wort:hover, aside .wort:hover svg { color: var(--olive); }
-aside > .haupt { width: 100%; padding: 0.7rem; }
 aside h2, aside summary {
   font-size: 0.75rem;
   font-weight: 400;
@@ -142,7 +140,6 @@ nav .thema {
 /* Start */
 #start { padding-top: 3rem; }
 #start h1 { font-family: var(--serif); font-weight: 400; font-size: 2.4rem; margin: 0 0 0.4rem; }
-#start > p:first-of-type { font-size: 1.1rem; margin: 0 0 1.5rem; }
 
 /* Blatt */
 .leiste {
@@ -238,3 +235,75 @@ dialog .aktionen { justify-content: flex-end; }
 .haupt.gefahr { background: var(--rot); border-color: var(--rot); }
 .haupt.gefahr:hover { background: var(--ink); border-color: var(--ink); }
 aside .mehr { display: block; margin: 0.3rem 0 0; font-size: 0.82rem; }
+
+/* Kontaktaufnahme */
+aside summary .zahl:not(:empty) {
+  margin-left: 0.3rem;
+  padding: 0.05rem 0.4rem;
+  background: var(--rot);
+  color: var(--paper);
+  letter-spacing: 0.04em;
+}
+#anfragen-gruppe { margin-bottom: 1.2rem; }
+#anfragen-gruppe summary { margin-top: 0; }
+nav .ungelesen .thema { font-weight: 600; }
+.marke.neu { background: var(--rot); color: var(--paper); }
+nav button[data-anfrage][aria-current] { border-left-color: var(--olive); background: rgba(95, 107, 69, 0.1); }
+#anfragen { padding-top: 1.5rem; }
+#anfragen h1 { font-family: var(--serif); font-weight: 400; font-size: 2.4rem; margin: 0 0 0.4rem; }
+#anfragen-karten { list-style: none; padding: 0; margin: 1.5rem 0 3rem; }
+#anfragen-karten li {
+  padding: 1.2rem 1.4rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--line);
+  background: rgba(255, 255, 255, 0.45);
+  scroll-margin-top: 1.5rem;
+}
+#anfragen-karten li.gewaehlt { border-left-color: var(--olive); }
+#anfragen-karten .kopfzeile { margin: 0; font-size: 0.78rem; color: var(--quiet); }
+#anfragen-karten h2 { font-family: var(--serif); font-weight: 400; font-size: 1.4rem; margin: 0.3rem 0 0.1rem; }
+#anfragen-karten a:not(.knopf) { color: var(--olive); }
+#anfragen-karten .nachricht { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; margin: 0.9rem 0 1.1rem; }
+#anfragen-karten li[data-status="erledigt"] { opacity: 0.75; }
+#anfragen-karten li[data-status="erledigt"] .nachricht { color: var(--quiet); }
+#anfragen-karten .aktionen { margin-top: 0.2rem; }
+
+/* Zahlen über der Übersicht. Jede Kachel filtert die Liste darunter. */
+.kacheln { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.8rem; margin: 1.4rem 0 0.6rem; }
+.kachel {
+  display: grid;
+  gap: 0.15rem;
+  text-align: left;
+  padding: 0.9rem 1rem;
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px solid var(--line);
+  border-top: 2px solid var(--line);
+}
+.kachel[aria-pressed="true"] { border-top-color: var(--olive); background: rgba(95, 107, 69, 0.1); }
+.kachel .label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--quiet); }
+.kachel .wert { font-family: var(--serif); font-size: 2.2rem; line-height: 1.1; font-variant-numeric: lining-nums tabular-nums; }
+.kachel .unter { font-size: 0.8rem; color: var(--quiet); }
+@media (max-width: 520px) { .kacheln { grid-template-columns: 1fr; } }
+
+/* Startseite: die zwei Aufgaben nebeneinander */
+.aufgaben { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-top: 2rem; }
+.aufgabe {
+  display: flex;
+  flex-direction: column;
+  padding: 1.3rem 1.4rem 1.4rem;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--olive);
+  background: rgba(255, 255, 255, 0.45);
+}
+.aufgabe.dringend { border-top-color: var(--rot); }
+.aufgabe h2 { margin: 0 0 0.6rem; font-size: 0.75rem; font-weight: 400; text-transform: uppercase; letter-spacing: 0.08em; color: var(--quiet); }
+.aufgabe .gross { margin: 0; font-family: var(--serif); font-size: 1.6rem; line-height: 1.2; font-variant-numeric: lining-nums; }
+.aufgabe p.leise { margin: 0.3rem 0 0.9rem; }
+.aufgabe ul { list-style: none; padding: 0; margin: 0 0 1.2rem; border-top: 1px solid var(--line); }
+.aufgabe li { border-bottom: 1px solid var(--line); }
+.aufgabe li button { display: grid; width: 100%; text-align: left; border: 0; padding: 0.5rem 0.2rem; font-size: 0.92rem; }
+.aufgabe li button:hover { background: rgba(28, 25, 21, 0.05); }
+.aufgabe li button span { font-size: 0.75rem; color: var(--quiet); }
+.aufgabe > button { margin-top: auto; align-self: flex-start; }
+@media (max-width: 1000px) { .aufgaben { grid-template-columns: 1fr; } }

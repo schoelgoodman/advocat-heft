@@ -9,7 +9,7 @@ import { notFoundPage } from "../design/page.ts";
 import { commitIfChanged, ensureContentGit, logFile, restoreFile, showFile } from "../git/history.ts";
 import { anfragenDir, contentDir, repoRoot, siteDir } from "../paths.ts";
 import { buildSite, previewPage, rebuildDocuments } from "../render/build.ts";
-import { handleAnfrage } from "./anfrage.ts";
+import { handleAnfrage, listAnfragen, setAnfrageStatus } from "./anfrage.ts";
 
 const PORT = Number(process.env.PORT ?? 4321);
 
@@ -231,6 +231,20 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     const docs = await loadPapierkorb();
     docs.sort((a, b) => a.titel.localeCompare(b.titel, "de"));
     sendJson(res, 200, { pages: docs.map(summary) });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/anfragen") {
+    // Personendaten: nie zwischenspeichern.
+    res.setHeader("cache-control", "no-store");
+    sendJson(res, 200, { anfragen: await listAnfragen() });
+    return;
+  }
+
+  if (req.method === "PUT" && url.pathname === "/api/anfragen") {
+    const payload = JSON.parse((await readBody(req)).toString("utf8")) as { id?: string; status?: string };
+    await setAnfrageStatus(String(payload.id ?? ""), String(payload.status ?? ""));
+    sendJson(res, 200, { ok: true });
     return;
   }
 

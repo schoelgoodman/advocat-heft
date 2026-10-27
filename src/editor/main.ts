@@ -48,6 +48,20 @@ interface PageSummary {
 
 type Doc = ContentDocument & { href: string };
 
+interface Anfrage {
+  id: string;
+  eingang: string;
+  vorname: string;
+  name: string;
+  email: string;
+  nachricht: string;
+  telegram?: "gesendet" | "fehler" | "aus";
+  status: "neu" | "gelesen" | "erledigt";
+  seit?: string;
+}
+
+type AnfragenFilter = "offen" | "erledigt" | "alle";
+
 const root = document.querySelector<HTMLElement>("#redaktion");
 if (!root) throw new Error("Redaktion fehlt");
 
@@ -58,6 +72,10 @@ let armed = false;
 let alleBriefe: PageSummary[] = [];
 let alleSeiten: PageSummary[] = [];
 let sichtbar = 10;
+let alleAnfragen: Anfrage[] = [];
+let anfragenStand = "";
+let anfragenFilter: AnfragenFilter = "offen";
+let gewaehlt: string | null = null;
 
 root.innerHTML = `
   <div class="redaktion">
@@ -66,7 +84,11 @@ root.innerHTML = `
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 11 12 4l9 7M6 9.5V20h4.5v-5.5h3V20H18V9.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
         Redaktion
       </button>
-      <button type="button" class="haupt" data-neu>+ Neuer Newsletter</button>
+      <details id="anfragen-gruppe" open>
+        <summary>Kontaktaufnahme <span class="zahl" id="anfragen-zahl"></span></summary>
+        <nav id="anfragen-liste"></nav>
+        <button type="button" class="leise mehr" id="anfragen-alle">Übersicht aller Anfragen</button>
+      </details>
       <details id="briefe-gruppe" open>
         <summary>Newsletter</summary>
         <nav id="briefe"></nav>
@@ -85,9 +107,16 @@ root.innerHTML = `
     <main>
       <section id="start">
         <h1>Guten Tag, Patrick.</h1>
-        <p>Was möchten Sie tun?</p>
-        <button type="button" class="haupt gross" data-neu>Neuen Newsletter schreiben</button>
-        <p class="leise">Oder links einen Newsletter zum Bearbeiten wählen.</p>
+        <div class="aufgaben">
+          <article class="aufgabe" id="start-anfragen"></article>
+          <article class="aufgabe" id="start-briefe"></article>
+        </div>
+      </section>
+      <section id="anfragen" hidden>
+        <h1>Kontaktaufnahme</h1>
+        <div class="kacheln" id="anfragen-kacheln" role="group" aria-label="Anfragen filtern"></div>
+        <p class="leise" id="anfragen-text"></p>
+        <ol id="anfragen-karten"></ol>
       </section>
       <form id="blatt" hidden>
         <div class="leiste">
@@ -129,6 +158,15 @@ const seitenGruppe = root.querySelector<HTMLDetailsElement>("#seiten-gruppe")!;
 const papierkorb = root.querySelector<HTMLElement>("#papierkorb")!;
 const papierkorbGruppe = root.querySelector<HTMLDetailsElement>("#papierkorb-gruppe")!;
 const start = root.querySelector<HTMLElement>("#start")!;
+const anfragenGruppe = root.querySelector<HTMLDetailsElement>("#anfragen-gruppe")!;
+const anfragenListe = root.querySelector<HTMLElement>("#anfragen-liste")!;
+const anfragenZahl = root.querySelector<HTMLElement>("#anfragen-zahl")!;
+const anfragenSeite = root.querySelector<HTMLElement>("#anfragen")!;
+const anfragenText = root.querySelector<HTMLElement>("#anfragen-text")!;
+const anfragenKacheln = root.querySelector<HTMLElement>("#anfragen-kacheln")!;
+const startAnfragen = root.querySelector<HTMLElement>("#start-anfragen")!;
+const startBriefe = root.querySelector<HTMLElement>("#start-briefe")!;
+const anfragenKarten = root.querySelector<HTMLOListElement>("#anfragen-karten")!;
 const form = root.querySelector<HTMLFormElement>("#blatt")!;
 const stand = root.querySelector<HTMLElement>("#stand")!;
 const speicher = root.querySelector<HTMLElement>("#speicher")!;
@@ -395,11 +433,64 @@ function renderBriefe(): void {
   mehr.hidden = rest <= 0;
   mehr.textContent = `Ältere anzeigen (noch ${rest})`;
   markCurrent();
+  renderStartBriefe();
+}
+
+/** Eine Karte auf der Startseite: Titel, eine grosse Zeile, Kleingedrucktes, eine kurze Liste, ein Knopf. */
+function aufgabe(
+  host: HTMLElement,
+  options: { titel: string; gross: string; leise: string; liste: { label: string; info: string; onClick: () => void }[]; knopf: HTMLButtonElement },
+): void {
+  const titel = document.createElement("h2");
+  titel.textContent = options.titel;
+  const gross = document.createElement("p");
+  gross.className = "gross";
+  gross.textContent = options.gross;
+  const leise = document.createElement("p");
+  leise.className = "leise";
+  leise.textContent = options.leise;
+  const liste = document.createElement("ul");
+  for (const eintrag of options.liste) {
+    const item = document.createElement("li");
+    const link = button(eintrag.label, "", eintrag.onClick);
+    const info = document.createElement("span");
+    info.textContent = eintrag.info;
+    link.append(info);
+    item.append(link);
+    liste.append(item);
+  }
+  host.replaceChildren(titel, gross, leise, ...(options.liste.length ? [liste] : []), options.knopf);
+}
+
+function renderStartBriefe(): void {
+  const entwuerfe = alleBriefe.filter((page) => page.entwurf);
+  const zuletzt = alleBriefe.find((page) => !page.entwurf);
+  const neu = button("Neuen Newsletter schreiben", "haupt", () => void newBrief());
+  // Entwürfe zuerst, die wollen fertig werden. Sonst die letzten veröffentlichten.
+  const liste = (entwuerfe.length ? entwuerfe : alleBriefe).slice(0, 3).map((page) => ({
+    label: thema(page.titel) || "Noch ohne Thema",
+    info: page.entwurf ? `Entwurf · Nr. ${page.nummer ?? ""}` : `Nr. ${page.nummer ?? ""} · ${shortDate(page.datum)}`,
+    onClick: () => void openPage(page.rel),
+  }));
+  aufgabe(startBriefe, {
+    titel: "Newsletter",
+    gross: entwuerfe.length
+      ? `${entwuerfe.length === 1 ? "Ein Entwurf wartet" : `${entwuerfe.length} Entwürfe warten`}`
+      : "Keine offenen Entwürfe",
+    leise: zuletzt
+      ? `Zuletzt erschienen: Nr. ${zuletzt.nummer ?? ""} am ${shortDate(zuletzt.datum)}.`
+      : "Der erste Newsletter erscheint, sobald Sie ihn veröffentlichen.",
+    liste,
+    knopf: neu,
+  });
 }
 
 function markCurrent(): void {
   for (const item of root!.querySelectorAll<HTMLButtonElement>("nav button[data-rel]")) {
     item.toggleAttribute("aria-current", item.dataset.rel === current?.rel);
+  }
+  for (const item of root!.querySelectorAll<HTMLButtonElement>("nav button[data-anfrage]")) {
+    item.toggleAttribute("aria-current", item.dataset.anfrage === gewaehlt);
   }
   if (current) (isBrief(current) ? briefeGruppe : seitenGruppe).open = true;
 }
@@ -462,7 +553,9 @@ function renderStand(): void {
 
 function showStart(): void {
   current = null;
+  gewaehlt = null;
   form.hidden = true;
+  anfragenSeite.hidden = true;
   start.hidden = false;
   history.replaceState(null, "", location.pathname + location.search);
   markCurrent();
@@ -476,8 +569,10 @@ async function openPage(rel: string): Promise<void> {
     return;
   }
   current = (await response.json()) as Doc;
+  gewaehlt = null;
   const brief = isBrief(current);
   start.hidden = true;
+  anfragenSeite.hidden = true;
   form.hidden = false;
   kennung.textContent = brief ? `Newsletter ${current.nummer ?? ""}` : current.art === "recht" ? "Rechtliches" : "Seite";
   titelInput.placeholder = brief ? "Thema, z. B. Revision des Erbrechts" : "Titel";
@@ -765,6 +860,241 @@ async function restoreRevision(rel: string, revision: Revision): Promise<void> {
   await loadList();
 }
 
+const eingangFormat = new Intl.DateTimeFormat("de-CH", { dateStyle: "medium", timeStyle: "short" });
+
+const TELEGRAM: Record<NonNullable<Anfrage["telegram"]>, string> = {
+  gesendet: "an Telegram gesendet",
+  fehler: "Telegram fehlgeschlagen",
+  aus: "Telegram aus",
+};
+
+const STATUS_MARKE: Record<Anfrage["status"], string> = {
+  neu: `<span class="marke neu">Neu</span>`,
+  gelesen: `<span class="marke">Gelesen</span>`,
+  erledigt: `<span class="marke online">Erledigt</span>`,
+};
+
+function wer(anfrage: Anfrage): string {
+  return `${anfrage.vorname} ${anfrage.name}`;
+}
+
+function offen(anfrage: Anfrage): boolean {
+  return anfrage.status !== "erledigt";
+}
+
+/** „vor 3 Tagen“, für die älteste offene Anfrage. */
+function wartetSeit(iso: string): string {
+  const tage = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+  if (tage <= 0) return "seit heute";
+  if (tage === 1) return "seit gestern";
+  return `seit ${tage} Tagen`;
+}
+
+function zaehle() {
+  const neu = alleAnfragen.filter((a) => a.status === "neu").length;
+  const offene = alleAnfragen.filter(offen).length;
+  return { neu, offen: offene, erledigt: alleAnfragen.length - offene, alle: alleAnfragen.length };
+}
+
+function anfrageItem(anfrage: Anfrage): HTMLElement {
+  const item = document.createElement("button");
+  item.type = "button";
+  item.dataset.anfrage = anfrage.id;
+  item.toggleAttribute("aria-current", anfrage.id === gewaehlt);
+  const head = document.createElement("span");
+  head.className = "kopfzeile";
+  head.innerHTML = `${anfrage.status === "neu" ? STATUS_MARKE.neu + " " : ""}${esc(eingangFormat.format(new Date(anfrage.eingang)))}`;
+  const text = document.createElement("span");
+  text.className = "thema";
+  text.textContent = wer(anfrage);
+  item.append(head, text);
+  item.addEventListener("click", () => void openAnfrage(anfrage.id));
+  const zeile = document.createElement("div");
+  zeile.className = anfrage.status === "neu" ? "eintrag ungelesen" : "eintrag";
+  zeile.append(item);
+  return zeile;
+}
+
+function anfrageKarte(anfrage: Anfrage): HTMLElement {
+  const karte = document.createElement("li");
+  karte.id = `anfrage-${anfrage.id}`;
+  karte.dataset.status = anfrage.status;
+  karte.classList.toggle("gewaehlt", anfrage.id === gewaehlt);
+  const kopf = document.createElement("p");
+  kopf.className = "kopfzeile";
+  kopf.innerHTML = `${STATUS_MARKE[anfrage.status]} `;
+  const when = document.createElement("time");
+  when.dateTime = anfrage.eingang;
+  when.textContent = eingangFormat.format(new Date(anfrage.eingang));
+  kopf.append(when);
+  if (anfrage.status === "erledigt" && anfrage.seit) kopf.append(` · erledigt am ${eingangFormat.format(new Date(anfrage.seit))}`);
+  if (anfrage.telegram) kopf.append(` · ${TELEGRAM[anfrage.telegram]}`);
+  const name = document.createElement("h2");
+  name.textContent = wer(anfrage);
+  const mail = document.createElement("a");
+  mail.href = `mailto:${encodeURIComponent(anfrage.email).replace("%40", "@")}?subject=${encodeURIComponent("Ihre Anfrage an Advocat Finanz")}`;
+  mail.textContent = anfrage.email;
+  const nachricht = document.createElement("p");
+  nachricht.className = "nachricht";
+  nachricht.textContent = anfrage.nachricht;
+  const knoepfe = document.createElement("div");
+  knoepfe.className = "aktionen";
+  const antworten = document.createElement("a");
+  antworten.className = "knopf";
+  antworten.href = mail.href;
+  antworten.textContent = "Per E-Mail antworten";
+  // Wer antwortet, hat sie gelesen.
+  antworten.addEventListener("click", () => {
+    if (anfrage.status === "neu") void setStatus(anfrage.id, "gelesen");
+  });
+  if (anfrage.status === "erledigt") {
+    knoepfe.append(antworten, button("Wieder öffnen", "leise", () => void setStatus(anfrage.id, "gelesen")));
+  } else {
+    knoepfe.append(button("Erledigt ✓", "haupt", () => void setStatus(anfrage.id, "erledigt")), antworten);
+    knoepfe.append(
+      anfrage.status === "neu"
+        ? button("Als gelesen markieren", "leise", () => void setStatus(anfrage.id, "gelesen"))
+        : button("Als ungelesen markieren", "leise", () => void setStatus(anfrage.id, "neu")),
+    );
+  }
+  karte.append(kopf, name, mail, nachricht, knoepfe);
+  return karte;
+}
+
+/** Holt die Anfragen und zeichnet alles neu, was davon abhängt. Unverändert: nichts. */
+async function loadAnfragen(force = false): Promise<void> {
+  const json = (await fetch("/api/anfragen", { cache: "no-store" })
+    .then((res) => res.json())
+    .catch(() => null)) as { anfragen: Anfrage[] } | null;
+  if (!json) return;
+  const stand = JSON.stringify(json.anfragen);
+  if (!force && stand === anfragenStand) return;
+  anfragenStand = stand;
+  alleAnfragen = json.anfragen;
+  renderAnfragen();
+}
+
+function renderAnfragen(): void {
+  const zahl = zaehle();
+  document.title = `${zahl.neu ? `(${zahl.neu}) ` : ""}Redaktion · Advocat Finanz`;
+  anfragenZahl.textContent = zahl.neu ? `${zahl.neu} neu` : "";
+
+  // Im Verzeichnis nur, was noch offen ist. Erledigte stehen in der Übersicht.
+  const offene = alleAnfragen.filter(offen);
+  anfragenListe.replaceChildren(...offene.map(anfrageItem));
+  if (offene.length === 0) {
+    const leer = document.createElement("p");
+    leer.className = "leise";
+    leer.textContent = alleAnfragen.length ? "Alle Anfragen sind erledigt." : "Noch keine Anfragen.";
+    anfragenListe.append(leer);
+  }
+
+  renderStartAnfragen(zahl);
+  if (!anfragenSeite.hidden) renderUebersicht();
+}
+
+function renderStartAnfragen(zahl: ReturnType<typeof zaehle>): void {
+  // Neue zuerst. Gibt es keine, die noch offenen.
+  const zeigen = (zahl.neu ? alleAnfragen.filter((a) => a.status === "neu") : alleAnfragen.filter(offen)).slice(0, 3);
+  startAnfragen.classList.toggle("dringend", zahl.neu > 0);
+  aufgabe(startAnfragen, {
+    titel: "Kontaktaufnahme",
+    gross: zahl.neu
+      ? zahl.neu === 1 ? "Eine neue Anfrage" : `${zahl.neu} neue Anfragen`
+      : "Keine neuen Anfragen",
+    leise: zahl.alle
+      ? `${zahl.offen} offen · ${zahl.erledigt} erledigt`
+      : "Anfragen aus dem Kontaktformular erscheinen hier.",
+    liste: zeigen.map((anfrage) => ({
+      label: wer(anfrage),
+      info: `${anfrage.status === "neu" ? "Neu" : "Gelesen"} · ${eingangFormat.format(new Date(anfrage.eingang))}`,
+      onClick: () => void openAnfrage(anfrage.id),
+    })),
+    knopf: button("Zur Kontaktaufnahme", zahl.neu ? "haupt" : "", () => void showAnfragen()),
+  });
+}
+
+function kachel(filter: AnfragenFilter, wert: number, label: string, unter: string): HTMLButtonElement {
+  const element = document.createElement("button");
+  element.type = "button";
+  element.className = "kachel";
+  element.setAttribute("aria-pressed", String(anfragenFilter === filter));
+  element.innerHTML = `<span class="label">${esc(label)}</span><span class="wert">${wert}</span><span class="unter">${esc(unter)}</span>`;
+  element.addEventListener("click", () => {
+    anfragenFilter = filter;
+    renderUebersicht();
+  });
+  return element;
+}
+
+function renderUebersicht(): void {
+  const zahl = zaehle();
+  anfragenKacheln.replaceChildren(
+    kachel("offen", zahl.offen, "Offen", zahl.neu ? `davon ${zahl.neu} neu` : "keine neuen"),
+    kachel("erledigt", zahl.erledigt, "Erledigt", zahl.alle ? `${Math.round((zahl.erledigt / zahl.alle) * 100)} % aller Anfragen` : "–"),
+    kachel("alle", zahl.alle, "Gesamt", `${alleAnfragen.filter((a) => Date.now() - new Date(a.eingang).getTime() < 30 * 86_400_000).length} in den letzten 30 Tagen`),
+  );
+  const sichtbare = alleAnfragen.filter((a) =>
+    anfragenFilter === "alle" ? true : anfragenFilter === "offen" ? offen(a) : !offen(a),
+  );
+  const aeltesteOffene = alleAnfragen.filter(offen).at(-1);
+  if (alleAnfragen.length === 0) anfragenText.textContent = "Noch keine Anfragen über das Kontaktformular.";
+  else if (anfragenFilter === "offen") {
+    anfragenText.textContent = aeltesteOffene
+      ? `Offene Anfragen, die neueste zuerst. Die älteste wartet ${wartetSeit(aeltesteOffene.eingang)}.`
+      : "Keine offenen Anfragen. Alles erledigt.";
+  } else if (anfragenFilter === "erledigt") {
+    anfragenText.textContent = sichtbare.length ? "Erledigte Anfragen, die neueste zuerst." : "Noch nichts erledigt.";
+  } else anfragenText.textContent = "Alle Anfragen, die neueste zuerst.";
+  anfragenKarten.replaceChildren(...sichtbare.map(anfrageKarte));
+}
+
+async function setStatus(id: string, status: Anfrage["status"]): Promise<void> {
+  const response = await fetch("/api/anfragen", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id, status }),
+  }).catch(() => null);
+  if (!response?.ok) {
+    await ask({
+      titel: "Das hat nicht geklappt",
+      text: response ? await errorText(response, "Der Stand liess sich nicht speichern.") : "Keine Verbindung zum Server.",
+      ja: "OK",
+    });
+    return;
+  }
+  await loadAnfragen(true);
+}
+
+/** Die Übersicht: Zahlen oben, darunter die Anfragen des gewählten Filters. */
+async function showAnfragen(): Promise<void> {
+  await flushCommit();
+  current = null;
+  gewaehlt = null;
+  markCurrent();
+  start.hidden = true;
+  form.hidden = true;
+  anfragenSeite.hidden = false;
+  anfragenGruppe.open = true;
+  history.replaceState(null, "", "#anfragen");
+  await loadAnfragen(true);
+  window.scrollTo({ top: 0 });
+}
+
+/** Eine Anfrage aus dem Verzeichnis: in der Übersicht zeigen und als gelesen merken. */
+async function openAnfrage(id: string): Promise<void> {
+  await showAnfragen();
+  const anfrage = alleAnfragen.find((a) => a.id === id);
+  if (!anfrage) return;
+  gewaehlt = id;
+  // Der Filter muss die gewählte Anfrage zeigen.
+  if (!offen(anfrage) && anfragenFilter === "offen") anfragenFilter = "alle";
+  if (offen(anfrage) && anfragenFilter === "erledigt") anfragenFilter = "offen";
+  if (anfrage.status === "neu") await setStatus(id, "gelesen");
+  else renderAnfragen();
+  document.getElementById(`anfrage-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 form.addEventListener("submit", (event) => event.preventDefault());
 titelInput.addEventListener("keydown", (event) => {
   // Ein Titel hat keine Zeilenumbrüche. Enter springt in den Text.
@@ -787,9 +1117,18 @@ root.querySelector("#heim")!.addEventListener("click", async () => {
   await flushCommit();
   showStart();
 });
-for (const element of root.querySelectorAll<HTMLButtonElement>("[data-neu]")) {
-  element.addEventListener("click", () => void newBrief());
-}
+root.querySelector("#anfragen-alle")!.addEventListener("click", () => void showAnfragen());
+// Ein Klick auf „Kontaktaufnahme“ öffnet die Übersicht. Zuklappen geht, wenn sie schon offen ist.
+anfragenGruppe.querySelector("summary")!.addEventListener("click", (event) => {
+  if (!anfragenSeite.hidden && anfragenGruppe.open) return;
+  event.preventDefault();
+  void showAnfragen();
+});
+// Neue Anfragen erscheinen ohne Neuladen.
+window.setInterval(() => void loadAnfragen(), 60_000);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") void loadAnfragen();
+});
 mehr.addEventListener("click", () => {
   sichtbar += 10;
   renderBriefe();
@@ -798,5 +1137,7 @@ mehr.addEventListener("click", () => {
 const info = (await fetch("/api/info").then((response) => response.json()).catch(() => ({}))) as { publicUrl?: string };
 publicOrigin = info.publicUrl ?? "";
 await loadList();
+await loadAnfragen();
 const wanted = decodeURIComponent(location.hash.slice(1));
-if (wanted) await openPage(wanted);
+if (wanted === "anfragen") await showAnfragen();
+else if (wanted) await openPage(wanted);
