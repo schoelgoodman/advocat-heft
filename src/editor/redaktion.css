@@ -747,46 +747,49 @@ body.mit-assistent { padding-right: 26rem; }
 }
 .assistent-auf:hover { background: var(--ink); transform: translateY(-1px); }
 
-/* Schmaler: die Spalte liegt über der Seite statt daneben. */
-/* Kleiner Laptop mit Assistent: das Verzeichnis wird zur Schublade, der Text behält seine Breite. */
-.verzeichnis-auf { display: none; }
-@media (min-width: 1101px) and (max-width: 1439px) {
-  body.mit-assistent .redaktion { grid-template-columns: minmax(0, 44rem); justify-content: center; padding-left: 4.5rem; }
-  body.mit-assistent .verzeichnis-auf {
-    position: fixed;
-    top: 1.2rem;
-    left: 1rem;
-    z-index: 15;
-    display: grid;
-    place-items: center;
-    width: 2.6rem;
-    height: 2.6rem;
-    padding: 0;
-    border: 1px solid var(--line);
-    border-radius: 50%;
-    background: var(--flaeche);
-    box-shadow: var(--schatten);
-  }
-  body.mit-assistent .verzeichnis-auf:hover { border-color: var(--olive); color: var(--olive); }
-  body.mit-assistent aside {
-    position: fixed;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    z-index: 16;
-    width: 20rem;
-    max-height: none;
-    padding: 1.4rem 1rem;
-    background: var(--flaeche-tief);
-    border-right: 1px solid var(--line);
-    box-shadow: 8px 0 32px rgba(28, 25, 21, 0.15);
-    transform: translateX(-105%);
-    visibility: hidden;
-    transition: transform 0.2s ease-out, visibility 0.2s;
-  }
-  body.mit-assistent.verzeichnis-offen aside { transform: none; visibility: visible; }
+/* Das Verzeichnis als Schublade: auf dem Telefon und auf einem kleinen Laptop mit Assistent. Wann, entscheidet main.ts. */
+.verzeichnis-auf, .schleier { display: none; }
+body.schublade .redaktion { grid-template-columns: minmax(0, 44rem); justify-content: center; }
+body.schublade .verzeichnis-auf {
+  position: fixed;
+  top: 1.2rem;
+  left: 1rem;
+  z-index: 15;
+  display: grid;
+  place-items: center;
+  width: 2.6rem;
+  height: 2.6rem;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--flaeche);
+  box-shadow: var(--schatten);
 }
+body.schublade .verzeichnis-auf:hover { border-color: var(--olive); color: var(--olive); }
+body.schublade aside {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 17;
+  width: min(20rem, 85vw);
+  max-height: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1.4rem 1rem;
+  background: var(--flaeche-tief);
+  border-right: 1px solid var(--line);
+  box-shadow: 8px 0 32px rgba(28, 25, 21, 0.15);
+  transform: translateX(-105%);
+  visibility: hidden;
+  transition: transform 0.2s ease-out, visibility 0.2s;
+}
+body.schublade.verzeichnis-offen aside { transform: none; visibility: visible; }
+/* Dahinter die Seite abgedunkelt. Ein Tippen darauf schliesst die Schublade, ohne darunter etwas auszulösen. */
+body.schublade.verzeichnis-offen .schleier { display: block; position: fixed; inset: 0; z-index: 16; background: rgba(28, 25, 21, 0.3); }
+@media (min-width: 1101px) { body.schublade .redaktion { padding-left: 4.5rem; } }
 
+/* Schmaler: die Spalte liegt über der Seite statt daneben. */
 @media (max-width: 1100px) {
   body.mit-assistent { padding-right: 0; }
   .assistent { box-shadow: -8px 0 32px rgba(28, 25, 21, 0.15); }
@@ -869,15 +872,14 @@ input.suche {
 .assistent .vorschlag.wunsch textarea:focus { outline: none; border-color: var(--olive); }
 .assistent .vorschlag.wunsch textarea[readonly] { color: var(--quiet); background: transparent; }
 
-/* Telefon: eine Spalte, das Verzeichnis knapp oben, die Seite darunter. */
+/* Telefon: eine Spalte, das Verzeichnis in der Schublade, oben links der Knopf dazu. */
 @media (max-width: 800px) {
   .redaktion { grid-template-columns: minmax(0, 1fr); gap: 1.2rem; padding: 1rem; }
-  aside { position: static; max-height: none; padding: 0; }
-  aside .wort { margin-bottom: 0.4rem; }
-  aside summary, aside .gruppe-zeile { margin: 0.3rem 0 0.1rem; }
-  main { scroll-margin-top: 0.5rem; }
-  main h1 { font-size: 2rem; }
+  body.schublade .verzeichnis-auf { top: 0.8rem; left: 0.8rem; }
+  /* Die Überschrift rückt neben den Knopf, die Leiste darunter. */
+  main h1 { font-size: 2rem; padding-left: 3.2rem; }
   #start { padding-top: 0.5rem; }
+  #blatt { padding-top: 3.4rem; }
   .aufgaben { margin-top: 1.2rem; }
   textarea.titel { font-size: 1.6rem; }
   /* Die Leiste wäre fast ein Fünftel des Bildschirms. Hier scrollt sie mit; ein Fehler bleibt unten stehen. */

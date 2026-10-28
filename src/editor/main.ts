@@ -101,6 +101,7 @@ root.innerHTML = `
   <button type="button" class="verzeichnis-auf" id="verzeichnis-auf" title="Verzeichnis zeigen" aria-label="Verzeichnis zeigen" aria-expanded="false">
     <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
   </button>
+  <div class="schleier" aria-hidden="true"></div>
   <div class="redaktion">
     <aside id="verzeichnis">
       <button type="button" class="wort" id="heim" title="Zur Startseite">
@@ -623,13 +624,9 @@ function renderStartBriefe(): void {
   });
 }
 
-/** Auf dem Telefon steht das Verzeichnis über der Seite. Dort klappt es nicht von selbst auf. */
-const schmal = window.matchMedia("(max-width: 800px)");
-
-/** Nach einem Wechsel an den Anfang der Ansicht. Auf dem Telefon am Verzeichnis vorbei. */
+/** Nach einem Wechsel an den Anfang der Ansicht. */
 function nachOben(): void {
-  if (schmal.matches) root!.querySelector("main")!.scrollIntoView();
-  else window.scrollTo({ top: 0 });
+  window.scrollTo({ top: 0 });
 }
 
 /** Jede Ansicht bekommt einen Eintrag im Verlauf des Browsers, damit «Zurück» in der Redaktion bleibt. */
@@ -645,7 +642,7 @@ function markCurrent(): void {
   for (const item of root!.querySelectorAll<HTMLButtonElement>("nav button[data-anfrage]")) {
     item.toggleAttribute("aria-current", item.dataset.anfrage === gewaehlt);
   }
-  if (current && !schmal.matches) (isBrief(current) ? briefeGruppe : seitenGruppe).open = true;
+  if (current) (isBrief(current) ? briefeGruppe : seitenGruppe).open = true;
 }
 
 /** Hält das Thema im Verzeichnis gleich, während getippt wird. */
@@ -783,7 +780,7 @@ async function openPage(rel: string): Promise<void> {
   renderStand();
   merke(current.rel);
   renderBriefe();
-  if (schmal.matches) nachOben();
+  nachOben();
   await mountEditor(current.body);
   void loadHistory(current.rel);
   if (brief && current.entwurf && !titelInput.value) titelInput.focus();
@@ -1470,7 +1467,7 @@ async function showBriefe(): Promise<void> {
   anfragenSeite.hidden = true;
   briefeSeite.hidden = false;
   wuenscheSeite.hidden = true;
-  if (!schmal.matches) briefeGruppe.open = true;
+  briefeGruppe.open = true;
   merke("newsletter");
   renderBriefUebersicht();
   nachOben();
@@ -1605,7 +1602,7 @@ async function showAnfragen(): Promise<boolean> {
   anfragenSeite.hidden = false;
   briefeSeite.hidden = true;
   wuenscheSeite.hidden = true;
-  if (!schmal.matches) anfragenGruppe.open = true;
+  anfragenGruppe.open = true;
   merke("anfragen");
   await loadAnfragen(true);
   nachOben();
@@ -1663,11 +1660,25 @@ document.addEventListener("keydown", (event) => {
   if (current && !form.hidden) void saveNow();
 });
 /**
- * Auf einem kleinen Laptop mit offenem Assistenten wird das Verzeichnis zur Schublade links,
- * damit der Text seine Breite behält. Ob die Schublade gilt, entscheidet das CSS; hier nur auf und zu.
+ * Das Verzeichnis als Schublade links: auf dem Telefon immer, auf einem kleinen Laptop,
+ * solange der Assistent offen ist (sonst hätte der Text kaum Platz). Hier wird entschieden,
+ * das CSS zeichnet nur `body.schublade`.
  */
 const verzeichnis = root.querySelector<HTMLElement>("#verzeichnis")!;
 const verzeichnisAuf = root.querySelector<HTMLButtonElement>("#verzeichnis-auf")!;
+const telefon = window.matchMedia("(max-width: 800px)");
+const laptop = window.matchMedia("(min-width: 1101px) and (max-width: 1439px)");
+function pruefeSchublade(): void {
+  const schublade = telefon.matches || (laptop.matches && document.body.classList.contains("mit-assistent"));
+  document.body.classList.toggle("schublade", schublade);
+  if (!schublade) zeigeVerzeichnis(false);
+}
+telefon.addEventListener("change", pruefeSchublade);
+laptop.addEventListener("change", pruefeSchublade);
+// Der Assistent setzt «mit-assistent» selbst, beim Öffnen und Schliessen.
+new MutationObserver(pruefeSchublade).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+pruefeSchublade();
+
 function zeigeVerzeichnis(offen: boolean): void {
   document.body.classList.toggle("verzeichnis-offen", offen);
   verzeichnisAuf.setAttribute("aria-expanded", String(offen));

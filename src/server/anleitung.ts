@@ -102,7 +102,7 @@ Verzeichnis (links):
 - «Wünsche»: siehe unten.
 - «Papierkorb», ganz unten: gelöschte Entwürfe. Erscheint nur, wenn etwas drin liegt. «Zurückholen» macht wieder einen Entwurf daraus.
 - Neben jedem Eintrag «…», beim Darüberfahren deutlich: ein kleines Menü mit «Öffnen», «Kopie anlegen» und «Vorschau ↗» (Entwurf) bzw. «Auf der Website ansehen ↗» (online). Veröffentlichen und Zurückziehen gehen nur in der offenen Seite oder in der Übersicht der Newsletter, nicht im Verzeichnis.
-- Auf einem kleinen Laptop mit offenem Assistenten ist das Verzeichnis eingeklappt: der runde Knopf mit den drei Strichen oben links öffnet es, ein Klick daneben oder eine Wahl darin schliesst es wieder.
+- Auf dem Telefon und auf einem kleinen Laptop mit offenem Assistenten ist das Verzeichnis eingeklappt: der runde Knopf mit den drei Strichen oben links öffnet es, ein Tippen daneben oder eine Wahl darin schliesst es wieder.
 - «Zurück» und «Vorwärts» im Browser wechseln zwischen den Ansichten der Redaktion.
 
 Startseite der Redaktion: ein Gruss je nach Tageszeit («Guten Morgen», «Guten Tag», «Guten Abend, Patrick.») mit zwei Karten. «Kontaktaufnahme» zeigt die neuen Anfragen und «Zur Kontaktaufnahme». «Newsletter» zeigt die wartenden Entwürfe, «Neuen Newsletter schreiben» und «Zur Übersicht» (alle Newsletter).
