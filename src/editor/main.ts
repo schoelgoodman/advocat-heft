@@ -104,31 +104,34 @@ root.innerHTML = `
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 11 12 4l9 7M6 9.5V20h4.5v-5.5h3V20H18V9.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
         Redaktion
       </button>
+      <!-- Jede Gruppe gleich: der Pfeil klappt die Liste auf, der Name öffnet die Übersicht, wo es eine gibt. -->
       <details id="anfragen-gruppe">
-        <summary>Kontaktaufnahme <span class="zahl" id="anfragen-zahl"></span></summary>
+        <summary><button type="button" class="gruppe-titel" id="anfragen-titel">Kontaktaufnahme</button><span class="zahl" id="anfragen-zahl"></span></summary>
         <nav id="anfragen-liste"></nav>
         <button type="button" class="leise mehr" id="anfragen-alle">Übersicht aller Anfragen</button>
       </details>
       <details id="briefe-gruppe">
-        <summary>Newsletter</summary>
+        <summary><button type="button" class="gruppe-titel" id="briefe-titel">Newsletter</button></summary>
         <nav id="briefe"></nav>
         <button type="button" class="leise mehr" id="mehr" hidden></button>
         <button type="button" class="leise mehr" id="briefe-alle">Übersicht aller Newsletter</button>
       </details>
       <details id="seiten-gruppe">
-        <summary>Übrige Seiten</summary>
+        <summary><span class="gruppe-titel">Übrige Seiten</span></summary>
         <nav id="seiten"></nav>
       </details>
+      <div class="gruppe-zeile">
+        <button type="button" class="gruppe-titel" id="wuensche-link">Wünsche</button><span class="zahl" id="wuensche-zahl"></span><span class="marke neu" id="wuensche-neu" hidden>Neu</span>
+      </div>
       <details id="papierkorb-gruppe" hidden>
-        <summary>Papierkorb</summary>
+        <summary><span class="gruppe-titel">Papierkorb</span></summary>
         <p class="leise">Gelöschte Entwürfe. Zurückgeholt sind sie wieder Entwürfe.</p>
         <nav id="papierkorb"></nav>
       </details>
-      <button type="button" class="gruppe-link" id="wuensche-link">Wünsche <span class="zahl" id="wuensche-zahl"></span><span class="marke neu" id="wuensche-neu" hidden>Neu</span></button>
     </aside>
     <main>
       <section id="start">
-        <h1>Guten Tag, Patrick.</h1>
+        <h1 id="gruss">Guten Tag, Patrick.</h1>
         <div class="aufgaben">
           <article class="aufgabe" id="start-anfragen"></article>
           <article class="aufgabe" id="start-briefe"></article>
@@ -423,10 +426,6 @@ async function mountEditor(markdown: string): Promise<void> {
 const ICONS = {
   kopieren:
     '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="8.5" height="8.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M3 10.5V2.5h8" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>',
-  online:
-    '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8s-2.4 4.5-6.5 4.5S1.5 8 1.5 8z" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>',
-  entwurf:
-    '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8s-2.4 4.5-6.5 4.5S1.5 8 1.5 8z" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M2.5 13.5l11-11" stroke="currentColor" stroke-width="1.3"/></svg>',
 };
 
 function icon(svg: string, label: string, onClick: () => void): HTMLButtonElement {
@@ -461,16 +460,10 @@ function listItem(page: PageSummary): HTMLElement {
   }
   item.addEventListener("click", () => void openPage(page.rel));
 
+  // Veröffentlichen und Zurückziehen stehen beim offenen Blatt, nicht hier: ein Klick daneben wäre zu leicht.
   const werkzeuge = document.createElement("span");
   werkzeuge.className = "werkzeuge";
   werkzeuge.append(icon(ICONS.kopieren, "Kopie anlegen", () => void copyPage(page.rel)));
-  if (page.rel !== STARTSEITE) {
-    werkzeuge.append(
-      page.entwurf
-        ? icon(ICONS.entwurf, "Entwurf · Veröffentlichen", () => void publish(page.rel))
-        : icon(ICONS.online, "Online · Von der Website nehmen", () => void unpublish(page.rel)),
-    );
-  }
   const zeile = document.createElement("div");
   zeile.className = "eintrag";
   zeile.append(item, werkzeuge);
@@ -651,20 +644,21 @@ function renderStand(): void {
   aktionen.replaceChildren();
   // Online sieht das Blatt anders aus: jede Änderung ist sofort auf der Website.
   form.dataset.stand = doc.entwurf ? "entwurf" : "online";
+  // Was die Seite wegnimmt (Löschen, Zurückziehen) steht links für sich, die übrigen Knöpfe rechts.
   if (doc.entwurf) {
     stand.innerHTML = `<span class="marke">Entwurf</span> Nur hier in der Redaktion sichtbar.`;
     aktionen.append(
-      button("Löschen", "leise", () => void deleteDraft()),
-      button("Kopie anlegen", "leise", () => void copyPage(doc.rel)),
+      button("Löschen", "leise weg", () => void deleteDraft()),
       button("Word importieren", "leise", () => wordInput.click()),
+      button("Kopie anlegen", "leise", () => void copyPage(doc.rel)),
       button("Vorschau", "", () => void openPreview()),
       button("Veröffentlichen", "haupt", () => void publish()),
     );
     return;
   }
   stand.innerHTML = `<span class="marke online">Online</span> Jede Änderung erscheint sofort auf der Website.`;
+  if (doc.rel !== STARTSEITE) aktionen.append(button("Zurückziehen", "leise weg", () => void unpublish()));
   aktionen.append(button("Kopie anlegen", "leise", () => void copyPage(doc.rel)));
-  if (doc.rel !== STARTSEITE) aktionen.append(button("Zurückziehen", "leise", () => void unpublish()));
   const link = document.createElement("a");
   link.className = "knopf";
   link.href = viewHref(doc);
@@ -674,7 +668,16 @@ function renderStand(): void {
   aktionen.append(link);
 }
 
+/** «Guten Morgen» bis elf, dann «Guten Tag», ab fünf «Guten Abend». Auch spät in der Nacht noch Abend. */
+function gruss(): string {
+  const stunde = new Date().getHours();
+  if (stunde >= 5 && stunde < 11) return "Guten Morgen, Patrick.";
+  if (stunde >= 11 && stunde < 17) return "Guten Tag, Patrick.";
+  return "Guten Abend, Patrick.";
+}
+
 function showStart(): void {
+  root!.querySelector("#gruss")!.textContent = gruss();
   current = null;
   gewaehlt = null;
   form.hidden = true;
@@ -1542,22 +1545,23 @@ wunschForm.addEventListener("submit", async (event) => {
 });
 root.querySelector("#briefe-neu")!.addEventListener("click", () => void newBrief());
 briefeSuche.addEventListener("input", () => renderBriefUebersicht());
-// Wie bei der Kontaktaufnahme: „Newsletter“ öffnet die Übersicht. Zuklappen geht, wenn sie schon offen ist.
-briefeGruppe.querySelector("summary")!.addEventListener("click", (event) => {
-  if (!briefeSeite.hidden && briefeGruppe.open) return;
-  event.preventDefault();
-  void showBriefe();
-});
-// Ein Klick auf „Kontaktaufnahme“ öffnet die Übersicht. Zuklappen geht, wenn sie schon offen ist.
-anfragenGruppe.querySelector("summary")!.addEventListener("click", (event) => {
-  if (!anfragenSeite.hidden && anfragenGruppe.open) return;
-  event.preventDefault();
-  void showAnfragen();
-});
+// Der Name einer Gruppe öffnet ihre Übersicht. Auf- und zuklappen macht der Rest der Zeile mit dem Pfeil.
+for (const [titel, zeige] of [
+  ["#briefe-titel", showBriefe],
+  ["#anfragen-titel", showAnfragen],
+] as const) {
+  root.querySelector(titel)!.addEventListener("click", (event) => {
+    event.preventDefault();
+    void zeige();
+  });
+}
 // Neue Anfragen erscheinen ohne Neuladen.
 window.setInterval(() => void loadAnfragen(), 60_000);
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") void loadAnfragen();
+  if (document.visibilityState !== "visible") return;
+  void loadAnfragen();
+  // Wer die Redaktion morgens offen liess, wird abends nicht mehr mit «Guten Morgen» begrüsst.
+  root.querySelector("#gruss")!.textContent = gruss();
 });
 mehr.addEventListener("click", () => {
   sichtbar += 10;

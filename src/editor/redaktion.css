@@ -111,16 +111,41 @@ aside .wort {
 }
 aside .wort svg { color: var(--olive); }
 aside .wort:hover { color: var(--olive); background: var(--hover); }
-aside h2, aside summary {
-  font-size: 0.75rem;
-  font-weight: 400;
+/* Gruppen: der Pfeil klappt auf und zu, ein Name in Olive beim Darüberfahren öffnet die Übersicht. */
+aside summary, aside .gruppe-zeile {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 1.1rem 0 0.3rem;
+  padding: 0.3rem 0.4rem;
+  border-radius: var(--rund-klein);
+  font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--quiet);
-  margin: 1.6rem 0 0.5rem;
 }
-aside summary { cursor: pointer; padding: 0.3rem 0.3rem; border-radius: var(--rund-klein); }
-aside summary:hover { color: var(--ink); }
+aside summary { cursor: pointer; list-style: none; }
+aside summary::-webkit-details-marker { display: none; }
+aside summary::before {
+  content: "";
+  flex: none;
+  width: 0.4rem;
+  height: 0.4rem;
+  margin: 0 0.3rem 0 0.15rem;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.15s;
+}
+aside details[open] > summary::before { transform: rotate(45deg); }
+aside summary:hover { color: var(--ink); background: var(--hover); }
+/* Ohne Pfeil gleich weit eingerückt wie mit. */
+aside .gruppe-zeile { padding-left: calc(0.4rem + 0.85rem + 0.4rem); }
+aside .gruppe-titel { font: inherit; text-transform: inherit; letter-spacing: inherit; color: inherit; }
+aside button.gruppe-titel { border: 0; border-radius: 4px; padding: 0; }
+aside button.gruppe-titel:hover { color: var(--olive); text-decoration: underline; text-underline-offset: 0.25em; }
+aside .gruppe-zeile .zahl:not(:empty) { padding: 0.05rem 0.45rem; border-radius: 999px; background: var(--olive); color: var(--paper); letter-spacing: 0.04em; }
+aside .gruppe-zeile .marke { font-size: 0.68rem; }
 nav { display: flex; flex-direction: column; gap: 0.15rem; }
 nav button {
   text-align: left;
@@ -144,7 +169,7 @@ nav .geloescht { align-items: center; justify-content: space-between; gap: 0.4re
 nav .geloescht .thema { color: var(--quiet); }
 nav .geloescht button { display: inline-block; border: 0; font-size: 0.82rem; flex: none; }
 @media (hover: none) { nav .werkzeuge { opacity: 1; } }
-nav .kopfzeile { font-size: 0.75rem; color: var(--quiet); }
+nav .kopfzeile { font-size: 0.8rem; color: var(--quiet); }
 nav .thema {
   font-size: 0.9rem;
   line-height: 1.3;
@@ -156,7 +181,7 @@ nav .thema {
 
 .marke {
   display: inline-block;
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   padding: 0.12rem 0.5rem;
@@ -198,6 +223,10 @@ nav .thema {
   font-size: 0.88rem;
 }
 .aktionen { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+/* Löschen und Zurückziehen links für sich, weg von «Veröffentlichen». */
+.leiste .aktionen { flex: 1 1 100%; justify-content: flex-end; }
+.leiste .aktionen .weg { margin-right: auto; }
+.leiste .aktionen .weg:hover { color: var(--rot); background: var(--rot-hauch); }
 
 /* Online: die Leiste olivgrün, ein pulsierender Punkt, der Rahmen ums Textfeld auch. */
 #blatt[data-stand="online"] .leiste { background: color-mix(in srgb, var(--olive) 9%, var(--paper)); border-color: rgba(95, 107, 69, 0.35); }
@@ -255,7 +284,7 @@ textarea.titel:focus { outline: none; border-bottom-color: var(--olive); }
 .milkdown h1, .milkdown h2, .milkdown h3 { font-weight: 400; font-variant-numeric: lining-nums; }
 /* Der Rahmen ums ganze Textfeld zeigt den Fokus schon. */
 .milkdown [contenteditable]:focus-visible { outline: none; }
-.tipp { font-size: 0.8rem; color: var(--quiet); margin: 0.6rem 0.2rem 2rem; }
+.tipp { font-size: 0.85rem; color: var(--quiet); margin: 0.6rem 0.2rem 2rem; }
 kbd { font-family: var(--sans); border: 1px solid var(--line); border-radius: 4px; padding: 0 0.3rem; background: #fff; }
 
 /* Fassungen */
@@ -263,7 +292,7 @@ kbd { font-family: var(--sans); border: 1px solid var(--line); border-radius: 4p
 #fassungen-gruppe summary { cursor: pointer; font-size: 0.9rem; }
 #fassungen { list-style: none; padding: 0; margin: 0; font-size: 0.85rem; }
 #fassungen li { display: grid; gap: 0.2rem; padding: 0.55rem 0; border-top: 1px solid var(--line); }
-#fassungen time { color: var(--quiet); font-size: 0.78rem; }
+#fassungen time { color: var(--quiet); font-size: 0.82rem; }
 #fassungen .knoepfe { display: flex; gap: 0.2rem; margin-left: -0.5rem; }
 #vorschau {
   margin-top: 1rem;
@@ -291,7 +320,7 @@ dialog p { margin: 0 0 1.4rem; line-height: 1.5; }
 dialog .aktionen { justify-content: flex-end; }
 .haupt.gefahr { background: var(--rot); border-color: var(--rot); }
 .haupt.gefahr:hover { background: var(--ink); border-color: var(--ink); }
-aside .mehr { display: block; margin: 0.3rem 0 0; font-size: 0.82rem; }
+aside .mehr { display: block; margin: 0.3rem 0 0; font-size: 0.85rem; }
 
 /* Kontaktaufnahme */
 aside summary .zahl:not(:empty) {
@@ -302,7 +331,6 @@ aside summary .zahl:not(:empty) {
   color: var(--paper);
   letter-spacing: 0.04em;
 }
-#anfragen-gruppe { margin-bottom: 1.2rem; }
 #anfragen-gruppe summary { margin-top: 0; }
 nav .ungelesen .thema { font-weight: 600; }
 .marke.neu { background: var(--rot); color: var(--paper); }
@@ -314,7 +342,7 @@ nav .ungelesen .thema { font-weight: 600; }
   scroll-margin-top: 1.5rem;
 }
 #anfragen-karten li.gewaehlt { border-color: var(--olive); box-shadow: 0 0 0 3px var(--olive-ring), var(--schatten); }
-#anfragen-karten .kopfzeile { margin: 0; font-size: 0.78rem; color: var(--quiet); }
+#anfragen-karten .kopfzeile { margin: 0; font-size: 0.82rem; color: var(--quiet); }
 #anfragen-karten h2 { font-family: var(--serif); font-weight: 400; font-size: 1.4rem; margin: 0.3rem 0 0.1rem; }
 #anfragen-karten a:not(.knopf) { color: var(--olive); }
 #anfragen-karten .nachricht { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; margin: 0.9rem 0 1.1rem; }
@@ -332,7 +360,7 @@ nav .ungelesen .thema { font-weight: 600; }
 }
 .kachel:hover { border-color: rgba(95, 107, 69, 0.5); }
 .kachel[aria-pressed="true"] { border-color: var(--olive); background: color-mix(in srgb, var(--olive) 8%, var(--flaeche)); }
-.kachel .label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--quiet); }
+.kachel .label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--quiet); }
 /* Manrope statt Marcellus: dort sieht die Null aus wie ein O. */
 .kachel .wert { font-size: 2rem; font-weight: 600; line-height: 1.15; font-variant-numeric: tabular-nums; }
 .kachel[aria-pressed="true"] .wert { color: var(--olive); }
@@ -346,14 +374,14 @@ nav .ungelesen .thema { font-weight: 600; }
   padding: 1.3rem 1.4rem 1.4rem;
 }
 .aufgabe.dringend { border-color: rgba(154, 59, 42, 0.35); box-shadow: 0 0 0 3px var(--rot-hauch), var(--schatten); }
-.aufgabe h2 { margin: 0 0 0.6rem; font-size: 0.75rem; font-weight: 400; text-transform: uppercase; letter-spacing: 0.08em; color: var(--quiet); }
+.aufgabe h2 { margin: 0 0 0.6rem; font-size: 0.78rem; font-weight: 400; text-transform: uppercase; letter-spacing: 0.08em; color: var(--quiet); }
 .aufgabe.dringend h2 { color: var(--rot); }
 .aufgabe .gross { margin: 0; font-family: var(--serif); font-size: 1.6rem; line-height: 1.2; font-variant-numeric: lining-nums; }
 .aufgabe p.leise { margin: 0.3rem 0 0.9rem; }
 .aufgabe ul { list-style: none; padding: 0; margin: 0 0 1.2rem; display: grid; gap: 0.15rem; }
 .aufgabe li button { display: grid; width: 100%; text-align: left; border: 0; padding: 0.5rem 0.6rem; font-size: 0.92rem; background: var(--flaeche-tief); }
 .aufgabe li button:hover { background: var(--olive-hauch); }
-.aufgabe li button span { font-size: 0.75rem; color: var(--quiet); }
+.aufgabe li button span { font-size: 0.8rem; color: var(--quiet); }
 .aufgabe > .aktionen { margin-top: auto; }
 @media (max-width: 1000px) { .aufgaben { grid-template-columns: 1fr; } }
 
@@ -625,7 +653,7 @@ body.mit-assistent { padding-right: 26rem; }
 .assistent .senden:disabled { opacity: 0.3; cursor: default; background: var(--olive); }
 .assistent .senden.stopp { background: var(--ink); }
 .assistent .unten { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-top: 0.6rem; }
-.assistent .hinweis { margin: 0; font-size: 0.72rem; color: var(--quiet); text-align: right; }
+.assistent .hinweis { margin: 0; font-size: 0.78rem; color: var(--quiet); text-align: right; }
 .assistent .denken {
   display: inline-flex;
   flex: none;
@@ -697,29 +725,13 @@ input.suche {
 #briefe-karten { list-style: none; padding: 0; margin: 1.2rem 0 3rem; }
 #briefe-karten li { padding: 1.1rem 1.4rem 1.2rem; margin-bottom: 0.9rem; }
 #briefe-karten li[data-entwurf="true"] { border-color: rgba(226, 200, 122, 0.9); }
-#briefe-karten .kopfzeile { margin: 0; font-size: 0.78rem; color: var(--quiet); }
+#briefe-karten .kopfzeile { margin: 0; font-size: 0.82rem; color: var(--quiet); }
 #briefe-karten h2 { margin: 0.35rem 0 0.3rem; font-family: var(--serif); font-weight: 400; font-size: 1.4rem; line-height: 1.25; }
 #briefe-karten .titel-knopf { border: 0; padding: 0; text-align: left; font: inherit; }
 #briefe-karten .titel-knopf:hover { color: var(--olive); }
 #briefe-karten .auszug { margin: 0 0 0.9rem; font-size: 0.9rem; line-height: 1.55; color: var(--quiet); }
 
 /* Wünsche */
-aside .gruppe-link {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin: 1.6rem 0 0.5rem;
-  padding: 0.3rem 0.3rem;
-  border: 0;
-  border-radius: var(--rund-klein);
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--quiet);
-}
-aside .gruppe-link:hover { color: var(--ink); }
-aside .gruppe-link .zahl:not(:empty) { padding: 0.05rem 0.45rem; border-radius: 999px; background: var(--olive); color: var(--paper); letter-spacing: 0.04em; }
-aside .gruppe-link .marke { font-size: 0.65rem; }
 .wunsch-hinweis { margin: 1.4rem 0 0; font-size: 0.9rem; color: var(--quiet); }
 .wunsch-hinweis button { color: var(--olive); font-weight: 600; padding-inline: 0.4rem; }
 #wuensche-seite { padding-top: 1.5rem; }
@@ -755,7 +767,7 @@ aside .gruppe-link .marke { font-size: 0.65rem; }
 #wuensche-karten li { padding: 1.1rem 1.4rem; margin-bottom: 0.9rem; }
 #wuensche-karten li[data-status="erledigt"] { opacity: 0.8; }
 #wuensche-karten li.leer { color: var(--quiet); box-shadow: none; background: transparent; border-style: dashed; }
-#wuensche-karten .kopfzeile { margin: 0; font-size: 0.78rem; color: var(--quiet); }
+#wuensche-karten .kopfzeile { margin: 0; font-size: 0.82rem; color: var(--quiet); }
 #wuensche-karten .nachricht { margin: 0.7rem 0 0.9rem; line-height: 1.55; overflow-wrap: anywhere; }
 #wuensche-karten .telegram-fehlt { font-size: 0.8rem; color: var(--rot); }
 .assistent .vorschlag.wunsch .inhalt { font-family: var(--sans); font-size: 0.92rem; display: grid; gap: 0.5rem; max-height: none; }
@@ -779,8 +791,7 @@ aside .gruppe-link .marke { font-size: 0.65rem; }
   .redaktion { grid-template-columns: minmax(0, 1fr); gap: 1.2rem; padding: 1rem; }
   aside { position: static; max-height: none; padding: 0; }
   aside .wort { margin-bottom: 0.4rem; }
-  aside h2, aside summary, aside .gruppe-link { margin: 0.5rem 0 0.2rem; }
-  #anfragen-gruppe { margin-bottom: 0; }
+  aside summary, aside .gruppe-zeile { margin: 0.3rem 0 0.1rem; }
   main { scroll-margin-top: 0.5rem; }
   main h1 { font-size: 2rem; }
   #start { padding-top: 0.5rem; }
