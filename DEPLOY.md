@@ -33,7 +33,16 @@ echo "7c108e29e221c2e8a71e1097aa83bf87d26d369d4c579fef811d84f7ef2964eb  /tmp/adv
 
 # Beide Container schreiben in content/, darum beide anhalten.
 systemctl stop docker-advocat docker-advocat-redaktion
-unzip -q /tmp/advocat-content.zip -d <appdata>/advocat/content
+
+# Der Zip ersetzt den Inhalt. Was schon dasteht, wird nicht gelöscht, sondern beiseitegelegt.
+cd <appdata>/advocat
+if [ -n "$(ls -A content 2>/dev/null)" ]; then mv content "content.alt-$(date +%F-%H%M)"; fi
+mkdir -p content
+unzip -q /tmp/advocat-content.zip -d content
+# Besitzer und Rechte wie site/ daneben, die Neo im preStart anlegt.
+chown -R --reference=site content
+chmod -R u+rwX content
+
 systemctl start docker-advocat docker-advocat-redaktion
 ```
 
@@ -51,7 +60,7 @@ Danach muss es so aussehen:
 
 Liegt dort ein Ordner `dev-content/` oder `advocat-content/` statt `briefe/` usw., ist eine Ebene zu viel entpackt. Den Inhalt eine Ebene hochschieben.
 
-Besitzer und Rechte wie die anderen Ordner unter `<appdata>/advocat` setzen (Neo legt sie im `preStart` an). Ist `content` nicht leer, wenn der Zip kommt, nichts überschreiben und Bescheid geben.
+Der Zip ersetzt immer den ganzen Inhalt, auch Änderungen, die in der Redaktion seither gemacht wurden. Der alte Inhalt liegt danach unter `<appdata>/advocat/content.alt-<Datum>` und lässt sich zurückholen: beide Container anhalten, `content` beiseitelegen, den alten Ordner zurück nach `content` schieben, starten. Erst löschen, wenn die Seite mit dem neuen Inhalt läuft und niemand ihn mehr braucht.
 
 `site/` nicht anfassen. Der Dienst setzt das HTML bei jedem Start neu.
 
