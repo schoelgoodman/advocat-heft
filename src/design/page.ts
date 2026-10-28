@@ -35,6 +35,7 @@ function headMeta(view: PageView): string {
     `<meta property="og:description" content="${esc(view.description)}">`,
     `<meta property="og:url" content="${esc(url)}">`,
     `<meta property="og:image" content="${esc(image)}">`,
+    ...(view.imageAlt ? [`<meta property="og:image:alt" content="${esc(view.imageAlt)}">`] : []),
     `<meta name="twitter:card" content="summary_large_image">`,
   ];
   if (view.noindex) return tags.join("\n  ");

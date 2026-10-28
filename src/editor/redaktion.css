@@ -920,3 +920,21 @@ input.suche {
     scroll-behavior: auto !important;
   }
 }
+
+/* «Seite prüfen» über dem Eingabefeld, wie «Neuer Chat». */
+.assistent .pruefen {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0 0 0.5rem;
+  padding: 0.35rem 0.8rem 0.35rem 0.6rem;
+  border: 1px solid var(--a-rand);
+  border-radius: 999px;
+  background: var(--a-flaeche);
+  font-size: 0.8rem;
+  color: var(--ink);
+}
+.assistent .pruefen[hidden] { display: none; }
+.assistent .pruefen svg { width: 14px; height: 14px; color: var(--olive); }
+.assistent .pruefen:hover:not(:disabled) { border-color: var(--olive); }
+.assistent .pruefen:disabled { opacity: 0.45; cursor: default; }

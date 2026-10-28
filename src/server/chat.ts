@@ -2,8 +2,10 @@ import fs from "node:fs/promises";
 import type http from "node:http";
 import path from "node:path";
 import { briefsNewestFirst, loadDocuments } from "../content/load.ts";
-import type { ContentDocument } from "../content/document.ts";
+import { publicPath, type ContentDocument } from "../content/document.ts";
+import { absoluteUrl, DEFAULT_DESCRIPTION } from "../design/seo.ts";
 import { chatDir } from "../paths.ts";
+import { pageView } from "../render/build.ts";
 import { ANLEITUNG } from "./anleitung.ts";
 import { wuenscheText } from "./wuensche.ts";
 
@@ -115,6 +117,47 @@ function briefKopf(doc: ContentDocument): string {
   return `Nr. ${doc.nummer ?? "?"} · ${doc.datum} · ${doc.titel}${doc.entwurf ? " (Entwurf)" : ""}`;
 }
 
+/** Was Google von der offenen Seite zeigt, aus demselben Code wie die Website. So muss das Modell nicht raten. */
+async function googleText(lage: Lage): Promise<string> {
+  try {
+    const view = await pageView({
+      rel: lage.rel ?? "",
+      art: lage.art ?? "kapitel",
+      titel: lage.titel ?? "",
+      datum: lage.datum ?? "",
+      nummer: null,
+      entwurf: lage.entwurf ?? false,
+      body: lage.body ?? "",
+    });
+    // Auf festen Seiten ist ein Bild ganz oben das Titelbild: ein Hintergrund, dessen Beschreibung Google nicht liest.
+    const bilder = [...(lage.body ?? "").matchAll(/!\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g)];
+    const titelbild = lage.art === "kapitel" && /^!\[/.test((lage.body ?? "").trim()) ? bilder.shift() : undefined;
+    const ohne = bilder.filter((bild) => {
+      const alt = bild[1].trim();
+      const name = (bild[2].split("/").pop() ?? "").replace(/\.[a-z0-9]+$/i, "");
+      return !alt || alt === name || /^[\w-]+$/.test(alt) && /[-_]/.test(alt);
+    });
+    const ersatz = view.description === DEFAULT_DESCRIPTION
+      ? " (Ersatztext: die Seite hat keinen Absatz, der sich als Beschreibung eignet)"
+      : "";
+    return [
+      "So zeigt Google die offene Seite (aus dem aktuellen Text berechnet, auch wenn er noch nicht gespeichert ist):",
+      `- Adresse: ${absoluteUrl(publicPath(lage.rel ?? ""))}`,
+      `- Titel im Suchergebnis: «${view.title}» (${view.title.length} Zeichen)`,
+      `- Beschreibung im Suchergebnis: «${view.description}» (${view.description.length} Zeichen)${ersatz}`,
+      `- Vorschaubild beim Teilen: ${view.image}`,
+      ...(titelbild
+        ? [`- Titelbild ${titelbild[2]}: ${titelbild[1].trim() ? `Beschreibung «${titelbild[1].trim()}»` : "ohne Beschreibung"}. Sie erscheint nur beim Teilen der Seite, nicht in der Google-Suche.`]
+        : []),
+      ohne.length
+        ? `- Bilder im Text ohne brauchbare Beschreibung: ${ohne.map((bild) => bild[2]).join(", ")}`
+        : "- Alle Bilder im Text haben eine Beschreibung.",
+    ].join("\n");
+  } catch {
+    return "";
+  }
+}
+
 /** Die Lage als Text fürs Modell: wo Patrick ist, was offen ist, und die Vorbilder. */
 async function lageText(lage: Lage, frage: string): Promise<string> {
   const teile: string[] = ["# Lage"];
@@ -129,6 +172,7 @@ async function lageText(lage: Lage, frage: string): Promise<string> {
     );
     if (lage.auswahl?.trim()) teile.push(`Patrick hat diese Stelle markiert:\n"""\n${lage.auswahl.trim()}\n"""`);
     teile.push(lage.body?.trim() ? `Der Text der offenen Seite als Markdown:\n"""\n${lage.body}\n"""` : "Der Text der offenen Seite ist noch leer.");
+    if (lage.art !== "recht" && lage.body?.trim()) teile.push(await googleText(lage));
   }
 
   teile.push(`# Patricks Wünsche an die Betreuung, der neueste zuerst\n${await wuenscheText()}`);

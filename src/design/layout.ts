@@ -28,6 +28,8 @@ export interface PageView {
   description: string;
   /** Vorschaubild, ein Pfad auf der Seite. */
   image: string;
+  /** Seine Beschreibung aus dem Markdown, für die Vorschau beim Teilen. */
+  imageAlt?: string;
   /** Ein Newsletter ist ein Artikel mit Datum, alles andere eine Seite. */
   article?: { datum: string };
   noindex?: boolean;
@@ -694,8 +696,12 @@ export function renderDocument(input: RenderInput): PageView {
       if (!image.getAttribute("alt")) image.setAttribute("alt", "");
       if (image.getAttribute("title") === "") image.removeAttribute("title");
     }
-    const firstImage = root.querySelector("img")?.getAttribute("src");
-    if (firstImage && !/\.svg$/i.test(firstImage)) view.image = firstImage;
+    const firstImage = root.querySelector("img");
+    const firstSrc = firstImage?.getAttribute("src");
+    if (firstImage && firstSrc && !/\.svg$/i.test(firstSrc)) {
+      view.image = firstSrc;
+      view.imageAlt = firstImage.getAttribute("alt") ?? "";
+    }
     view.description = describe(root) || DEFAULT_DESCRIPTION;
     const hero = takeHero(root, input);
     if (input.art === "brief") {

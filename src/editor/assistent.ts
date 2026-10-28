@@ -186,6 +186,9 @@ const BEISPIELE = [
   "Prüf den Text auf Rechtschreibung.",
 ];
 
+/** Was «Seite prüfen» schickt. Die Anleitung des Assistenten kennt genau diesen Satz. */
+const PRUEFEN = "Prüf diese Seite: Inhalt und Suchmaschinen.";
+
 const svg = (inhalt: string) =>
   `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inhalt}</svg>`;
 
@@ -198,6 +201,7 @@ const ICON = {
   schnell: svg('<path d="M13 3L5 13.5h6L10 21l8-10.5h-6z"/>'),
   gruendlich: svg('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),
   markierung: svg('<path d="M4 7h16M4 12h10M4 17h7"/>'),
+  lupe: svg('<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/>'),
 };
 
 const DENKEN_KEY = "assistent-denken";
@@ -229,6 +233,7 @@ export async function mountAssistent(anschluss: Anschluss, bereit: boolean): Pro
     </header>
     <ol class="verlauf" aria-live="polite"></ol>
     <form class="eingabe">
+      <button type="button" class="pruefen" hidden title="Der Assistent prüft die offene Seite auf Verständlichkeit und darauf, wie Google sie findet, und schlägt höchstens drei Verbesserungen vor.">${ICON.lupe}Seite prüfen</button>
       <p class="markiert" hidden>${ICON.markierung}<span></span><button type="button" class="symbol klein" title="Markierung nicht mitschicken" aria-label="Markierung nicht mitschicken">${ICON.zu}</button></p>
       <div class="feld">
         <textarea rows="1" placeholder="Nachricht an den Assistenten …"></textarea>
@@ -256,6 +261,7 @@ export async function mountAssistent(anschluss: Anschluss, bereit: boolean): Pro
   const senden = spalte.querySelector<HTMLButtonElement>('button[type="submit"]')!;
   const markiert = spalte.querySelector<HTMLElement>(".markiert")!;
   const markiertText = markiert.querySelector<HTMLElement>("span")!;
+  const pruefen = spalte.querySelector<HTMLButtonElement>(".pruefen")!;
 
   let denken: Denken = gemerktesDenken();
   const denkKnoepfe = [...spalte.querySelectorAll<HTMLButtonElement>("[data-denken]")];
@@ -310,6 +316,20 @@ export async function mountAssistent(anschluss: Anschluss, bereit: boolean): Pro
   markiert.querySelector("button")!.addEventListener("click", () => {
     auswahl = "";
     zeigeAuswahl();
+  });
+
+  // «Seite prüfen» gibt es für Newsletter und feste Seiten. Das Rechtliche bleibt, wie es ist.
+  function zeigePruefen(): void {
+    const lage = anschluss.lage();
+    pruefen.hidden = !bereit || lage.ansicht !== "blatt" || lage.art === "recht";
+    pruefen.disabled = !!laeuft;
+  }
+  // Die Redaktion meldet keinen Seitenwechsel. Nachsehen kostet nichts.
+  window.setInterval(zeigePruefen, 600);
+  pruefen.addEventListener("click", () => {
+    if (laeuft) return;
+    eingabe.value = PRUEFEN;
+    void frage();
   });
 
   function scrollAnsEnde(): void {
@@ -563,6 +583,7 @@ export async function mountAssistent(anschluss: Anschluss, bereit: boolean): Pro
     senden.setAttribute("aria-label", senden.title);
     senden.classList.toggle("stopp", an);
     pruefeSenden();
+    zeigePruefen();
   }
 
   /** Das Feld wächst mit dem Text bis zu einer Grenze, danach scrollt es. */

@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { publicPath, type ContentDocument } from "../content/document.ts";
 import { briefsNewestFirst, loadDocuments } from "../content/load.ts";
-import { excerptFromMarkdown, renderDocument, type Teaser } from "../design/layout.ts";
+import { excerptFromMarkdown, renderDocument, type PageView, type Teaser } from "../design/layout.ts";
 import { pageShell } from "../design/page.ts";
 import { robotsTxt, sitemapXml, type SitemapEntry } from "../design/seo.ts";
 import { repoRoot, siteDir, contentDir } from "../paths.ts";
@@ -131,10 +131,14 @@ async function publishedDocuments(): Promise<ContentDocument[]> {
 
 /** Eine Seite so, wie sie veröffentlicht aussähe. Für die Vorschau eines Entwurfs. */
 export async function previewPage(doc: ContentDocument): Promise<string> {
+  return pageShell(await pageView(doc));
+}
+
+/** Titel, Beschreibung und Vorschaubild, wie Google sie von dieser Seite liest. Für den Assistenten. */
+export async function pageView(doc: ContentDocument): Promise<PageView> {
   const teasers = teasersFor(briefsNewestFirst(await publishedDocuments()));
   const html = publishHtml(await markdownToHtml(doc.body));
-  const view = renderDocument({ ...doc, html, teasers });
-  return pageShell(view);
+  return renderDocument({ ...doc, html, teasers });
 }
 
 export async function buildSite(): Promise<{ pages: number; index: string }> {
