@@ -2,6 +2,8 @@
 
 Anleitung für Hermes auf dem Homeserver. Zwei Teile: das Plugin, der Inhalt. Die Reihenfolge einhalten.
 
+Ein Code-Update ist nur Teil 1. Teil 2 (Inhalt einspielen) nur, wenn der Betreiber es ausdrücklich verlangt. Der Inhalt gehört Patrick: Er pflegt ihn in der Redaktion, jedes Einspielen ersetzt seine Arbeit.
+
 Repo: `github.com/schoelgoodman/advocat-heft` (öffentlich, kein Token nötig).
 
 ## 1. Plugin eintragen
@@ -24,6 +26,8 @@ Beim ersten Start legt der Dienst zwei leere Ordner an:
 `<appdata>` ist `neo.core.volumes.appdata` in der Neo-Konfiguration. Den echten Pfad dort nachsehen, nicht raten.
 
 ## 2. Inhalt einspielen
+
+Nur auf ausdrückliche Anweisung des Betreibers, nicht bei einem Code-Update. Einmalig zum Umzug auf einen Server; danach pflegt Patrick den Inhalt in der Redaktion.
 
 Der Inhalt hängt als `advocat-content.zip` am Release `content-2026-10-29` (Stand 29.10.2026, ersetzt `content-2026-10-25`). Das Zip enthält den Inhalt von `dev-content/` direkt (kein Oberordner), samt `.git`. Das `.git` muss mit: die Redaktion schreibt dort ihre Fassungen.
 
@@ -60,7 +64,7 @@ Danach muss es so aussehen:
 
 Liegt dort ein Ordner `dev-content/` oder `advocat-content/` statt `briefe/` usw., ist eine Ebene zu viel entpackt. Den Inhalt eine Ebene hochschieben.
 
-Der Zip ersetzt immer den ganzen Inhalt, auch Änderungen, die in der Redaktion seither gemacht wurden. Der alte Inhalt liegt danach unter `<appdata>/advocat/content.alt-<Datum>` und lässt sich zurückholen: beide Container anhalten, `content` beiseitelegen, den alten Ordner zurück nach `content` schieben, starten. Erst löschen, wenn die Seite mit dem neuen Inhalt läuft und niemand ihn mehr braucht.
+Der Zip ersetzt den ganzen Inhalt, auch alles, was Patrick seither in der Redaktion geändert hat. Darum nur auf Anweisung. Der alte Inhalt liegt danach unter `<appdata>/advocat/content.alt-<Datum>` und lässt sich zurückholen: beide Container anhalten, `content` beiseitelegen, den alten Ordner zurück nach `content` schieben, starten. Erst löschen, wenn die Seite mit dem neuen Inhalt läuft und niemand ihn mehr braucht.
 
 `site/` nicht anfassen. Der Dienst setzt das HTML bei jedem Start neu.
 
