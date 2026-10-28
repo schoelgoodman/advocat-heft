@@ -27,7 +27,7 @@ Rechts in der Redaktion sitzt ein Assistent: Er erklärt die Redaktion und schre
 
 Der Assistent hat keine Werkzeuge. Der Server schickt ihm die Anleitung (`src/server/anleitung.ts`), die offene Seite samt Markierung und die drei neuesten Newsletter, dazu jeden, den Patrick mit Nummer nennt. Änderungen am Text kommen als Vorschlag; erst «Übernehmen» setzt sie ein, als normale Änderung im Editor (Ctrl+Z, Fassungen). Ändert sich die Redaktion, muss `anleitung.ts` mit.
 
-Wünsche zum Aussehen fasst er als Designwunsch zusammen. «Wunsch senden» schickt ihn über denselben Telegram-Bot wie die Anfragen. Der Verlauf liegt in `CHAT_DIR` (lokal `dev-chat/`, auf Neo `<appdata>/advocat/chat`), nicht im Inhalts-Git. «Neues Gespräch» leert ihn.
+Wünsche an die Betreuung: am Aussehen der Website (Design) oder an der Redaktion (Funktion). Der Assistent schreibt sie auf, einen Funktionswunsch als kleinen Entwurf (Was fehlt, Wozu, Vorschlag). Patrick kann den Text auf der Karte ändern, «Wunsch senden» schickt ihn über denselben Telegram-Bot wie die Anfragen. Jeder Wunsch bleibt in `CHAT_DIR/wuensche.json` und steht in der Redaktion unter «Wünsche», mit Stand offen oder erledigt; dort lässt sich auch ohne Assistenten einer schreiben. Der Verlauf des Assistenten liegt daneben in `CHAT_DIR/verlauf.json`, nicht im Inhalts-Git. «Neues Gespräch» leert nur den Verlauf.
 
 ## Word-Import
 

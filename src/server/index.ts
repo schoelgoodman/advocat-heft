@@ -11,7 +11,8 @@ import { anfragenDir, contentDir, repoRoot, siteDir } from "../paths.ts";
 import { buildSite, previewPage, rebuildDocuments } from "../render/build.ts";
 import { handleAnfrage, listAnfragen, setAnfrageStatus } from "./anfrage.ts";
 import { importWord } from "./word.ts";
-import { assistentBereit, clearVerlauf, handleChat, readVerlauf, sendDesignwunsch } from "./chat.ts";
+import { assistentBereit, clearVerlauf, handleChat, readVerlauf } from "./chat.ts";
+import { aendereWunsch, listWuensche, neuerWunsch } from "./wuensche.ts";
 
 // Lokal stehen Schlüssel wie XAI_API_KEY in .env (gitignoriert). Auf Neo setzt sie der Container.
 if (process.env.NODE_ENV !== "production") {
@@ -294,10 +295,19 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     return;
   }
 
-  if (req.method === "POST" && url.pathname === "/api/designwunsch") {
-    const telegram = await sendDesignwunsch(JSON.parse((await readBody(req)).toString("utf8")));
-    if (telegram !== "gesendet") throw new Error(telegram === "aus" ? "Telegram ist nicht eingerichtet." : "Telegram hat nicht geantwortet.");
-    sendJson(res, 200, { ok: true });
+  if (req.method === "GET" && url.pathname === "/api/wuensche") {
+    res.setHeader("cache-control", "no-store");
+    sendJson(res, 200, { wuensche: await listWuensche() });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/wuensche") {
+    sendJson(res, 200, await neuerWunsch(JSON.parse((await readBody(req)).toString("utf8"))));
+    return;
+  }
+
+  if (req.method === "PUT" && url.pathname === "/api/wuensche") {
+    sendJson(res, 200, await aendereWunsch(JSON.parse((await readBody(req)).toString("utf8"))));
     return;
   }
 

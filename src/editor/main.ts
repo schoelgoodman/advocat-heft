@@ -82,6 +82,19 @@ let alleAnfragen: Anfrage[] = [];
 let anfragenStand = "";
 let anfragenFilter: AnfragenFilter = "offen";
 let briefeFilter: "alle" | "entwuerfe" | "online" = "alle";
+let wuenscheFilter: "offen" | "erledigt" | "alle" = "offen";
+
+interface Wunsch {
+  id: string;
+  art: "design" | "funktion";
+  text: string;
+  seite: string;
+  eingang: string;
+  status: "offen" | "erledigt";
+  erledigtAm?: string;
+  telegram: "gesendet" | "fehler" | "aus";
+}
+let alleWuensche: Wunsch[] = [];
 let gewaehlt: string | null = null;
 
 root.innerHTML = `
@@ -111,6 +124,7 @@ root.innerHTML = `
         <p class="leise">Gelöschte Entwürfe. Zurückgeholt sind sie wieder Entwürfe.</p>
         <nav id="papierkorb"></nav>
       </details>
+      <button type="button" class="gruppe-link" id="wuensche-link">Wünsche <span class="zahl" id="wuensche-zahl"></span><span class="marke neu" id="wuensche-neu" hidden>Neu</span></button>
     </aside>
     <main>
       <section id="start">
@@ -119,6 +133,7 @@ root.innerHTML = `
           <article class="aufgabe" id="start-anfragen"></article>
           <article class="aufgabe" id="start-briefe"></article>
         </div>
+        <p class="wunsch-hinweis">Fehlt etwas in der Redaktion oder soll die Website anders aussehen? <button type="button" class="leise" id="start-wunsch">Wunsch schreiben →</button></p>
       </section>
       <section id="anfragen" hidden>
         <h1>Kontaktaufnahme</h1>
@@ -135,6 +150,25 @@ root.innerHTML = `
         <input type="search" class="suche" id="briefe-suche" placeholder="Nach Thema oder Nummer suchen …" aria-label="Newsletter suchen">
         <p class="leise" id="briefe-text"></p>
         <ol id="briefe-karten"></ol>
+      </section>
+      <section id="wuensche-seite" hidden>
+        <h1>Wünsche</h1>
+        <p class="leise einleitung">Was in der Redaktion fehlt oder an der Website anders sein soll. Jeder Wunsch geht per Telegram an die Betreuung der Website. Beim Formulieren hilft der Assistent rechts.</p>
+        <form class="neuer-wunsch" id="wunsch-form">
+          <label>Art
+            <select id="wunsch-art">
+              <option value="funktion">Funktion der Redaktion</option>
+              <option value="design">Aussehen der Website</option>
+            </select>
+          </label>
+          <textarea id="wunsch-text" rows="4" placeholder="Was fehlt oder soll anders sein, und wozu?"></textarea>
+          <div class="aktionen">
+            <button type="submit" class="haupt">Wunsch senden</button>
+            <p class="leise" id="wunsch-meldung" aria-live="polite"></p>
+          </div>
+        </form>
+        <div class="kacheln" id="wuensche-kacheln" role="group" aria-label="Wünsche filtern"></div>
+        <ol id="wuensche-karten"></ol>
       </section>
       <form id="blatt" hidden>
         <div class="leiste">
@@ -189,6 +223,15 @@ const briefeKacheln = root.querySelector<HTMLElement>("#briefe-kacheln")!;
 const briefeSuche = root.querySelector<HTMLInputElement>("#briefe-suche")!;
 const briefeText = root.querySelector<HTMLElement>("#briefe-text")!;
 const briefeKarten = root.querySelector<HTMLOListElement>("#briefe-karten")!;
+const wuenscheSeite = root.querySelector<HTMLElement>("#wuensche-seite")!;
+const wuenscheKacheln = root.querySelector<HTMLElement>("#wuensche-kacheln")!;
+const wuenscheKarten = root.querySelector<HTMLOListElement>("#wuensche-karten")!;
+const wuenscheZahl = root.querySelector<HTMLElement>("#wuensche-zahl")!;
+const wuenscheNeu = root.querySelector<HTMLElement>("#wuensche-neu")!;
+const wunschForm = root.querySelector<HTMLFormElement>("#wunsch-form")!;
+const wunschArt = root.querySelector<HTMLSelectElement>("#wunsch-art")!;
+const wunschText = root.querySelector<HTMLTextAreaElement>("#wunsch-text")!;
+const wunschMeldung = root.querySelector<HTMLElement>("#wunsch-meldung")!;
 const anfragenText = root.querySelector<HTMLElement>("#anfragen-text")!;
 const anfragenKacheln = root.querySelector<HTMLElement>("#anfragen-kacheln")!;
 const startAnfragen = root.querySelector<HTMLElement>("#start-anfragen")!;
@@ -620,6 +663,7 @@ function showStart(): void {
   form.hidden = true;
   anfragenSeite.hidden = true;
   briefeSeite.hidden = true;
+  wuenscheSeite.hidden = true;
   start.hidden = false;
   history.replaceState(null, "", location.pathname + location.search);
   // Auf der Startseite ist das Verzeichnis zugeklappt. Eine geöffnete Seite klappt ihre Gruppe selbst auf.
@@ -640,6 +684,7 @@ async function openPage(rel: string): Promise<void> {
   start.hidden = true;
   anfragenSeite.hidden = true;
   briefeSeite.hidden = true;
+  wuenscheSeite.hidden = true;
   form.hidden = false;
   kennung.textContent = brief ? `Newsletter ${current.nummer ?? ""}` : current.art === "recht" ? "Rechtliches" : "Seite";
   titelInput.placeholder = brief ? "Thema, z. B. Revision des Erbrechts" : "Titel";
@@ -1214,9 +1259,128 @@ async function showBriefe(): Promise<void> {
   form.hidden = true;
   anfragenSeite.hidden = true;
   briefeSeite.hidden = false;
+  wuenscheSeite.hidden = true;
   briefeGruppe.open = true;
   history.replaceState(null, "", "#newsletter");
   renderBriefUebersicht();
+  window.scrollTo({ top: 0 });
+}
+
+const ART_LABEL: Record<Wunsch["art"], string> = { design: "Aussehen der Website", funktion: "Funktion der Redaktion" };
+
+/** Wünsche zeigen Absätze und **fett** wie im Assistenten, sonst reinen Text. */
+function wunschHtml(text: string): string {
+  return esc(text)
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/^\s*[-*•]\s+/gm, "• ")
+    .replace(/\n/g, "<br>");
+}
+
+async function loadWuensche(): Promise<void> {
+  const json = (await fetch("/api/wuensche", { cache: "no-store" })
+    .then((res) => res.json())
+    .catch(() => null)) as { wuensche: Wunsch[] } | null;
+  if (!json) return;
+  alleWuensche = json.wuensche;
+  const offene = alleWuensche.filter((w) => w.status === "offen").length;
+  wuenscheZahl.textContent = offene ? `${offene} offen` : "";
+  if (!wuenscheSeite.hidden) renderWuensche();
+}
+
+function wunschKachel(filter: typeof wuenscheFilter, wert: number, label: string, unter: string): HTMLButtonElement {
+  const element = document.createElement("button");
+  element.type = "button";
+  element.className = "kachel";
+  element.setAttribute("aria-pressed", String(wuenscheFilter === filter));
+  element.innerHTML = `<span class="label">${esc(label)}</span><span class="wert">${wert}</span><span class="unter">${esc(unter)}</span>`;
+  element.addEventListener("click", () => {
+    wuenscheFilter = filter;
+    renderWuensche();
+  });
+  return element;
+}
+
+async function aendereWunsch(id: string, aenderung: { status?: Wunsch["status"]; aktion?: "senden" }): Promise<void> {
+  const response = await fetch("/api/wuensche", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id, ...aenderung }),
+  }).catch(() => null);
+  if (!response?.ok) {
+    await ask({ titel: "Das hat nicht geklappt", text: response ? await errorText(response, "Der Wunsch liess sich nicht ändern.") : "Keine Verbindung zum Server.", ja: "OK" });
+    return;
+  }
+  await loadWuensche();
+}
+
+function wunschKarte(wunsch: Wunsch): HTMLElement {
+  const karte = document.createElement("li");
+  karte.dataset.status = wunsch.status;
+  const kopf = document.createElement("p");
+  kopf.className = "kopfzeile";
+  kopf.innerHTML = `${wunsch.status === "erledigt" ? `<span class="marke online">Erledigt</span>` : `<span class="marke">Offen</span>`} ${esc(ART_LABEL[wunsch.art])} · ${esc(eingangFormat.format(new Date(wunsch.eingang)))}${
+    wunsch.status === "erledigt" && wunsch.erledigtAm ? ` · erledigt am ${esc(shortDate(wunsch.erledigtAm.slice(0, 10)))}` : ""
+  }${wunsch.seite ? ` · ${esc(wunsch.seite)}` : ""}`;
+  const text = document.createElement("p");
+  text.className = "nachricht";
+  text.innerHTML = wunschHtml(wunsch.text);
+  const knoepfe = document.createElement("div");
+  knoepfe.className = "aktionen";
+  knoepfe.append(
+    wunsch.status === "offen"
+      ? button("Als erledigt markieren", "", () => void aendereWunsch(wunsch.id, { status: "erledigt" }))
+      : button("Wieder öffnen", "leise", () => void aendereWunsch(wunsch.id, { status: "offen" })),
+  );
+  if (wunsch.telegram !== "gesendet") {
+    const hinweis = document.createElement("span");
+    hinweis.className = "telegram-fehlt";
+    hinweis.textContent = wunsch.telegram === "aus" ? "Telegram ist nicht eingerichtet." : "Telegram hat nicht geklappt.";
+    knoepfe.append(hinweis, button("Nochmals senden", "leise", () => void aendereWunsch(wunsch.id, { aktion: "senden" })));
+  }
+  karte.append(kopf, text, knoepfe);
+  return karte;
+}
+
+function renderWuensche(): void {
+  const offene = alleWuensche.filter((w) => w.status === "offen");
+  const erledigte = alleWuensche.filter((w) => w.status === "erledigt");
+  wuenscheKacheln.replaceChildren(
+    wunschKachel("offen", offene.length, "Offen", offene.length ? "warten auf die Betreuung" : "nichts offen"),
+    wunschKachel("erledigt", erledigte.length, "Erledigt", erledigte.length ? "umgesetzt oder beantwortet" : "–"),
+    wunschKachel("alle", alleWuensche.length, "Gesamt", "alle Wünsche"),
+  );
+  const sichtbare = wuenscheFilter === "alle" ? alleWuensche : wuenscheFilter === "offen" ? offene : erledigte;
+  if (sichtbare.length) wuenscheKarten.replaceChildren(...sichtbare.map(wunschKarte));
+  else {
+    const leer = document.createElement("li");
+    leer.className = "leer";
+    leer.textContent = alleWuensche.length ? "Hier ist nichts." : "Noch keine Wünsche. Oben einen schreiben oder den Assistenten fragen.";
+    wuenscheKarten.replaceChildren(leer);
+  }
+}
+
+const WUENSCHE_GESEHEN = "wuensche-gesehen";
+
+/** Die Seite «Wünsche». Beim ersten Besuch verschwindet die Marke „Neu“ im Verzeichnis. */
+async function showWuensche(): Promise<void> {
+  await flushCommit();
+  current = null;
+  gewaehlt = null;
+  markCurrent();
+  start.hidden = true;
+  form.hidden = true;
+  anfragenSeite.hidden = true;
+  briefeSeite.hidden = true;
+  wuenscheSeite.hidden = false;
+  history.replaceState(null, "", "#wuensche");
+  try {
+    localStorage.setItem(WUENSCHE_GESEHEN, "1");
+  } catch {
+    // Dann bleibt „Neu“ eben stehen.
+  }
+  wuenscheNeu.hidden = true;
+  await loadWuensche();
+  renderWuensche();
   window.scrollTo({ top: 0 });
 }
 
@@ -1230,6 +1394,7 @@ async function showAnfragen(): Promise<void> {
   form.hidden = true;
   anfragenSeite.hidden = false;
   briefeSeite.hidden = true;
+  wuenscheSeite.hidden = true;
   anfragenGruppe.open = true;
   history.replaceState(null, "", "#anfragen");
   await loadAnfragen(true);
@@ -1280,6 +1445,48 @@ root.querySelector("#heim")!.addEventListener("click", async () => {
 });
 root.querySelector("#anfragen-alle")!.addEventListener("click", () => void showAnfragen());
 root.querySelector("#briefe-alle")!.addEventListener("click", () => void showBriefe());
+root.querySelector("#wuensche-link")!.addEventListener("click", () => void showWuensche());
+root.querySelector("#start-wunsch")!.addEventListener("click", async () => {
+  await showWuensche();
+  wunschText.focus();
+});
+try {
+  wuenscheNeu.hidden = localStorage.getItem(WUENSCHE_GESEHEN) === "1";
+} catch {
+  wuenscheNeu.hidden = true;
+}
+wunschForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const text = wunschText.value.trim();
+  if (!text) {
+    wunschText.focus();
+    return;
+  }
+  const knopf = wunschForm.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+  knopf.disabled = true;
+  wunschMeldung.textContent = "Wird gesendet …";
+  const response = await fetch("/api/wuensche", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ art: wunschArt.value, text, seite: "" }),
+  }).catch(() => null);
+  knopf.disabled = false;
+  if (!response?.ok) {
+    wunschMeldung.textContent = response ? await errorText(response, "Senden ging nicht.") : "Keine Verbindung zum Server.";
+    return;
+  }
+  const wunsch = (await response.json()) as Wunsch;
+  wunschText.value = "";
+  wunschMeldung.textContent =
+    wunsch.telegram === "gesendet"
+      ? "Gesendet ✓"
+      : wunsch.telegram === "aus"
+        ? "Gespeichert. Telegram ist hier nicht eingerichtet."
+        : "Gespeichert. Telegram hat nicht geklappt, unten nochmals senden.";
+  wuenscheFilter = "offen";
+  await loadWuensche();
+  renderWuensche();
+});
 root.querySelector("#briefe-neu")!.addEventListener("click", () => void newBrief());
 briefeSuche.addEventListener("input", () => renderBriefUebersicht());
 // Wie bei der Kontaktaufnahme: „Newsletter“ öffnet die Übersicht. Zuklappen geht, wenn sie schon offen ist.
@@ -1380,7 +1587,7 @@ function setzeThema(text: string): void {
 /** Was der Assistent sieht und wie er Text einsetzt. */
 function lage(): Lage {
   if (!current || !crepe || form.hidden) {
-    return { ansicht: !anfragenSeite.hidden ? "anfragen" : !briefeSeite.hidden ? "briefe" : "start" };
+    return { ansicht: !anfragenSeite.hidden ? "anfragen" : !briefeSeite.hidden ? "briefe" : !wuenscheSeite.hidden ? "wuensche" : "start" };
   }
   const doc = collect();
   return { ansicht: "blatt", rel: doc.rel, art: doc.art, titel: doc.titel, datum: doc.datum, entwurf: doc.entwurf, body: doc.body };
@@ -1412,6 +1619,7 @@ void mountAssistent(
     // Während des Schreibens den Zustand ersetzen, nicht ändern: keine hundert Rückgängig-Schritte.
     schreibeLive: (markdown) => crepe?.editor.action(replaceAll(forEditor(markdown), true)),
     speichere: () => scheduleSave(),
+    zeigeWuensche: () => void showWuensche(),
     oeffneNewsletter: (text) => {
       const page = alleBriefe.find((item) => thema(item.titel) === text.trim());
       if (page) void openPage(page.rel);
@@ -1423,7 +1631,9 @@ void mountAssistent(
 );
 await loadList();
 await loadAnfragen();
+await loadWuensche();
 const wanted = decodeURIComponent(location.hash.slice(1));
 if (wanted === "anfragen") await showAnfragen();
 else if (wanted === "newsletter") await showBriefe();
+else if (wanted === "wuensche") await showWuensche();
 else if (wanted) await openPage(wanted);

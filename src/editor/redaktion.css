@@ -449,6 +449,7 @@ body.mit-assistent { padding-right: 26rem; }
 .assistent .willkommen .zeichen { margin: 0 auto 0.9rem; }
 .assistent .willkommen h3 { margin: 0 0 0.4rem; font-family: var(--serif); font-weight: 400; font-size: 1.5rem; color: var(--ink); }
 .assistent .willkommen > p { max-width: 21rem; margin: 0 auto; font-size: 0.88rem; }
+.assistent .willkommen > p + p { margin-top: 0.7rem; }
 .assistent .beispiele { display: grid; gap: 0.5rem; margin-top: 1.4rem; text-align: left; }
 .assistent .beispiele button {
   width: 100%;
@@ -651,3 +652,81 @@ input.suche:focus { outline: none; border-color: var(--olive); }
 #briefe-karten .titel-knopf { border: 0; padding: 0; text-align: left; font: inherit; }
 #briefe-karten .titel-knopf:hover { color: var(--olive); }
 #briefe-karten .auszug { margin: 0 0 0.9rem; font-size: 0.9rem; line-height: 1.55; color: var(--quiet); }
+
+/* Wünsche */
+aside .gruppe-link {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 1.6rem 0 0.5rem;
+  padding: 0.3rem 0;
+  border: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--quiet);
+}
+aside .gruppe-link:hover { color: var(--ink); }
+aside .gruppe-link .zahl:not(:empty) { padding: 0.05rem 0.4rem; background: var(--olive); color: var(--paper); letter-spacing: 0.04em; }
+aside .gruppe-link .marke { font-size: 0.65rem; }
+.wunsch-hinweis { margin: 1.4rem 0 0; font-size: 0.9rem; color: var(--quiet); }
+.wunsch-hinweis button { color: var(--olive); font-weight: 600; padding-inline: 0.2rem; }
+#wuensche-seite { padding-top: 1.5rem; }
+#wuensche-seite h1 { font-family: var(--serif); font-weight: 400; font-size: 2.4rem; margin: 0 0 0.4rem; }
+#wuensche-seite .einleitung { max-width: 38rem; margin: 0 0 1.2rem; line-height: 1.5; }
+.neuer-wunsch {
+  display: grid;
+  gap: 0.6rem;
+  padding: 1.1rem 1.2rem;
+  border: 1px solid var(--line);
+  border-top: 2px solid var(--olive);
+  background: rgba(255, 255, 255, 0.45);
+}
+.neuer-wunsch label { display: flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; color: var(--quiet); }
+.neuer-wunsch select, .assistent .wunsch select {
+  font: inherit;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid rgba(28, 25, 21, 0.25);
+  padding: 0.3rem 0.4rem;
+}
+.neuer-wunsch textarea {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid rgba(28, 25, 21, 0.25);
+  padding: 0.6rem 0.7rem;
+}
+.neuer-wunsch textarea:focus { outline: none; border-color: var(--olive); }
+.neuer-wunsch .aktionen p { margin: 0; }
+#wuensche-karten { list-style: none; padding: 0; margin: 1.2rem 0 3rem; }
+#wuensche-karten li {
+  padding: 1.1rem 1.4rem;
+  margin-bottom: 0.9rem;
+  border: 1px solid var(--line);
+  border-left: 2px solid #e2c87a;
+  background: rgba(255, 255, 255, 0.45);
+}
+#wuensche-karten li[data-status="erledigt"] { border-left-color: var(--olive); opacity: 0.8; }
+#wuensche-karten li.leer { border-left-color: var(--line); color: var(--quiet); }
+#wuensche-karten .kopfzeile { margin: 0; font-size: 0.78rem; color: var(--quiet); }
+#wuensche-karten .nachricht { margin: 0.7rem 0 0.9rem; line-height: 1.55; overflow-wrap: anywhere; }
+#wuensche-karten .telegram-fehlt { font-size: 0.8rem; color: var(--rot); }
+.assistent .vorschlag.wunsch .inhalt { font-family: var(--sans); font-size: 0.92rem; display: grid; gap: 0.5rem; max-height: none; }
+.assistent .vorschlag.wunsch select { border-radius: 8px; font-size: 0.85rem; justify-self: start; }
+.assistent .vorschlag.wunsch textarea {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--a-flaeche);
+  border: 1px solid var(--a-rand);
+  border-radius: 8px;
+  padding: 0.55rem 0.65rem;
+}
+.assistent .vorschlag.wunsch textarea:focus { outline: none; border-color: var(--olive); }
+.assistent .vorschlag.wunsch textarea[readonly] { color: var(--quiet); background: transparent; }

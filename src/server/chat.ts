@@ -4,8 +4,8 @@ import path from "node:path";
 import { briefsNewestFirst, loadDocuments } from "../content/load.ts";
 import type { ContentDocument } from "../content/document.ts";
 import { chatDir } from "../paths.ts";
-import { sendTelegram } from "./anfrage.ts";
 import { ANLEITUNG } from "./anleitung.ts";
+import { wuenscheText } from "./wuensche.ts";
 
 /**
  * Der Assistent in der Redaktion. Ein Sprachmodell bei xAI, ohne Werkzeuge:
@@ -49,7 +49,7 @@ export interface Nachricht {
 
 /** Was Patrick gerade vor sich hat. Kommt vom Browser, weil ungespeicherte Änderungen zählen. */
 export interface Lage {
-  ansicht: "start" | "anfragen" | "briefe" | "blatt";
+  ansicht: "start" | "anfragen" | "briefe" | "wuensche" | "blatt";
   rel?: string;
   art?: ContentDocument["art"];
   titel?: string;
@@ -97,7 +97,7 @@ function text(value: unknown, max: number): string {
 
 function cleanLage(value: unknown): Lage {
   const raw = (value ?? {}) as Record<string, unknown>;
-  const ansicht = raw.ansicht === "blatt" || raw.ansicht === "anfragen" || raw.ansicht === "briefe" ? raw.ansicht : "start";
+  const ansicht = ["blatt", "anfragen", "briefe", "wuensche"].includes(String(raw.ansicht)) ? (raw.ansicht as Lage["ansicht"]) : "start";
   if (ansicht !== "blatt") return { ansicht };
   return {
     ansicht,
@@ -121,6 +121,7 @@ async function lageText(lage: Lage, frage: string): Promise<string> {
   if (lage.ansicht === "start") teile.push("Patrick ist auf der Startseite der Redaktion. Keine Seite ist offen.");
   if (lage.ansicht === "anfragen") teile.push("Patrick ist in der Kontaktaufnahme. Keine Seite ist offen.");
   if (lage.ansicht === "briefe") teile.push("Patrick ist in der Übersicht aller Newsletter. Keine Seite ist offen.");
+  if (lage.ansicht === "wuensche") teile.push("Patrick ist auf der Seite «Wünsche». Keine Seite ist offen.");
   if (lage.ansicht === "blatt") {
     const art = lage.art === "brief" ? "Newsletter" : lage.art === "recht" ? "Rechtliche Seite" : "Feste Seite";
     teile.push(
@@ -129,6 +130,8 @@ async function lageText(lage: Lage, frage: string): Promise<string> {
     if (lage.auswahl?.trim()) teile.push(`Patrick hat diese Stelle markiert:\n"""\n${lage.auswahl.trim()}\n"""`);
     teile.push(lage.body?.trim() ? `Der Text der offenen Seite als Markdown:\n"""\n${lage.body}\n"""` : "Der Text der offenen Seite ist noch leer.");
   }
+
+  teile.push(`# Patricks Wünsche an die Betreuung, der neueste zuerst\n${await wuenscheText()}`);
 
   const briefe = briefsNewestFirst(await loadDocuments().catch(() => []));
   if (briefe.length) {
@@ -248,14 +251,4 @@ export async function handleChat(payload: unknown, res: http.ServerResponse): Pr
     sse(res, fehler ? { fehler } : { fertig: true });
     res.end();
   }
-}
-
-/** POST /api/designwunsch. Geht per Telegram an die Betreuung der Website. */
-export async function sendDesignwunsch(payload: unknown): Promise<"gesendet" | "fehler" | "aus"> {
-  const raw = (payload ?? {}) as Record<string, unknown>;
-  const wunsch = text(raw.wunsch, 3000).trim();
-  if (!wunsch) throw new Error("Leerer Wunsch");
-  const seite = text(raw.titel, 300).trim();
-  const kopf = seite ? ["Designwunsch aus der Redaktion", `Seite: ${seite}`] : ["Designwunsch aus der Redaktion"];
-  return sendTelegram([...kopf, "", wunsch].join("\n"));
 }
