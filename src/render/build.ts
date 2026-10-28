@@ -4,8 +4,10 @@ import { publicPath, type ContentDocument } from "../content/document.ts";
 import { briefsNewestFirst, loadDocuments } from "../content/load.ts";
 import { excerptFromMarkdown, renderDocument, type Teaser } from "../design/layout.ts";
 import { pageShell } from "../design/page.ts";
+import { robotsTxt, sitemapXml, type SitemapEntry } from "../design/seo.ts";
 import { repoRoot, siteDir, contentDir } from "../paths.ts";
 import { markdownToHtml } from "./crepe.ts";
+import { publishMedia } from "./media.ts";
 
 const FONTS: Record<string, string> = {
   "manrope-400.woff2": "@fontsource/manrope/files/manrope-latin-400-normal.woff2",
@@ -35,14 +37,15 @@ async function copyWritable(from: string, to: string): Promise<void> {
   await fs.writeFile(to, data);
 }
 
-async function copyDir(from: string, to: string): Promise<void> {
+/** Die Bilder aus dem Inhalt, verkleinert für die Seite. */
+async function copyMediaDir(from: string, to: string): Promise<void> {
   await fs.mkdir(to, { recursive: true });
   const entries = await fs.readdir(from, { withFileTypes: true });
   for (const entry of entries) {
     const src = path.join(from, entry.name);
     const dest = path.join(to, entry.name);
-    if (entry.isDirectory()) await copyDir(src, dest);
-    else if (entry.isFile()) await copyWritable(src, dest);
+    if (entry.isDirectory()) await copyMediaDir(src, dest);
+    else if (entry.isFile()) await publishMedia(src, dest);
   }
 }
 
@@ -93,12 +96,32 @@ async function writeDocument(site: string, doc: ContentDocument, teasers: Teaser
     await fs.rm(path.join(site, "neuigkeiten", "page"), { recursive: true, force: true });
     for (let page = 1; page <= pages; page += 1) {
       const view = renderDocument({ ...doc, html, teasers, page });
-      await writePage(site, view.here, pageShell({ title: view.title, here: view.here, main: view.main }));
+      await writePage(site, view.here, pageShell(view));
     }
     return;
   }
   const view = renderDocument({ ...doc, html, teasers });
-  await writePage(site, view.here, pageShell({ title: view.title, here: view.here, main: view.main }));
+  await writePage(site, view.here, pageShell(view));
+}
+
+/** Sitemap und robots.txt. Billig genug, um sie bei jeder Änderung ganz neu zu schreiben. */
+async function writeIndexFiles(site: string, docs: ContentDocument[]): Promise<void> {
+  const briefs = briefsNewestFirst(docs);
+  const newest = briefs[0]?.datum ?? "";
+  const entries: SitemapEntry[] = [];
+  for (const doc of docs) {
+    const href = publicPath(doc.rel);
+    // Start und Archiv ändern sich mit jedem neuen Newsletter.
+    const lastmod = doc.rel === "kapitel/willkommen.md" || doc.rel === "kapitel/neuigkeiten.md" ? newest : doc.datum;
+    entries.push({ href, lastmod });
+    if (doc.rel === "kapitel/neuigkeiten.md") {
+      const pages = Math.ceil(briefs.length / 10);
+      for (let page = 2; page <= pages; page += 1) entries.push({ href: `/neuigkeiten/page/${page}`, lastmod: "" });
+    }
+  }
+  entries.sort((a, b) => (a.href === "/" ? -1 : b.href === "/" ? 1 : a.href.localeCompare(b.href, "de")));
+  await fs.writeFile(path.join(site, "sitemap.xml"), sitemapXml(entries), "utf8");
+  await fs.writeFile(path.join(site, "robots.txt"), robotsTxt(), "utf8");
 }
 
 /** Was auf der Seite steht. Entwürfe bleiben in der Redaktion. */
@@ -111,7 +134,7 @@ export async function previewPage(doc: ContentDocument): Promise<string> {
   const teasers = teasersFor(briefsNewestFirst(await publishedDocuments()));
   const html = publishHtml(await markdownToHtml(doc.body));
   const view = renderDocument({ ...doc, html, teasers });
-  return pageShell({ title: view.title, here: view.here, main: view.main });
+  return pageShell(view);
 }
 
 export async function buildSite(): Promise<{ pages: number; index: string }> {
@@ -123,7 +146,7 @@ export async function buildSite(): Promise<{ pages: number; index: string }> {
 
   const media = path.join(contentDir(), "media");
   try {
-    await copyDir(media, path.join(site, "media"));
+    await copyMediaDir(media, path.join(site, "media"));
   } catch {
     // Noch keine Bilder.
   }
@@ -134,6 +157,7 @@ export async function buildSite(): Promise<{ pages: number; index: string }> {
     await writeDocument(site, doc, teasers);
     if (doc.rel === "kapitel/willkommen.md") index = doc.titel;
   }
+  await writeIndexFiles(site, docs);
   return { pages: docs.length, index };
 }
 
@@ -159,4 +183,5 @@ export async function rebuildDocuments(rels: string[]): Promise<void> {
     }
     await writeDocument(site, doc, teasers);
   }
+  await writeIndexFiles(site, docs);
 }

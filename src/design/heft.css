@@ -975,3 +975,16 @@ html.cookie-ok .cookies { display: none; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+/* Für Suchmaschinen und Screenreader, nicht fürs Auge. */
+.unsichtbar {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}

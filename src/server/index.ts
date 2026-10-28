@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
+import zlib from "node:zlib";
 import { watch } from "chokidar";
 import { createServer as createVite, type ViteDevServer } from "vite";
 import { parseDocument, publicPath, redirectTarget, serializeDocument, type Art, type ContentDocument } from "../content/document.ts";
@@ -9,6 +10,7 @@ import { notFoundPage } from "../design/page.ts";
 import { commitIfChanged, ensureContentGit, logFile, restoreFile, showFile } from "../git/history.ts";
 import { anfragenDir, contentDir, repoRoot, siteDir } from "../paths.ts";
 import { buildSite, previewPage, rebuildDocuments } from "../render/build.ts";
+import { publishMedia } from "../render/media.ts";
 import { handleAnfrage, listAnfragen, setAnfrageStatus } from "./anfrage.ts";
 import { importWord } from "./word.ts";
 import { assistentBereit, clearVerlauf, handleChat, readVerlauf } from "./chat.ts";
@@ -199,9 +201,60 @@ const MIME: Record<string, string> = {
   ".gif": "image/gif",
   ".svg": "image/svg+xml",
   ".pdf": "application/pdf",
+  ".xml": "application/xml; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8",
+  ".ico": "image/x-icon",
 };
 
-async function serveStatic(urlPath: string, res: http.ServerResponse): Promise<boolean> {
+/** Text lohnt sich zu packen, Bilder und Schriften sind es schon. */
+const PACKBAR = new Set([".html", ".css", ".js", ".xml", ".txt", ".svg"]);
+
+/**
+ * Wie lange der Browser eine Datei behalten darf. Schriften ändern ihren Namen nie,
+ * Bilder selten. HTML, CSS und JS fragen jedes Mal nach, sonst sieht man Änderungen erst spät.
+ */
+function cacheControl(urlPath: string): string {
+  if (urlPath.startsWith("/fonts/")) return "public, max-age=31536000, immutable";
+  if (urlPath.startsWith("/media/") || urlPath.startsWith("/brand/")) return "public, max-age=604800";
+  return "no-cache";
+}
+
+function send(req: http.IncomingMessage, res: http.ServerResponse, file: string, data: Buffer, urlPath: string): void {
+  const ext = path.extname(file).toLowerCase();
+  const headers: http.OutgoingHttpHeaders = {
+    "content-type": MIME[ext] ?? "application/octet-stream",
+    "cache-control": cacheControl(urlPath),
+  };
+  if (PACKBAR.has(ext)) {
+    headers.vary = "Accept-Encoding";
+    if (/\bgzip\b/.test(String(req.headers["accept-encoding"] ?? "")) && data.length > 1024) {
+      headers["content-encoding"] = "gzip";
+      data = zlib.gzipSync(data);
+    }
+  }
+  res.writeHead(200, headers);
+  res.end(data);
+}
+
+/**
+ * Bilder aus WordPress, z.B. /wp-content/uploads/2021/05/Logo.png, liegen jetzt unter /media/.
+ * Google kennt die alten Adressen noch.
+ */
+async function wordpressMedia(pathname: string): Promise<string | null> {
+  const match = /^\/wp-content\/uploads\/(?:.*\/)?([^/]+)$/.exec(pathname);
+  if (!match) return null;
+  let name = match[1];
+  try {
+    name = decodeURIComponent(name);
+  } catch {
+    return null;
+  }
+  name = name.replace(/[^A-Za-z0-9._-]+/g, "-");
+  const found = await fs.stat(path.join(siteDir(), "media", name)).then((stat) => stat.isFile(), () => false);
+  return found ? `/media/${name}` : null;
+}
+
+async function serveStatic(req: http.IncomingMessage, urlPath: string, res: http.ServerResponse): Promise<boolean> {
   const decoded = decodeURIComponent(urlPath.split("?")[0] ?? "/");
   if (decoded.includes("\0") || decoded.split("/").includes("..")) return false;
   let file = path.join(siteDir(), decoded);
@@ -214,8 +267,7 @@ async function serveStatic(urlPath: string, res: http.ServerResponse): Promise<b
   for (const candidate of fallback ? [file, fallback] : [file]) {
     try {
       const data = await fs.readFile(candidate);
-      res.writeHead(200, { "content-type": MIME[path.extname(candidate)] ?? "application/octet-stream" });
-      res.end(data);
+      send(req, res, candidate, data, decoded);
       return true;
     } catch {
       // Nächster Ort.
@@ -593,9 +645,7 @@ async function serveEditor(rel: string, res: http.ServerResponse): Promise<boole
 async function copyMediaFile(file: string): Promise<void> {
   const rel = path.relative(contentDir(), file).replaceAll("\\", "/");
   if (!rel.startsWith("media/") || rel.includes("..")) return;
-  const dest = path.join(siteDir(), rel);
-  await fs.mkdir(path.dirname(dest), { recursive: true });
-  await fs.copyFile(file, dest);
+  await publishMedia(file, path.join(siteDir(), rel));
 }
 
 function watchContent(): void {
@@ -651,6 +701,10 @@ async function main(): Promise<void> {
     // Der Container `redaktion` hat nur den einen Namen, dort ist die Redaktion immer die Wurzel.
     const aufRedaktion = ROLLE === "redaktion" || host.startsWith("redaktion.");
     const unterRedaktion = url.pathname === "/redaktion" || url.pathname === "/redaktion/";
+    // Die Redaktion, ihre Vorschau und die API gehören nicht in den Suchindex.
+    if (aufRedaktion || unterRedaktion || url.pathname.startsWith("/api/") || url.pathname.startsWith("/assets/")) {
+      res.setHeader("x-robots-tag", "noindex, nofollow");
+    }
     // Auf redaktion.<domain> ist die Redaktion die Wurzel. Lokal gibt es nur einen Namen, dort bleibt /redaktion.
     if (aufRedaktion && unterRedaktion) {
       res.writeHead(301, { location: "/" + url.search });
@@ -707,7 +761,24 @@ async function main(): Promise<void> {
       res.end();
       return;
     }
-    void serveStatic(url.pathname, res).then((ok) => {
+    // Eine Adresse pro Seite: /angebot/ (so hiess es unter WordPress) springt auf /angebot.
+    if ((req.method === "GET" || req.method === "HEAD") && /.\/+$/.test(url.pathname)) {
+      res.writeHead(301, { location: url.pathname.replace(/\/+$/, "") + url.search });
+      res.end();
+      return;
+    }
+    if (url.pathname.startsWith("/wp-content/")) {
+      void wordpressMedia(url.pathname).then((media) => {
+        if (media) {
+          res.writeHead(301, { location: media });
+        } else {
+          res.writeHead(404, { "content-type": "text/html; charset=utf-8" });
+        }
+        res.end(media ? undefined : notFoundPage());
+      });
+      return;
+    }
+    void serveStatic(req, url.pathname, res).then((ok) => {
       if (!ok && !res.headersSent) {
         res.writeHead(404, { "content-type": "text/html; charset=utf-8" });
         res.end(notFoundPage());

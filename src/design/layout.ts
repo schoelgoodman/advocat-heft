@@ -1,5 +1,6 @@
 import { Window } from "happy-dom";
 import { publicPath, type Art } from "../content/document.ts";
+import { clip, DEFAULT_DESCRIPTION, DEFAULT_IMAGE } from "./seo.ts";
 
 export interface Teaser {
   href: string;
@@ -23,6 +24,13 @@ export interface PageView {
   title: string;
   here: string;
   main: string;
+  /** Für `<meta name="description">` und die Vorschau beim Teilen. */
+  description: string;
+  /** Vorschaubild, ein Pfad auf der Seite. */
+  image: string;
+  /** Ein Newsletter ist ein Artikel mit Datum, alles andere eine Seite. */
+  article?: { datum: string };
+  noindex?: boolean;
 }
 
 const PER_PAGE = 10;
@@ -161,8 +169,13 @@ function standardCards(): string {
   return `<div class="karten karten-seite">${cardAnchor("/media/Privatperson-scaled.jpg", "Für Privatpersonen", "/privatpersonen")}${cardAnchor("/media/Unternehmen-scaled.jpg", "Für Unternehmen", "/unternehmen-2")}${cardAnchor("/media/Stiftungen-scaled.jpg", "Für Stiftungen", "/stiftungen-2")}</div>`;
 }
 
+/** Im Inhalt steht oft „Kontaktieren sie uns“. Auf dem Knopf immer mit grossem Sie. */
+function knopfText(label: string): string {
+  return label.replace(/^kontaktieren sie uns/i, "Kontaktieren Sie uns");
+}
+
 function bandHtml(heading: string, paragraph: string, label: string, href: string): string {
-  return `<aside class="band"><div class="band-innen"><h2>${esc(heading)}</h2><p>${esc(paragraph)}</p><p class="aktionen"><a class="btn btn-solid" href="${esc(href)}">${esc(label)}</a></p></div></aside>`;
+  return `<aside class="band"><div class="band-innen"><h2>${esc(heading)}</h2><p>${esc(paragraph)}</p><p class="aktionen"><a class="btn btn-solid" href="${esc(href)}">${esc(knopfText(label))}</a></p></div></aside>`;
 }
 
 function standardBand(): string {
@@ -477,6 +490,7 @@ function styleSoloLinks(root: HTMLElement): void {
     } else if (label === "kontaktieren sie uns") {
       paragraph.classList.add("aktionen");
       anchor.classList.add("btn", "btn-solid");
+      anchor.textContent = knopfText(plain(anchor));
     }
   }
 }
@@ -605,6 +619,24 @@ function serializeFlow(root: HTMLElement): string {
   return parts.join("\n");
 }
 
+/** Die ersten richtigen Absätze, ohne Formular, Adressen und Knöpfe. */
+function describe(root: HTMLElement): string {
+  let text = "";
+  for (const paragraph of root.querySelectorAll("p")) {
+    if (paragraph.closest("form, .band, .aktionen, .karten")) continue;
+    // Der Satz unter „Kontaktieren Sie uns.“ wird später das Band und steht auf jeder Seite.
+    const before = paragraph.previousElementSibling;
+    if (before && isBandHeading(before)) continue;
+    const clone = paragraph.cloneNode(true) as HTMLElement;
+    for (const br of clone.querySelectorAll("br")) br.replaceWith(" ");
+    const value = plain(clone);
+    if (value.length < 40) continue;
+    text = text ? `${text} ${value}` : value;
+    if (text.length >= 140) break;
+  }
+  return text ? clip(text) : "";
+}
+
 function pageHref(page: number): string {
   return page <= 1 ? "/neuigkeiten" : `/neuigkeiten/page/${page}`;
 }
@@ -648,6 +680,8 @@ export function renderDocument(input: RenderInput): PageView {
     title: documentTitle(input.rel, input.titel),
     here: hereFor(input),
     main: "",
+    description: DEFAULT_DESCRIPTION,
+    image: DEFAULT_IMAGE,
   };
   const window = new Window({ url: "https://advocat.local/" });
   try {
@@ -657,19 +691,32 @@ export function renderDocument(input: RenderInput): PageView {
     doc.body.appendChild(root);
     root.innerHTML = input.html.replaceAll("%22", "&quot;");
     repair(root, doc);
-    const hero = takeHero(root, input);
-    if (input.rel === "recht/impressum.md") {
-      view.main = `${hero}${layoutImpressum(root)}`;
-      return view;
+    for (const image of root.querySelectorAll("img")) {
+      image.setAttribute("loading", "lazy");
+      image.setAttribute("decoding", "async");
+      if (!image.getAttribute("alt")) image.setAttribute("alt", "");
+      if (image.getAttribute("title") === "") image.removeAttribute("title");
     }
+    const firstImage = root.querySelector("img")?.getAttribute("src");
+    if (firstImage && !/\.svg$/i.test(firstImage)) view.image = firstImage;
+    view.description = describe(root) || DEFAULT_DESCRIPTION;
+    const hero = takeHero(root, input);
     if (input.art === "brief") {
+      view.article = { datum: input.datum };
       view.main = `<article class="beitrag einzel"><h1>${esc(input.titel)}</h1><p class="post-meta"><time datetime="${esc(input.datum)}">${esc(longDate(input.datum))}</time></p><div class="prosa">${root.innerHTML}</div></article>${standardCards()}${standardBand()}`;
       return view;
     }
     if (input.rel === "kapitel/neuigkeiten.md") {
       extractBand(root);
       const band = root.querySelector(".band");
-      view.main = `${archiveHtml(input)}${band ? band.outerHTML : standardBand()}`;
+      const page = Math.max(1, input.page ?? 1);
+      // Das Archiv zeigt keinen Titel, wie das Original. Für Suchmaschinen und Screenreader steht er trotzdem da.
+      const titel = page > 1 ? `${input.titel} – Seite ${page}` : input.titel;
+      if (page > 1) view.title = documentTitle(input.rel, titel);
+      if (view.description === DEFAULT_DESCRIPTION && input.teasers.length) {
+        view.description = clip(`Newsletter von Advocat Finanz: ${input.teasers.slice((page - 1) * PER_PAGE, page * PER_PAGE).map((teaser) => teaser.titel).join(" · ")}`);
+      }
+      view.main = `<h1 class="unsichtbar">${esc(titel)}</h1>${archiveHtml(input)}${band ? band.outerHTML : standardBand()}`;
       return view;
     }
     if (input.art === "recht") {
@@ -679,6 +726,10 @@ export function renderDocument(input: RenderInput): PageView {
         title.textContent = plain(heading);
         heading.replaceWith(title);
       }
+    }
+    if (input.rel === "recht/impressum.md") {
+      view.main = `${hero}${layoutImpressum(root)}`;
+      return view;
     }
     extractCards(root, input.rel === "kapitel/willkommen.md");
     extractBand(root);

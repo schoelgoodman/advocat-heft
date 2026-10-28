@@ -56,6 +56,7 @@
             CONTENT_DIR = "/content";
             SITE_DIR = "/site";
             ANFRAGEN_DIR = "/anfragen";
+            SITE_URL = cfg.siteUrl;
             TELEGRAM_BOT_TOKEN = cfg.telegram.botToken;
             TELEGRAM_CHAT_ID = cfg.telegram.chatId;
             PORT = "4321";

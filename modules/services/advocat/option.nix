@@ -15,6 +15,16 @@
           options =
             {
               enabled = mkEnableOption "Advocat Finanz" {rank = 0;};
+              siteUrl = mkOption {
+                type = types.str;
+                default = "https://advocat-finanz.ch";
+                rank = 5;
+                description = ''
+                  Die Adresse, unter der Google die Seite führen soll. Steht in canonical, Sitemap
+                  und Vorschaubildern. Auch wenn die Seite unter advocat.<domain> läuft, zeigt
+                  Google dann auf diese Adresse. Ohne Schrägstrich am Ende.
+                '';
+              };
               telegram = {
                 botToken = mkOption {
                   type = types.str;

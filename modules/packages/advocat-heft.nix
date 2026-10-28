@@ -25,7 +25,7 @@
         ];
       };
       # Nach jeder Änderung an package-lock.json neu: prefetch-npm-deps package-lock.json
-      npmDepsHash = "sha256-GIMWGHnruoBMteW31M2QmZduXaHPiEEwqE3fvYx5hlM=";
+      npmDepsHash = "sha256-OFBvIEMww+xZoT/vI2wClqFcI2UjlHYnHY3Xd7i439M=";
       npmBuildScript = "editor:build";
       installPhase = ''
         runHook preInstall
@@ -36,11 +36,12 @@
       '';
     };
 
-    # Was der Server zur Laufzeit aufruft: node, git für die Fassungen, Zertifikate für Telegram.
+    # Was der Server zur Laufzeit aufruft: node, git für die Fassungen, Zertifikate für Telegram,
+    # libstdc++ für das vorgebaute sharp (Bilder verkleinern).
     tools = pkgs.buildEnv {
       name = "advocat-tools";
-      paths = with pkgs; [nodejs git cacert coreutils];
-      pathsToLink = ["/bin" "/etc"];
+      paths = with pkgs; [nodejs git cacert coreutils stdenv.cc.cc.lib];
+      pathsToLink = ["/bin" "/etc" "/lib"];
     };
 
     root = pkgs.runCommand "advocat-root" {} ''
@@ -66,6 +67,7 @@
         Env = [
           "PATH=/bin"
           "HOME=/tmp"
+          "LD_LIBRARY_PATH=/lib"
           "SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.crt"
           "NODE_ENV=production"
           "CONTENT_DIR=/content"
