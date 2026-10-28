@@ -165,6 +165,24 @@ nav .eintrag:hover .werkzeuge, nav .werkzeuge:focus-within { opacity: 1; }
 nav button.werkzeug { display: block; border: 0; border-radius: 6px; padding: 0.25rem; color: var(--quiet); line-height: 0; }
 nav button.werkzeug:hover { color: var(--ink); background: rgba(28, 25, 21, 0.08); }
 nav button.werkzeug svg { width: 1rem; height: 1rem; }
+nav .werkzeuge:has([aria-expanded="true"]) { opacity: 1; }
+nav button.werkzeug[aria-expanded="true"] { color: var(--ink); background: rgba(28, 25, 21, 0.08); }
+
+/* Das Menü «…» eines Eintrags */
+.menue {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  min-width: 13rem;
+  padding: 0.3rem;
+  border: 1px solid var(--line);
+  border-radius: var(--rund-mittel);
+  background: var(--flaeche);
+  color: var(--ink);
+  box-shadow: var(--schatten-hoch);
+}
+.menue button { display: block; width: 100%; text-align: left; border: 0; border-radius: 6px; padding: 0.5rem 0.7rem; font-size: 0.9rem; }
+.menue button:hover, .menue button:focus-visible { background: var(--olive-hauch); color: var(--olive); outline: none; }
 nav .geloescht { align-items: center; justify-content: space-between; gap: 0.4rem; padding: 0.3rem 0 0.3rem 0.6rem; }
 nav .geloescht .thema { color: var(--quiet); }
 nav .geloescht button { display: inline-block; border: 0; font-size: 0.82rem; flex: none; }
@@ -268,12 +286,30 @@ textarea.titel:focus { outline: none; border-bottom-color: var(--olive); }
 .nummer-hinweis { margin: 0.4rem 0 0; font-size: 0.82rem; color: var(--quiet); }
 .nummer-hinweis.fehler { color: var(--rot); }
 #editor {
+  position: relative;
   min-height: 55vh;
   margin-top: 1.2rem;
   font-family: var(--sans);
   font-size: 1.05rem;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
+/* Eine Word-Datei wird über den Text gezogen. */
+#editor[data-ziel]::after {
+  content: "Word-Datei hier loslassen";
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  padding-top: 5rem;
+  border: 2px dashed var(--olive);
+  border-radius: inherit;
+  background: rgba(244, 240, 230, 0.85);
+  color: var(--olive);
+  font-weight: 600;
+  pointer-events: none;
+}
+#editor[data-ziel="nein"]::after { content: "Word-Dateien gehen nur in einen Entwurf"; border-color: var(--rot); color: var(--rot); }
 #editor:focus-within { border-color: var(--olive); box-shadow: 0 0 0 3px var(--olive-ring), var(--schatten); }
 /* Schrift wie auf der Website */
 .milkdown {
@@ -295,12 +331,20 @@ kbd { font-family: var(--sans); border: 1px solid var(--line); border-radius: 4p
 #fassungen time { color: var(--quiet); font-size: 0.82rem; }
 #fassungen .knoepfe { display: flex; gap: 0.2rem; margin-left: -0.5rem; }
 #vorschau {
-  margin-top: 1rem;
+  margin-top: 0.6rem;
   padding: 1rem 1.2rem;
   background: #fff;
   font-family: var(--serif);
   font-size: 0.95rem;
 }
+/* Ein breites Bild darf die Fassung nicht breiter machen als die Spalte. */
+#fassungen li { min-width: 0; }
+#vorschau { min-width: 0; overflow-x: auto; }
+#vorschau img { max-width: 100%; height: auto; }
+#vorschau .legende { margin: 0 0 0.8rem; font-family: var(--sans); font-size: 0.82rem; color: var(--quiet); }
+/* Was in der alten Fassung anders ist als heute */
+#vorschau .anders { background: rgba(226, 200, 122, 0.25); border-radius: 4px; box-shadow: 0 0 0 0.25rem rgba(226, 200, 122, 0.25); }
+#vorschau mark { background: rgba(226, 200, 122, 0.85); color: inherit; border-radius: 3px; padding: 0 0.1em; }
 
 [hidden] { display: none !important; }
 
@@ -704,6 +748,45 @@ body.mit-assistent { padding-right: 26rem; }
 .assistent-auf:hover { background: var(--ink); transform: translateY(-1px); }
 
 /* Schmaler: die Spalte liegt über der Seite statt daneben. */
+/* Kleiner Laptop mit Assistent: das Verzeichnis wird zur Schublade, der Text behält seine Breite. */
+.verzeichnis-auf { display: none; }
+@media (min-width: 1101px) and (max-width: 1439px) {
+  body.mit-assistent .redaktion { grid-template-columns: minmax(0, 44rem); justify-content: center; padding-left: 4.5rem; }
+  body.mit-assistent .verzeichnis-auf {
+    position: fixed;
+    top: 1.2rem;
+    left: 1rem;
+    z-index: 15;
+    display: grid;
+    place-items: center;
+    width: 2.6rem;
+    height: 2.6rem;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    background: var(--flaeche);
+    box-shadow: var(--schatten);
+  }
+  body.mit-assistent .verzeichnis-auf:hover { border-color: var(--olive); color: var(--olive); }
+  body.mit-assistent aside {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 16;
+    width: 20rem;
+    max-height: none;
+    padding: 1.4rem 1rem;
+    background: var(--flaeche-tief);
+    border-right: 1px solid var(--line);
+    box-shadow: 8px 0 32px rgba(28, 25, 21, 0.15);
+    transform: translateX(-105%);
+    visibility: hidden;
+    transition: transform 0.2s ease-out, visibility 0.2s;
+  }
+  body.mit-assistent.verzeichnis-offen aside { transform: none; visibility: visible; }
+}
+
 @media (max-width: 1100px) {
   body.mit-assistent { padding-right: 0; }
   .assistent { box-shadow: -8px 0 32px rgba(28, 25, 21, 0.15); }

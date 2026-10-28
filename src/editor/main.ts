@@ -98,8 +98,11 @@ let alleWuensche: Wunsch[] = [];
 let gewaehlt: string | null = null;
 
 root.innerHTML = `
+  <button type="button" class="verzeichnis-auf" id="verzeichnis-auf" title="Verzeichnis zeigen" aria-label="Verzeichnis zeigen" aria-expanded="false">
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+  </button>
   <div class="redaktion">
-    <aside>
+    <aside id="verzeichnis">
       <button type="button" class="wort" id="heim" title="Zur Startseite">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 11 12 4l9 7M6 9.5V20h4.5v-5.5h3V20H18V9.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
         Redaktion
@@ -424,9 +427,64 @@ async function mountEditor(markdown: string): Promise<void> {
 }
 
 const ICONS = {
-  kopieren:
-    '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="8.5" height="8.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M3 10.5V2.5h8" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>',
+  mehr: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="8" r="1.4" fill="currentColor"/><circle cx="8" cy="8" r="1.4" fill="currentColor"/><circle cx="13" cy="8" r="1.4" fill="currentColor"/></svg>',
 };
+
+/** Ein Menü für alle Einträge im Verzeichnis. Es liegt über allem, damit das Verzeichnis es nicht abschneidet. */
+const menue = document.createElement("div");
+menue.className = "menue";
+menue.popover = "auto";
+menue.setAttribute("role", "menu");
+root.append(menue);
+let menueAnker: HTMLElement | null = null;
+/** Drückt Patrick den «…» eines offenen Menüs, soll der Klick danach es nicht wieder öffnen. */
+let menueSchliesst = false;
+menue.addEventListener("toggle", (event) => {
+  menueAnker?.setAttribute("aria-expanded", String((event as ToggleEvent).newState === "open"));
+  if ((event as ToggleEvent).newState !== "closed") return;
+  if (menue.contains(document.activeElement) || document.activeElement === document.body) menueAnker?.focus({ preventScroll: true });
+});
+menue.addEventListener("keydown", (event) => {
+  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+  event.preventDefault();
+  const punkte = [...menue.querySelectorAll<HTMLButtonElement>("button")];
+  const jetzt = punkte.indexOf(document.activeElement as HTMLButtonElement);
+  punkte[(jetzt + (event.key === "ArrowDown" ? 1 : -1) + punkte.length) % punkte.length]?.focus();
+});
+
+function zeigeMenue(anker: HTMLElement, page: PageSummary): void {
+  // Ein Klick auf denselben Knopf schliesst das Menü. Der Browser hat es beim Drücken schon zugemacht.
+  if (menueSchliesst) {
+    menueSchliesst = false;
+    return;
+  }
+  menueAnker?.setAttribute("aria-expanded", "false");
+  menueAnker = anker;
+  const ansehen: [string, () => void] = page.entwurf
+    ? ["Vorschau ↗", () => (page.rel === current?.rel ? void openPreview() : void window.open(`/api/preview?rel=${encodeURIComponent(page.rel)}`, "_blank"))]
+    : ["Auf der Website ansehen ↗", () => void window.open(`${publicOrigin}${page.href}`, "_blank", "noopener")];
+  const punkte: [string, () => void][] = [
+    ["Öffnen", () => void openPage(page.rel)],
+    ["Kopie anlegen", () => void copyPage(page.rel)],
+    ansehen,
+  ];
+  menue.replaceChildren(
+    ...punkte.map(([label, aktion]) => {
+      const punkt = button(label, "", () => {
+        menue.hidePopover();
+        aktion();
+      });
+      punkt.setAttribute("role", "menuitem");
+      return punkt;
+    }),
+  );
+  menue.showPopover();
+  const rahmen = anker.getBoundingClientRect();
+  const unten = rahmen.bottom + 4 + menue.offsetHeight > window.innerHeight;
+  menue.style.top = `${unten ? rahmen.top - 4 - menue.offsetHeight : rahmen.bottom + 4}px`;
+  menue.style.left = `${Math.max(8, rahmen.right - menue.offsetWidth)}px`;
+  menue.querySelector("button")?.focus();
+}
 
 function icon(svg: string, label: string, onClick: () => void): HTMLButtonElement {
   const element = document.createElement("button");
@@ -463,7 +521,13 @@ function listItem(page: PageSummary): HTMLElement {
   // Veröffentlichen und Zurückziehen stehen beim offenen Blatt, nicht hier: ein Klick daneben wäre zu leicht.
   const werkzeuge = document.createElement("span");
   werkzeuge.className = "werkzeuge";
-  werkzeuge.append(icon(ICONS.kopieren, "Kopie anlegen", () => void copyPage(page.rel)));
+  const mehrKnopf = icon(ICONS.mehr, "Weitere Aktionen", () => zeigeMenue(mehrKnopf, page));
+  mehrKnopf.setAttribute("aria-haspopup", "menu");
+  mehrKnopf.setAttribute("aria-expanded", "false");
+  mehrKnopf.addEventListener("pointerdown", () => {
+    menueSchliesst = menueAnker === mehrKnopf && menue.matches(":popover-open");
+  });
+  werkzeuge.append(mehrKnopf);
   const zeile = document.createElement("div");
   zeile.className = "eintrag";
   zeile.append(item, werkzeuge);
@@ -979,10 +1043,9 @@ async function loadHistory(rel: string): Promise<void> {
     text.textContent = revision.message;
     const knöpfe = document.createElement("span");
     knöpfe.className = "knoepfe";
-    knöpfe.append(
-      button("Ansehen", "leise", () => void showRevision(rel, revision)),
-      button("Diese Fassung zurückholen", "leise", () => void restoreRevision(rel, revision)),
-    );
+    const ansehen = button("Ansehen", "leise", () => void showRevision(rel, revision, item, ansehen));
+    ansehen.dataset.ansehen = "";
+    knöpfe.append(ansehen, button("Diese Fassung zurückholen", "leise", () => void restoreRevision(rel, revision)));
     item.append(when, text, knöpfe);
     fassungen.append(item);
   }
@@ -993,13 +1056,116 @@ async function loadHistory(rel: string): Promise<void> {
   }
 }
 
-async function showRevision(rel: string, revision: Revision): Promise<void> {
+/** Absätze, Zwischentitel und Listenpunkte, in der Fassung wie im Editor. */
+const BLOECKE = "p, h1, h2, h3, h4, li:not(:has(p)), blockquote:not(:has(p))";
+
+function norm(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function bloecke(host: Element): HTMLElement[] {
+  return [...host.querySelectorAll<HTMLElement>(BLOECKE)].filter((block) => norm(block.textContent ?? ""));
+}
+
+/** Welche Wörter aus `alt` auch in `neu` vorkommen, in derselben Reihenfolge (längste gemeinsame Folge). */
+function gemeinsam(alt: string[], neu: string[]): boolean[] {
+  const tabelle = Array.from({ length: alt.length + 1 }, () => new Uint16Array(neu.length + 1));
+  for (let i = alt.length - 1; i >= 0; i--) {
+    for (let j = neu.length - 1; j >= 0; j--) {
+      tabelle[i][j] = alt[i] === neu[j] ? tabelle[i + 1][j + 1] + 1 : Math.max(tabelle[i + 1][j], tabelle[i][j + 1]);
+    }
+  }
+  const bleibt = alt.map(() => false);
+  for (let i = 0, j = 0; i < alt.length && j < neu.length; ) {
+    if (alt[i] === neu[j]) {
+      bleibt[i] = true;
+      i++;
+      j++;
+    } else if (tabelle[i + 1][j] >= tabelle[i][j + 1]) i++;
+    else j++;
+  }
+  return bleibt;
+}
+
+/** Der Absatz von jetzt, der diesem alten am meisten gleicht, oder keiner. */
+function aehnlichster(text: string, jetzt: string[]): string | null {
+  const woerter = new Set(text.split(" "));
+  let bester: string | null = null;
+  let wert = 0.4;
+  for (const kandidat of jetzt) {
+    const andere = new Set(kandidat.split(" "));
+    const beide = [...woerter].filter((wort) => andere.has(wort)).length;
+    const anteil = beide / (woerter.size + andere.size - beide);
+    if (anteil > wert) [bester, wert] = [kandidat, anteil];
+  }
+  return bester;
+}
+
+/**
+ * Markiert in der alten Fassung, was heute anders ist: ganze Absätze gelb,
+ * darin die Wörter, die es so nicht mehr gibt. Gibt zurück, wie viel sich unterscheidet.
+ */
+function markiereUnterschiede(alt: HTMLElement): { anders: number; neu: number } {
+  // Nur der Text selbst, nicht die Menüs von Crepe daneben.
+  const jetzt = bloecke(editorHost.querySelector(".ProseMirror") ?? editorHost).map((block) => norm(block.textContent ?? ""));
+  const jetztMenge = new Set(jetzt);
+  const altTexte = new Set<string>();
+  // Absätze von heute, die nur geändert sind, zählen nicht als neu dazugekommen.
+  const geaendert = new Set<string>();
+  let anders = 0;
+  // Den Titel vergleicht showRevision für sich.
+  for (const block of bloecke(alt).filter((block) => !block.classList.contains("fassung-titel"))) {
+    const text = norm(block.textContent ?? "");
+    altTexte.add(text);
+    if (jetztMenge.has(text)) continue;
+    anders++;
+    block.classList.add("anders");
+    const naechster = aehnlichster(text, jetzt);
+    if (naechster) geaendert.add(naechster);
+    // Wörter nur markieren, wo nichts verloren geht: keine Bilder, nicht zu lang.
+    if (!naechster || block.querySelector("img")) continue;
+    const woerter = text.split(" ");
+    const heute = naechster.split(" ");
+    if (woerter.length * heute.length > 250_000) continue;
+    const bleibt = gemeinsam(woerter, heute);
+    // Nebeneinander geänderte Wörter in einer Markierung, nicht jedes für sich.
+    block.innerHTML = woerter
+      .map((wort, i) => `${!bleibt[i] && (i === 0 || bleibt[i - 1]) ? "<mark>" : ""}${esc(wort)}${!bleibt[i] && (i === woerter.length - 1 || bleibt[i + 1]) ? "</mark>" : ""}`)
+      .join(" ");
+  }
+  return { anders, neu: jetzt.filter((text) => !altTexte.has(text) && !geaendert.has(text)).length };
+}
+
+let offeneFassung: HTMLElement | null = null;
+
+/** Zeigt die Fassung direkt unter ihrem Eintrag. Ein zweiter Klick schliesst sie. */
+async function showRevision(rel: string, revision: Revision, item: HTMLElement, knopf: HTMLButtonElement): Promise<void> {
+  for (const andere of fassungen.querySelectorAll<HTMLButtonElement>("[data-ansehen]")) andere.textContent = "Ansehen";
+  if (offeneFassung === item && !vorschau.hidden) {
+    vorschau.hidden = true;
+    offeneFassung = null;
+    return;
+  }
   const params = new URLSearchParams({ rel, rev: revision.rev, path: revision.path });
   const response = await fetch(`/api/history?${params}`);
   const json = (await response.json()) as { html: string; titel: string };
+  if (current?.rel !== rel) return;
+  offeneFassung = item;
+  knopf.textContent = "Schliessen";
+  vorschau.innerHTML = `<p class="legende"></p><h3 class="fassung-titel">${esc(json.titel)}</h3>${json.html}`;
+  const titel = vorschau.querySelector<HTMLElement>(".fassung-titel")!;
+  if (json.titel !== collect().titel) titel.classList.add("anders");
+  const { anders, neu } = markiereUnterschiede(vorschau);
+  // Nur sagen, was wirklich anders ist.
+  const teile = [
+    titel.classList.contains("anders") ? "Der Titel war anders." : "",
+    anders ? `${anders === 1 ? "1 Absatz steht" : `${anders} Absätze stehen`} so nicht mehr im Text (gelb, geänderte Wörter hervorgehoben).` : "",
+    neu ? `Seither ${neu === 1 ? "ist 1 Absatz" : `sind ${neu} Absätze`} dazugekommen.` : "",
+  ].filter(Boolean);
+  vorschau.querySelector(".legende")!.textContent = teile.length ? teile.join(" ") : "Diese Fassung ist gleich wie der jetzige Text.";
+  item.append(vorschau);
   vorschau.hidden = false;
-  vorschau.innerHTML = `<h3>${esc(json.titel)}</h3>${json.html}`;
-  vorschau.scrollIntoView({ behavior: "smooth", block: "start" });
+  vorschau.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 async function restoreRevision(rel: string, revision: Revision): Promise<void> {
@@ -1496,6 +1662,36 @@ document.addEventListener("keydown", (event) => {
   event.preventDefault();
   if (current && !form.hidden) void saveNow();
 });
+/**
+ * Auf einem kleinen Laptop mit offenem Assistenten wird das Verzeichnis zur Schublade links,
+ * damit der Text seine Breite behält. Ob die Schublade gilt, entscheidet das CSS; hier nur auf und zu.
+ */
+const verzeichnis = root.querySelector<HTMLElement>("#verzeichnis")!;
+const verzeichnisAuf = root.querySelector<HTMLButtonElement>("#verzeichnis-auf")!;
+function zeigeVerzeichnis(offen: boolean): void {
+  document.body.classList.toggle("verzeichnis-offen", offen);
+  verzeichnisAuf.setAttribute("aria-expanded", String(offen));
+}
+verzeichnisAuf.addEventListener("click", (event) => {
+  event.stopPropagation();
+  const offen = !document.body.classList.contains("verzeichnis-offen");
+  zeigeVerzeichnis(offen);
+  if (offen) verzeichnis.querySelector<HTMLElement>("button, summary")?.focus();
+});
+// Ein Klick daneben schliesst sie, ebenso jede Wahl darin, die eine andere Ansicht öffnet.
+document.addEventListener("click", (event) => {
+  if (!document.body.classList.contains("verzeichnis-offen")) return;
+  const ziel = event.target as Element;
+  if (!verzeichnis.contains(ziel) || ziel.closest("nav button[data-rel], nav button[data-anfrage], button.mehr:not(#mehr), button.gruppe-titel, #heim")) {
+    zeigeVerzeichnis(false);
+  }
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && document.body.classList.contains("verzeichnis-offen")) {
+    zeigeVerzeichnis(false);
+    verzeichnisAuf.focus();
+  }
+});
 root.querySelector("#heim")!.addEventListener("click", async () => {
   if (await flushCommit()) showStart();
 });
@@ -1621,10 +1817,36 @@ async function importiereWord(file: File): Promise<void> {
   haltMeldungBis = Date.now() + (fehlend ? 15_000 : 6000);
 }
 
+const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+/**
+ * Beim Ziehen kennt der Browser nur die Art der Datei, nicht den Namen. Ohne Angabe könnte es Word sein.
+ * Der Zähler, weil jedes Kind des Editors beim Darüberziehen selbst «enter» und «leave» meldet.
+ */
+let ziehen = 0;
+function wordImZug(event: DragEvent): boolean {
+  return [...(event.dataTransfer?.items ?? [])].some((item) => item.kind === "file" && (item.type === DOCX || item.type === ""));
+}
+function zielAus(): void {
+  ziehen = 0;
+  delete editorHost.dataset.ziel;
+}
+editorHost.addEventListener("dragenter", (event) => {
+  if (!wordImZug(event)) return;
+  ziehen++;
+  editorHost.dataset.ziel = current?.entwurf ? "word" : "nein";
+});
+editorHost.addEventListener("dragleave", () => {
+  if (ziehen > 0 && --ziehen === 0) zielAus();
+});
+window.addEventListener("dragend", zielAus);
+window.addEventListener("drop", zielAus);
+
 // Eine .docx auf den Text ziehen importiert sie. Bilder und alles andere behandelt der Editor wie bisher.
 editorHost.addEventListener(
   "drop",
   (event) => {
+    zielAus();
     const file = [...(event.dataTransfer?.files ?? [])].find((f) => /\.docx$/i.test(f.name));
     if (!file) return;
     event.preventDefault();
