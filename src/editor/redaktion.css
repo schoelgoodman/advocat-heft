@@ -346,6 +346,21 @@ body.mit-assistent { padding-right: 26rem; }
 }
 .assistent .symbol:hover { color: var(--ink); background: rgba(28, 25, 21, 0.06); }
 .assistent .symbol.klein { width: 1.75rem; height: 1.75rem; }
+.assistent .neuer-chat {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.4rem 0.75rem 0.4rem 0.55rem;
+  border: 1px solid var(--a-rand);
+  border-radius: 999px;
+  background: var(--a-flaeche);
+  font-size: 0.8rem;
+  color: var(--ink);
+}
+.assistent .neuer-chat svg { width: 14px; height: 14px; color: var(--olive); }
+.assistent .neuer-chat:hover:not(:disabled) { border-color: var(--olive); }
+.assistent .neuer-chat:disabled { opacity: 0.45; cursor: default; }
 .assistent .symbol.klein svg { width: 14px; height: 14px; }
 .assistent .zeichen {
   display: grid;

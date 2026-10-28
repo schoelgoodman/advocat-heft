@@ -35,6 +35,8 @@ export interface Anschluss {
   schreibeLive(markdown: string): void;
   /** Speichert die offene Seite wie nach dem Tippen. */
   speichere(): void;
+  /** Fragt auf der Seite nach, wie die Redaktion selbst. */
+  frage(options: { titel: string; text: string; ja: string; nein: string; gefahr?: boolean }): Promise<boolean>;
   /** Zeigt die Seite «Wünsche». */
   zeigeWuensche(): void;
   /** Öffnet den Newsletter mit diesem Thema, falls es ihn gibt. */
@@ -189,7 +191,7 @@ const svg = (inhalt: string) =>
 
 const ICON = {
   funke: svg('<path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9z"/><path d="M18.5 16.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>'),
-  neu: svg('<path d="M12 20h8"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/>'),
+  neu: svg('<path d="M12 5v14M5 12h14"/>'),
   zu: svg('<path d="M6 6l12 12M18 6L6 18"/>'),
   senden: svg('<path d="M12 19V5M5.5 11.5L12 5l6.5 6.5"/>'),
   stopp: '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2.5" fill="currentColor"/></svg>',
@@ -222,7 +224,7 @@ export async function mountAssistent(anschluss: Anschluss, bereit: boolean): Pro
         <h2>Assistent</h2>
         <p>Hilft beim Schreiben und mit der Redaktion</p>
       </div>
-      <button type="button" class="symbol" data-neu title="Neues Gespräch" aria-label="Neues Gespräch">${ICON.neu}</button>
+      <button type="button" class="neuer-chat" data-neu title="Den bisherigen Chat löschen und neu beginnen">${ICON.neu}Neuer Chat</button>
       <button type="button" class="symbol" data-zu title="Assistent schliessen" aria-label="Assistent schliessen">${ICON.zu}</button>
     </header>
     <ol class="verlauf" aria-live="polite"></ol>
@@ -549,6 +551,7 @@ export async function mountAssistent(anschluss: Anschluss, bereit: boolean): Pro
   }
 
   function zeichne(): void {
+    neuerChat.disabled = !verlauf.length;
     verlaufListe.replaceChildren(...(verlauf.length ? verlauf.map(nachrichtItem) : [leer()]));
     scrollAnsEnde();
   }
@@ -581,6 +584,7 @@ export async function mountAssistent(anschluss: Anschluss, bereit: boolean): Pro
     if (!verlauf.length) verlaufListe.replaceChildren();
     const patrick: Nachricht = { rolle: "patrick", text, zeit: new Date().toISOString(), rel };
     verlauf.push(patrick);
+    neuerChat.disabled = false;
     verlaufListe.append(nachrichtItem(patrick));
     const item = document.createElement("li");
     item.className = "antwort denkt";
@@ -684,7 +688,17 @@ export async function mountAssistent(anschluss: Anschluss, bereit: boolean): Pro
     event.preventDefault();
     if (!laeuft) void frage();
   });
-  spalte.querySelector("[data-neu]")!.addEventListener("click", async () => {
+  const neuerChat = spalte.querySelector<HTMLButtonElement>("[data-neu]")!;
+  neuerChat.addEventListener("click", async () => {
+    if (!verlauf.length && !laeuft) return;
+    const ja = await anschluss.frage({
+      titel: "Chat löschen?",
+      text: "Der bisherige Verlauf mit dem Assistenten ist danach weg. Seiten, Entwürfe und frühere Fassungen bleiben unberührt.",
+      ja: "Löschen",
+      nein: "Abbrechen",
+      gefahr: true,
+    });
+    if (!ja) return;
     if (laeuft) laeuft.abort();
     await fetch("/api/chat", { method: "DELETE" }).catch(() => null);
     verlauf = [];

@@ -1620,6 +1620,7 @@ void mountAssistent(
     schreibeLive: (markdown) => crepe?.editor.action(replaceAll(forEditor(markdown), true)),
     speichere: () => scheduleSave(),
     zeigeWuensche: () => void showWuensche(),
+    frage: ask,
     oeffneNewsletter: (text) => {
       const page = alleBriefe.find((item) => thema(item.titel) === text.trim());
       if (page) void openPage(page.rel);
