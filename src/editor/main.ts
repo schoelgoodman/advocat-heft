@@ -133,6 +133,7 @@ root.innerHTML = `
         <summary><span class="gruppe-titel">Papierkorb</span></summary>
         <p class="leise">Gelöschte Entwürfe. Zurückgeholt sind sie wieder Entwürfe.</p>
         <nav id="papierkorb"></nav>
+        <button type="button" class="leise mehr gefahr" id="papierkorb-leeren">Papierkorb leeren</button>
       </details>
     </aside>
     <main>
@@ -226,6 +227,10 @@ const briefeGruppe = root.querySelector<HTMLDetailsElement>("#briefe-gruppe")!;
 const seitenGruppe = root.querySelector<HTMLDetailsElement>("#seiten-gruppe")!;
 const papierkorb = root.querySelector<HTMLElement>("#papierkorb")!;
 const papierkorbGruppe = root.querySelector<HTMLDetailsElement>("#papierkorb-gruppe")!;
+let papierkorbAnzahl = 0;
+root.querySelector("#papierkorb-leeren")!.addEventListener("click", () => {
+  void deleteFromTrash(null, papierkorbAnzahl === 1 ? "Ein Eintrag" : `Alle ${papierkorbAnzahl} Einträge`);
+});
 const start = root.querySelector<HTMLElement>("#start")!;
 const anfragenGruppe = root.querySelector<HTMLDetailsElement>("#anfragen-gruppe")!;
 const anfragenListe = root.querySelector<HTMLElement>("#anfragen-liste")!;
@@ -575,8 +580,32 @@ function trashItem(page: PageSummary): HTMLElement {
   const text = document.createElement("span");
   text.className = "thema";
   text.textContent = isBrief(page) ? `Nr. ${page.nummer ?? ""} · ${thema(page.titel) || "Ohne Thema"}` : page.titel;
-  zeile.append(text, button("Zurückholen", "leise", () => void restoreFromTrash(page.rel)));
+  const titel = isBrief(page) ? `Nr. ${page.nummer ?? ""} · ${thema(page.titel) || "Ohne Thema"}` : page.titel;
+  const loeschen = button("Endgültig löschen", "leise gefahr", () => void deleteFromTrash(page.rel, titel));
+  zeile.append(text, button("Zurückholen", "leise", () => void restoreFromTrash(page.rel)), loeschen);
   return zeile;
+}
+
+/** Ein Eintrag oder (ohne rel) der ganze Papierkorb, nach einer Rückfrage. */
+async function deleteFromTrash(rel: string | null, titel: string): Promise<void> {
+  const ja = await ask({
+    titel: rel ? "Endgültig löschen?" : "Papierkorb leeren?",
+    text: rel
+      ? `„${titel}“ wird endgültig gelöscht und lässt sich in der Redaktion nicht mehr zurückholen.`
+      : papierkorbAnzahl === 1
+        ? "Der Eintrag im Papierkorb wird endgültig gelöscht und lässt sich in der Redaktion nicht mehr zurückholen."
+        : `${titel} im Papierkorb werden endgültig gelöscht und lassen sich in der Redaktion nicht mehr zurückholen.`,
+    ja: rel ? "Endgültig löschen" : "Papierkorb leeren",
+    nein: "Abbrechen",
+    gefahr: true,
+  });
+  if (!ja) return;
+  const response = await fetch(`/api/papierkorb${rel ? `?rel=${encodeURIComponent(rel)}` : ""}`, { method: "DELETE" }).catch(() => null);
+  if (!response?.ok) {
+    await ask({ titel: "Das hat nicht geklappt", text: response ? await errorText(response, "Löschen ging nicht.") : "Keine Verbindung zum Server.", ja: "OK" });
+    return;
+  }
+  await loadList();
 }
 
 async function loadList(): Promise<void> {
@@ -591,6 +620,7 @@ async function loadList(): Promise<void> {
     .catch(() => ({ pages: [] }))) as { pages: PageSummary[] };
   papierkorb.replaceChildren(...geloescht.pages.map(trashItem));
   papierkorbGruppe.hidden = geloescht.pages.length === 0;
+  papierkorbAnzahl = geloescht.pages.length;
 }
 
 /** Zeigt die neuesten Newsletter, ältere erst auf Wunsch. */

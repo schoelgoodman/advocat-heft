@@ -184,7 +184,9 @@ nav button.werkzeug[aria-expanded="true"] { color: var(--ink); background: rgba(
 }
 .menue button { display: block; width: 100%; text-align: left; border: 0; border-radius: 6px; padding: 0.5rem 0.7rem; font-size: 0.9rem; }
 .menue button:hover, .menue button:focus-visible { background: var(--olive-hauch); color: var(--olive); outline: none; }
-nav .geloescht { align-items: center; justify-content: space-between; gap: 0.4rem; padding: 0.3rem 0 0.3rem 0.6rem; }
+nav .geloescht { flex-wrap: wrap; align-items: center; gap: 0.1rem 0.8rem; padding: 0.35rem 0 0.35rem 0.6rem; }
+/* Titel auf eine Zeile, die Knöpfe darunter: nebeneinander ist das Verzeichnis zu schmal. */
+nav .geloescht .thema { flex: 1 1 100%; }
 nav .geloescht .thema { color: var(--quiet); }
 nav .geloescht button { display: inline-block; border: 0; font-size: 0.82rem; flex: none; }
 @media (hover: none) { nav .werkzeuge { opacity: 1; } }
@@ -380,6 +382,8 @@ dialog h2 { font-family: var(--serif); font-weight: 400; font-size: 1.5rem; marg
 dialog p { margin: 0 0 1.4rem; line-height: 1.5; }
 dialog .aktionen { justify-content: flex-end; }
 .haupt.gefahr { background: var(--rot); border-color: var(--rot); }
+.leise.gefahr { color: var(--rot); }
+.leise.gefahr:hover { color: var(--ink); }
 .haupt.gefahr:hover { background: var(--ink); border-color: var(--ink); }
 aside .mehr { display: block; margin: 0.3rem 0 0; font-size: 0.85rem; }
 

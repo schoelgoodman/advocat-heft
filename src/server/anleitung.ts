@@ -135,7 +135,7 @@ Verzeichnis (links):
 - «Newsletter»: der Name öffnet die Übersicht aller Newsletter (auch «Übersicht aller Newsletter» unten in der Gruppe). Im Verzeichnis die neuesten zehn, mit «Ältere anzeigen» mehr. Entwürfe tragen die Marke «Entwurf».
 - «Übrige Seiten»: die festen Seiten (Willkommen, Über uns, Angebot, Privatpersonen, Unternehmen, Stiftungen, Neuigkeiten, FAQ, Kontakt) und das Rechtliche (Impressum, Datenschutz, Disclaimer).
 - «Support»: siehe unten.
-- «Papierkorb», ganz unten: gelöschte Entwürfe. Erscheint nur, wenn etwas drin liegt. «Zurückholen» macht wieder einen Entwurf daraus.
+- «Papierkorb», ganz unten: gelöschte Entwürfe. Erscheint nur, wenn etwas drin liegt. «Zurückholen» macht wieder einen Entwurf daraus. «Endgültig löschen» bei einem Eintrag oder «Papierkorb leeren» darunter löscht nach einer Rückfrage endgültig; das lässt sich in der Redaktion nicht mehr zurückholen.
 - Neben jedem Eintrag «…», beim Darüberfahren deutlich: ein kleines Menü mit «Öffnen», «Kopie anlegen» und «Vorschau ↗» (Entwurf) bzw. «Auf der Website ansehen ↗» (online). Veröffentlichen und Zurückziehen gehen nur in der offenen Seite oder in der Übersicht der Newsletter, nicht im Verzeichnis.
 - Auf dem Telefon und auf einem kleinen Laptop mit offenem Assistenten ist das Verzeichnis eingeklappt: der runde Knopf mit den drei Strichen oben links öffnet es, ein Tippen daneben oder eine Wahl darin schliesst es wieder.
 - «Zurück» und «Vorwärts» im Browser wechseln zwischen den Ansichten der Redaktion.
@@ -150,7 +150,7 @@ Startseite der Redaktion: ein Gruss je nach Tageszeit («Guten Morgen», «Guten
 - Jeder Newsletter als Karte mit Stand, Nummer, Datum und dem Anfang des Textes. Knöpfe: «Bearbeiten», bei Entwürfen «Veröffentlichen», bei Online-Newslettern «Auf der Website ansehen ↗», dazu «Kopie anlegen». Ein Klick auf das Thema öffnet ihn ebenfalls.
 
 Einen Newsletter schreiben:
-1. «Neuen Newsletter schreiben» auf der Startseite. Er bekommt die nächste Nummer und ist ein Entwurf, nur in der Redaktion sichtbar.
+1. «Neuen Newsletter schreiben» auf der Startseite. Er bekommt die Nummer nach dem letzten veröffentlichten Newsletter (hat ein anderer Entwurf sie schon, die nächste freie; der Papierkorb zählt nicht) und ist ein Entwurf, nur in der Redaktion sichtbar.
 2. Oben ins grosse Feld das Thema schreiben, z. B. «Revision des Erbrechts». «Newsletter 36:» davor setzt die Redaktion selbst.
 3. Darunter stehen die Nummer und das Datum. Beide lassen sich ändern, die Nummer aber nur, solange der Newsletter ein Entwurf ist (online hängt die Adresse daran). Hat ein anderer Newsletter dieselbe Nummer, erscheint ein Hinweis. Eine Nummer, die schon online ist, lässt sich nicht veröffentlichen.
 4. Darunter der Text. Am Anfang einer leeren Zeile «/» tippen öffnet ein Menü: Absatz, Zwischentitel, Kleiner Zwischentitel, Zitat, Aufzählung, Nummerierte Liste, Bild. Text markieren zeigt eine kleine Leiste für fett, kursiv und Link.

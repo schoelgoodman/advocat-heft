@@ -150,10 +150,18 @@ async function freeRel(rel: string): Promise<string> {
   }
 }
 
-/** Auch Newsletter im Papierkorb zählen, sonst bekäme ein neuer ihre Nummer. */
+/**
+ * Die Nummer nach dem letzten veröffentlichten Newsletter. Trägt ein Entwurf sie schon, die nächste
+ * freie. Der Papierkorb zählt nicht: Wer einen von dort zurückholt, sieht einen Hinweis, wenn seine
+ * Nummer doppelt ist, und veröffentlichen lässt sich eine doppelte Nummer ohnehin nicht.
+ */
 async function nextNummer(): Promise<number> {
-  const docs = [...(await loadDocuments()), ...(await loadPapierkorb())];
-  return Math.max(0, ...docs.filter((doc) => doc.art === "brief").map((doc) => doc.nummer ?? 0)) + 1;
+  const briefe = (await loadDocuments()).filter((doc) => doc.art === "brief");
+  const online = Math.max(0, ...briefe.filter((doc) => !doc.entwurf).map((doc) => doc.nummer ?? 0));
+  const vergeben = new Set(briefe.filter((doc) => doc.entwurf).map((doc) => doc.nummer));
+  let nummer = online + 1;
+  while (vergeben.has(nummer)) nummer += 1;
+  return nummer;
 }
 
 function briefRel(nummer: number): string {
@@ -309,6 +317,20 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     const docs = await loadPapierkorb();
     docs.sort((a, b) => a.titel.localeCompare(b.titel, "de"));
     sendJson(res, 200, { pages: docs.map(summary) });
+    return;
+  }
+
+  // Endgültig löschen: ein Eintrag (?rel=papierkorb/…) oder ohne rel der ganze Papierkorb.
+  // In der Redaktion lässt sich das nicht zurückholen; im Inhalts-Git bleibt die frühere Fassung.
+  if (req.method === "DELETE" && url.pathname === "/api/papierkorb") {
+    const rel = url.searchParams.get("rel");
+    const docs = rel ? [parseDocument(await fs.readFile(path.join(contentDir(), trashRel(rel)), "utf8"), trashRel(rel))] : await loadPapierkorb();
+    await flushPending();
+    for (const doc of docs) await fs.rm(path.join(contentDir(), doc.rel), { force: true });
+    const message = docs.length === 1 ? `Endgültig gelöscht: ${docs[0].titel}` : `Papierkorb geleert (${docs.length})`;
+    await commitIfChanged(message, docs.map((doc) => doc.rel));
+    console.log(message);
+    sendJson(res, 200, { geloescht: docs.length });
     return;
   }
 
