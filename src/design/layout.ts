@@ -693,6 +693,13 @@ export function renderDocument(input: RenderInput): PageView {
     for (const image of root.querySelectorAll("img")) {
       image.setAttribute("loading", "lazy");
       image.setAttribute("decoding", "async");
+      // Der Editor schrieb früher das Grössenverhältnis («1.00») als Beschreibung und Patricks
+      // Bildbeschreibung als Titel. Dann gilt der Titel; die Datei wird beim nächsten Speichern richtig.
+      const alt = image.getAttribute("alt") ?? "";
+      if (/^\d+(\.\d+)?$/.test(alt.trim())) {
+        image.setAttribute("alt", image.getAttribute("title")?.trim() ?? "");
+        image.removeAttribute("title");
+      }
       if (!image.getAttribute("alt")) image.setAttribute("alt", "");
       if (image.getAttribute("title") === "") image.removeAttribute("title");
     }

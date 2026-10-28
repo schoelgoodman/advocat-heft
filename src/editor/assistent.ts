@@ -33,11 +33,14 @@ export interface Anschluss {
   neuerNewsletter(thema: string): Promise<string | null>;
   /** Setzt den Text während des Schreibens, ohne Speichern und ohne Rückgängig-Schritte. */
   schreibeLive(markdown: string): void;
-  /** Speichert die offene Seite wie nach dem Tippen. */
-  speichere(): void;
+  /**
+   * Legt den fertigen Text in den Entwurf, den der Assistent angelegt hat. Ist er offen, wie getippt;
+   * hat Patrick inzwischen die Seite gewechselt, direkt in die Datei. Nur für Entwürfe.
+   */
+  speichereEntwurf(rel: string, markdown: string): Promise<boolean>;
   /** Fragt auf der Seite nach, wie die Redaktion selbst. */
   frage(options: { titel: string; text: string; ja: string; nein: string; gefahr?: boolean }): Promise<boolean>;
-  /** Zeigt die Seite «Wünsche». */
+  /** Zeigt die Seite «Support». */
   zeigeWuensche(): void;
   /** Öffnet den Newsletter mit diesem Thema, falls es ihn gibt. */
   oeffneNewsletter(thema: string): boolean;
@@ -56,11 +59,13 @@ type Teil =
   | { art: "text"; text: string }
   | { art: "ersetzen"; alt: string; neu: string }
   | { art: "text-ganz" | "anfuegen" | "titel"; neu: string }
-  | { art: "wunsch"; wunschArt: "design" | "funktion"; text: string }
+  | { art: "wunsch"; wunschArt: WunschArt; text: string }
   | { art: "newsletter"; thema: string; neu: string; fertig: boolean }
   | { art: "wartet" };
 
-const BLOCK = /<vorschlag art="(ersetzen|text|anfuegen|titel)">([\s\S]*?)<\/vorschlag>|<(?:wunsch art="(design|funktion)"|designwunsch)>([\s\S]*?)<\/(?:wunsch|designwunsch)>|<neuer-newsletter thema="([^"]*)">([\s\S]*?)<\/neuer-newsletter>/g;
+type WunschArt = "design" | "funktion" | "fehler";
+
+const BLOCK = /<vorschlag art="(ersetzen|text|anfuegen|titel)">([\s\S]*?)<\/vorschlag>|<(?:wunsch art="(design|funktion|fehler)"|designwunsch)>([\s\S]*?)<\/(?:wunsch|designwunsch)>|<neuer-newsletter thema="([^"]*)">([\s\S]*?)<\/neuer-newsletter>/g;
 
 /** Ein neuer Newsletter, auch halb geschrieben. Das Thema muss schon ganz dastehen. */
 const NEUER_NEWSLETTER = /<neuer-newsletter thema="([^"]*)">([\s\S]*?)(<\/neuer-newsletter>|$)/;
@@ -105,7 +110,7 @@ function zerlege(antwort: string, fertig: boolean): Teil[] {
     last = match.index + match[0].length;
     if (match[4] != null) {
       // Ältere Antworten im Verlauf kennen nur <designwunsch>.
-      teile.push({ art: "wunsch", wunschArt: match[3] === "funktion" ? "funktion" : "design", text: ohneRand(match[4]) });
+      teile.push({ art: "wunsch", wunschArt: match[3] === "funktion" || match[3] === "fehler" ? match[3] : "design", text: ohneRand(match[4]) });
       continue;
     }
     if (match[5] != null) {
@@ -331,6 +336,14 @@ export async function mountAssistent(anschluss: Anschluss, bereit: boolean): Pro
     eingabe.value = PRUEFEN;
     void frage();
   });
+  // Die Hinweise über dem Text haben denselben Auftrag. Die Spalte geht dafür auf, falls sie zu ist.
+  document.addEventListener("seite-pruefen", () => {
+    zeige(true);
+    zeigePruefen();
+    if (pruefen.hidden || laeuft) return;
+    eingabe.value = PRUEFEN;
+    void frage();
+  });
 
   function scrollAnsEnde(): void {
     verlaufListe.scrollTop = verlaufListe.scrollHeight;
@@ -350,7 +363,7 @@ export async function mountAssistent(anschluss: Anschluss, bereit: boolean): Pro
       <span class="zeichen gross" aria-hidden="true">${ICON.funke}</span>
       <h3>Hallo Patrick</h3>
       <p>Ich helfe dir mit der Redaktion und beim Schreiben. Ich sehe die offene Seite und die früheren Newsletter. Änderungen schlage ich vor, einsetzen tust du sie mit «Übernehmen».</p>
-      <p>Fehlt dir etwas in der Redaktion oder soll die Website anders aussehen? Sag es mir, ich schreibe daraus einen Wunsch an die Betreuung.</p>`;
+      <p>Fehlt dir etwas in der Redaktion oder soll die Website anders aussehen? Oder funktioniert etwas nicht? Sag es mir, ich schreibe es für den Support auf.</p>`;
     const liste = document.createElement("div");
     liste.className = "beispiele";
     for (const beispiel of BEISPIELE) {
@@ -455,7 +468,11 @@ export async function mountAssistent(anschluss: Anschluss, bereit: boolean): Pro
   /** Wünsche, die schon gesendet sind, erkannt am Anfang des ursprünglichen Textes. */
   const gesendet = new Set<string>();
 
-  const WUNSCH_TITEL = { design: "Wunsch · Aussehen der Website", funktion: "Wunsch · Funktion der Redaktion" };
+  const WUNSCH_TITEL: Record<WunschArt, string> = {
+    funktion: "Feature",
+    fehler: "Bug",
+    design: "Styling",
+  };
 
   /** Ein Wunsch an die Betreuung. Patrick kann Art und Text ändern, bevor er ihn sendet. */
   function wunschKarte(teil: Extract<Teil, { art: "wunsch" }>): HTMLElement {
@@ -466,10 +483,11 @@ export async function mountAssistent(anschluss: Anschluss, bereit: boolean): Pro
     const inhalt = element.querySelector<HTMLElement>(".inhalt")!;
     const art = document.createElement("select");
     art.setAttribute("aria-label", "Art des Wunsches");
-    art.innerHTML = `<option value="funktion">Funktion der Redaktion</option><option value="design">Aussehen der Website</option>`;
+    art.innerHTML = `<option value="funktion">Feature</option><option value="fehler">Bug</option><option value="design">Styling</option>`;
     art.value = teil.wunschArt;
     art.addEventListener("change", () => {
-      kopf.textContent = WUNSCH_TITEL[art.value as "design" | "funktion"];
+      kopf.textContent = WUNSCH_TITEL[art.value as WunschArt];
+      senden.textContent = art.value === "fehler" ? "Bug melden" : "An Support senden";
     });
     const feld = document.createElement("textarea");
     feld.value = teil.text;
@@ -482,14 +500,21 @@ export async function mountAssistent(anschluss: Anschluss, bereit: boolean): Pro
     requestAnimationFrame(passe);
     inhalt.append(art, feld);
 
-    const ansehen = knopf("Unter «Wünsche» ansehen", "leise", () => anschluss.zeigeWuensche());
-    const senden = knopf("Wunsch senden", "haupt", async () => {
+    const ansehen = knopf("Unter «Support» ansehen", "leise", () => anschluss.zeigeWuensche());
+    const senden = knopf("An Support senden", "haupt", async () => {
       if (!feld.value.trim()) return;
       senden.disabled = true;
       const response = await fetch("/api/wuensche", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ art: art.value, text: feld.value, seite: anschluss.offen()?.titel ?? "", quelle }),
+        body: JSON.stringify({
+          art: art.value,
+          text: feld.value,
+          seite: anschluss.offen()?.titel ?? "",
+          quelle,
+          // Bei einem Fehler: Browser und Fenstergrösse, damit die Betreuung ihn nachstellen kann.
+          ...(art.value === "fehler" ? { geraet: `${navigator.userAgent} · Fenster ${window.innerWidth}×${window.innerHeight}` } : {}),
+        }),
       }).catch(() => null);
       if (!response?.ok) {
         senden.disabled = false;
@@ -505,10 +530,11 @@ export async function mountAssistent(anschluss: Anschluss, bereit: boolean): Pro
         wunsch.telegram === "gesendet"
           ? "Per Telegram an die Betreuung der Website gegangen."
           : wunsch.telegram === "aus"
-            ? "Gespeichert. Telegram ist hier nicht eingerichtet, der Wunsch steht unter «Wünsche»."
-            : "Gespeichert, aber Telegram hat nicht geklappt. Unter «Wünsche» lässt er sich nochmals senden.",
+            ? "Gespeichert. Telegram ist hier nicht eingerichtet, der Eintrag steht unter «Support»."
+            : "Gespeichert, aber Telegram hat nicht geklappt. Unter «Support» lässt er sich nochmals senden.",
       );
     });
+    if (teil.wunschArt === "fehler") senden.textContent = "Bug melden";
     const zeigeGesendet = () => {
       senden.disabled = true;
       senden.textContent = "Gesendet ✓";
@@ -668,12 +694,11 @@ export async function mountAssistent(anschluss: Anschluss, bereit: boolean): Pro
     }
     if (liveTimer != null) window.clearTimeout(liveTimer);
     if (entwurf) {
-      // Zum Schluss der ganze Text, dann wie getippt speichern.
+      // Zum Schluss der ganze Text in den Entwurf, auch wenn Patrick inzwischen woanders ist.
       const ziel = await entwurf;
       const neu = newsletterText(antwort);
-      if (ziel && neu && anschluss.offen()?.rel === ziel) {
-        anschluss.schreibeLive(neu.text);
-        anschluss.speichere();
+      if (ziel && neu?.text && !(await anschluss.speichereEntwurf(ziel, neu.text)) && !fehler) {
+        fehler = "Der Text liess sich nicht im Entwurf speichern. «Text kopieren» auf der Karte geht noch.";
       }
       if (!ziel && !fehler) fehler = "Der neue Newsletter liess sich nicht anlegen.";
     }

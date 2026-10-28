@@ -86,7 +86,7 @@ let wuenscheFilter: "offen" | "erledigt" | "alle" = "offen";
 
 interface Wunsch {
   id: string;
-  art: "design" | "funktion";
+  art: "design" | "funktion" | "fehler";
   text: string;
   seite: string;
   eingang: string;
@@ -108,7 +108,7 @@ root.innerHTML = `
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 11 12 4l9 7M6 9.5V20h4.5v-5.5h3V20H18V9.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
         Redaktion
       </button>
-      <!-- Jede Gruppe gleich: der Pfeil klappt die Liste auf, der Name öffnet die Übersicht, wo es eine gibt. -->
+      <!-- Jede Gruppe gleich: die Zeile klappt die Liste auf und öffnet die Übersicht, wo es eine gibt. -->
       <details id="anfragen-gruppe">
         <summary><button type="button" class="gruppe-titel" id="anfragen-titel">Kontaktaufnahme</button><span class="zahl" id="anfragen-zahl"></span></summary>
         <nav id="anfragen-liste"></nav>
@@ -124,9 +124,11 @@ root.innerHTML = `
         <summary><span class="gruppe-titel">Übrige Seiten</span></summary>
         <nav id="seiten"></nav>
       </details>
-      <div class="gruppe-zeile">
-        <button type="button" class="gruppe-titel" id="wuensche-link">Wünsche</button><span class="zahl" id="wuensche-zahl"></span><span class="marke neu" id="wuensche-neu" hidden>Neu</span>
-      </div>
+      <details id="wuensche-gruppe">
+        <summary><button type="button" class="gruppe-titel" id="wuensche-link">Support</button><span class="zahl" id="wuensche-zahl"></span><span class="marke neu" id="wuensche-neu" hidden>Neu</span></summary>
+        <nav id="wuensche-liste"></nav>
+        <button type="button" class="leise mehr" id="wuensche-alle">Übersicht Support</button>
+      </details>
       <details id="papierkorb-gruppe" hidden>
         <summary><span class="gruppe-titel">Papierkorb</span></summary>
         <p class="leise">Gelöschte Entwürfe. Zurückgeholt sind sie wieder Entwürfe.</p>
@@ -139,8 +141,10 @@ root.innerHTML = `
         <div class="aufgaben">
           <article class="aufgabe" id="start-anfragen"></article>
           <article class="aufgabe" id="start-briefe"></article>
+          <article class="aufgabe breit laedt" id="start-check"></article>
         </div>
-        <p class="wunsch-hinweis">Fehlt etwas in der Redaktion oder soll die Website anders aussehen? <button type="button" class="leise" id="start-wunsch">Wunsch schreiben →</button></p>
+        <p class="wunsch-hinweis">Fehlt etwas in der Redaktion oder soll die Website anders aussehen? <button type="button" class="leise" id="start-wunsch">An Support schreiben →</button></p>
+        <p class="wunsch-hinweis">Funktioniert in der Redaktion etwas nicht? <button type="button" class="leise" id="start-fehler">Bug melden →</button></p>
       </section>
       <section id="anfragen" hidden>
         <h1>Kontaktaufnahme</h1>
@@ -159,22 +163,23 @@ root.innerHTML = `
         <ol id="briefe-karten"></ol>
       </section>
       <section id="wuensche-seite" hidden>
-        <h1>Wünsche</h1>
-        <p class="leise einleitung">Was in der Redaktion fehlt oder an der Website anders sein soll. Jeder Wunsch geht per Telegram an die Betreuung der Website. Beim Formulieren hilft der Assistent rechts.</p>
+        <h1>Support</h1>
+        <p class="leise einleitung">Was in der Redaktion fehlt, an der Website anders sein soll oder in der Redaktion nicht funktioniert. Alles geht per Telegram an die Betreuung der Website. Beim Formulieren hilft der Assistent rechts.</p>
         <form class="neuer-wunsch" id="wunsch-form">
           <label>Art
             <select id="wunsch-art">
-              <option value="funktion">Funktion der Redaktion</option>
-              <option value="design">Aussehen der Website</option>
+              <option value="funktion">Feature</option>
+              <option value="fehler">Bug</option>
+              <option value="design">Styling</option>
             </select>
           </label>
           <textarea id="wunsch-text" rows="4" placeholder="Was fehlt oder soll anders sein, und wozu?"></textarea>
           <div class="aktionen">
-            <button type="submit" class="haupt">Wunsch senden</button>
+            <button type="submit" class="haupt" id="wunsch-senden">An Support senden</button>
             <p class="leise" id="wunsch-meldung" aria-live="polite"></p>
           </div>
         </form>
-        <div class="kacheln" id="wuensche-kacheln" role="group" aria-label="Wünsche filtern"></div>
+        <div class="kacheln" id="wuensche-kacheln" role="group" aria-label="Support filtern"></div>
         <ol id="wuensche-karten"></ol>
       </section>
       <form id="blatt" hidden>
@@ -190,6 +195,7 @@ root.innerHTML = `
           <label class="datum" id="datum-feld">Datum <input type="date" id="datum"></label>
         </div>
         <p class="nummer-hinweis" id="nummer-hinweis" hidden></p>
+        <aside class="google-hinweise" id="google-hinweise" hidden aria-live="polite"></aside>
         <div id="editor"></div>
         <p class="tipp">Tipp: Am Anfang einer leeren Zeile <kbd>/</kbd> tippen für Zwischentitel, Liste oder Bild. Text markieren für fett, kursiv oder Link.</p>
         <details id="fassungen-gruppe">
@@ -231,6 +237,8 @@ const briefeSuche = root.querySelector<HTMLInputElement>("#briefe-suche")!;
 const briefeText = root.querySelector<HTMLElement>("#briefe-text")!;
 const briefeKarten = root.querySelector<HTMLOListElement>("#briefe-karten")!;
 const wuenscheSeite = root.querySelector<HTMLElement>("#wuensche-seite")!;
+const wuenscheGruppe = root.querySelector<HTMLDetailsElement>("#wuensche-gruppe")!;
+const wuenscheListe = root.querySelector<HTMLElement>("#wuensche-liste")!;
 const wuenscheKacheln = root.querySelector<HTMLElement>("#wuensche-kacheln")!;
 const wuenscheKarten = root.querySelector<HTMLOListElement>("#wuensche-karten")!;
 const wuenscheZahl = root.querySelector<HTMLElement>("#wuensche-zahl")!;
@@ -243,6 +251,9 @@ const anfragenText = root.querySelector<HTMLElement>("#anfragen-text")!;
 const anfragenKacheln = root.querySelector<HTMLElement>("#anfragen-kacheln")!;
 const startAnfragen = root.querySelector<HTMLElement>("#start-anfragen")!;
 const startBriefe = root.querySelector<HTMLElement>("#start-briefe")!;
+const startCheck = root.querySelector<HTMLElement>("#start-check")!;
+const googleHinweise = root.querySelector<HTMLElement>("#google-hinweise")!;
+renderStartCheckLaedt();
 const anfragenKarten = root.querySelector<HTMLOListElement>("#anfragen-karten")!;
 const form = root.querySelector<HTMLFormElement>("#blatt")!;
 const stand = root.querySelector<HTMLElement>("#stand")!;
@@ -309,12 +320,34 @@ function isBrief(doc: Pick<ContentDocument, "art"> | null | undefined): boolean 
   return doc?.art === "brief";
 }
 
+/**
+ * Ein Bild allein in seiner Zeile. Der Editor macht daraus einen Bildblock, und der speichert
+ * anders als die Website liest: die Beschreibung im Titel, an ihrer Stelle das Grössenverhältnis.
+ * `![Beschreibung](bild.png)` in der Datei ist im Editor `![1](bild.png "Beschreibung")`.
+ */
+const BILD_ZEILE = /^!\[((?:[^\]\\]|\\.)*)\]\((\S+?)(?:\s+"((?:[^"\\]|\\.)*)")?\)[ \t]*$/gm;
+
+/** «1.00»: das Grössenverhältnis, das der Editor früher als Beschreibung in die Datei schrieb. */
+const VERHAELTNIS = /^\d+(\.\d+)?$/;
+
+const ohneEscape = (value: string) => value.replace(/\\(.)/g, "$1");
+
 function forEditor(markdown: string): string {
-  return markdown.replaceAll("](../media/", "](/media/");
+  return markdown
+    .replace(BILD_ZEILE, (_zeile, alt: string, src: string, titel: string | undefined) => {
+      const text = (VERHAELTNIS.test(alt) ? "" : ohneEscape(alt)) || ohneEscape(titel ?? "");
+      return text ? `![1](${src} "${text.replace(/["\\]/g, "\\$&")}")` : `![1](${src})`;
+    })
+    .replaceAll("](../media/", "](/media/");
 }
 
 function forFile(markdown: string): string {
-  return markdown.replaceAll("](/media/", "](../media/");
+  return markdown
+    .replace(BILD_ZEILE, (_zeile, alt: string, src: string, titel: string | undefined) => {
+      const text = ohneEscape(titel ?? "") || (VERHAELTNIS.test(alt) ? "" : ohneEscape(alt));
+      return `![${text.replace(/[[\]\\]/g, "\\$&")}](${src})`;
+    })
+    .replaceAll("](/media/", "](../media/");
 }
 
 function esc(value: string): string {
@@ -380,7 +413,8 @@ async function mountEditor(markdown: string): Promise<void> {
         blockUploadButton: "Bild hochladen",
         blockUploadPlaceholderText: "oder Bildadresse einfügen",
         blockConfirmButton: "Übernehmen",
-        blockCaptionPlaceholderText: "Bildunterschrift",
+        // Auf der Website steht das nicht unter dem Bild: Es ist die Beschreibung, die Google liest.
+        blockCaptionPlaceholderText: "Bildbeschreibung für Google: Was ist zu sehen?",
       },
       [Crepe.Feature.BlockEdit]: {
         textGroup: {
@@ -617,11 +651,205 @@ function renderStartBriefe(): void {
       ? `${entwuerfe.length === 1 ? "Ein Entwurf wartet" : `${entwuerfe.length} Entwürfe warten`}`
       : "Keine offenen Entwürfe",
     leise: zuletzt
-      ? `Zuletzt erschienen: Nr. ${zuletzt.nummer ?? ""} am ${shortDate(zuletzt.datum)}.`
+      ? `Zuletzt erschienen: Nr. ${zuletzt.nummer ?? ""} am ${shortDate(zuletzt.datum)}, ${seit(zuletzt.datum)}.${
+          tageSeit(zuletzt.datum) > PAUSE_TAGE && !entwuerfe.length ? " Zeit für den nächsten?" : ""
+        }`
       : "Der erste Newsletter erscheint, sobald Sie ihn veröffentlichen.",
     liste,
     knopf: [neu, button("Zur Übersicht", "", () => void showBriefe())],
   });
+}
+
+/** Nach so vielen Tagen ohne neuen Newsletter erinnert die Startseite sanft. Google mag Seiten, die leben. */
+const PAUSE_TAGE = 60;
+
+function tageSeit(iso: string): number {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!match) return 0;
+  const damals = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return Math.max(0, Math.floor((Date.now() - damals.getTime()) / 86_400_000));
+}
+
+/** «heute», «vor 5 Tagen», «vor 3 Wochen», «vor 7 Monaten». */
+function seit(iso: string): string {
+  const tage = tageSeit(iso);
+  if (tage === 0) return "heute";
+  if (tage === 1) return "gestern";
+  if (tage < 14) return `vor ${tage} Tagen`;
+  if (tage < 60) return `vor ${Math.round(tage / 7)} Wochen`;
+  const monate = Math.round(tage / 30.4);
+  if (monate < 24) return `vor ${monate} Monaten`;
+  return `vor ${Math.round(tage / 365)} Jahren`;
+}
+
+interface Befund {
+  rel: string;
+  titel: string;
+  art: Art;
+  probleme: Problem[];
+}
+
+let befunde: Befund[] = [];
+let alleBefunde = false;
+/** Wie viele die Karte zeigt, bevor «Alle anzeigen» nötig ist. */
+const BEFUNDE_KURZ = 3;
+
+/** Holt den Website-Check. Unveränderte Seiten prüft der Server nicht nochmals. */
+async function loadCheck(): Promise<void> {
+  const json = (await fetch("/api/check", { cache: "no-store" })
+    .then((res) => (res.ok ? res.json() : null))
+    .catch(() => null)) as { befunde?: Befund[] } | null;
+  if (!json?.befunde) return;
+  befunde = json.befunde;
+  renderStartCheck();
+}
+
+function renderStartCheck(): void {
+  startCheck.classList.remove("laedt");
+  const n = befunde.length;
+  const zeigen = alleBefunde ? befunde : befunde.slice(0, BEFUNDE_KURZ);
+  const knoepfe = n > BEFUNDE_KURZ
+    ? [button(alleBefunde ? "Weniger anzeigen" : `Alle ${n} anzeigen`, "", () => {
+        alleBefunde = !alleBefunde;
+        renderStartCheck();
+      })]
+    : [];
+  aufgabe(startCheck, {
+    titel: "Website-Check",
+    gross: n ? `${n === 1 ? "Eine Seite lässt" : `${n} Seiten lassen`} sich für Google verbessern` : "Alles in Ordnung",
+    leise: n
+      ? "Die wichtigsten zuerst. Seite öffnen und im Assistenten «Seite prüfen» klicken, er schlägt die Verbesserung vor."
+      : "Alle Seiten haben ein Thema, einen Einstiegsabsatz für Google und Bilder mit Beschreibung.",
+    liste: zeigen.map((befund) => ({
+      label: befund.art === "brief" ? thema(befund.titel) || befund.titel : befund.titel,
+      info: befund.probleme.map((problem) => problem.text).join(" · "),
+      onClick: () => void openPage(befund.rel),
+    })),
+    knopf: knoepfe,
+  });
+}
+
+/** Bevor der Check da ist, steht die Karte schon an ihrem Platz. So springt nichts. */
+function renderStartCheckLaedt(): void {
+  aufgabe(startCheck, {
+    titel: "Website-Check",
+    gross: "Wird geprüft …",
+    leise: "Die Redaktion schaut, was Google von den Seiten liest. Das dauert einen Moment.",
+    liste: [],
+    knopf: [],
+  });
+}
+
+/** Für die offene Seite, wie sie gespeichert ist. Gilt nur, solange dieselbe Seite offen ist. */
+interface Problem {
+  art: "thema" | "einstieg" | "bilder";
+  text: string;
+  /** Wie src/server/pruefung.ts. Der Server prüft, die Redaktion zeigt nur an. */
+  bilder?: { datei: string; grund: "fehlt" | "dateiname"; alt: string }[];
+}
+
+/** Hatte die offene Seite Hinweise? Dann gibt es eine kurze Bestätigung, wenn alles erledigt ist. */
+let hinweiseFuer: string | null = null;
+let hinweiseTimer: number | null = null;
+
+async function loadSeitenCheck(): Promise<void> {
+  const rel = current?.rel;
+  if (!rel || current?.art === "recht") {
+    googleHinweise.hidden = true;
+    return;
+  }
+  const json = (await fetch(`/api/check?rel=${encodeURIComponent(rel)}`, { cache: "no-store" })
+    .then((res) => (res.ok ? res.json() : null))
+    .catch(() => null)) as { probleme?: Problem[] } | null;
+  if (!json?.probleme || current?.rel !== rel) return;
+  renderSeitenCheck(rel, json.probleme);
+}
+
+/** Nach dem Speichern nachsehen, ob ein Hinweis erledigt ist. Nicht bei jedem Tastendruck. */
+function spaeterSeitenCheck(): void {
+  if (hinweiseTimer != null) window.clearTimeout(hinweiseTimer);
+  hinweiseTimer = window.setTimeout(() => {
+    hinweiseTimer = null;
+    void loadSeitenCheck();
+  }, 400);
+}
+
+function renderSeitenCheck(rel: string, probleme: Problem[]): void {
+  if (!probleme.length) {
+    // Nur wer Hinweise gesehen hat, bekommt die Bestätigung. Sonst bleibt der Platz leer.
+    googleHinweise.hidden = hinweiseFuer !== rel;
+    googleHinweise.classList.add("erledigt");
+    googleHinweise.innerHTML = `<p class="kopf">Für Google ist auf dieser Seite alles in Ordnung ✓</p>`;
+    return;
+  }
+  hinweiseFuer = rel;
+  googleHinweise.hidden = false;
+  googleHinweise.classList.remove("erledigt");
+  const kopf = document.createElement("p");
+  kopf.className = "kopf";
+  kopf.textContent = probleme.length === 1 ? "Für Google lässt sich hier eine Sache verbessern" : `Für Google lassen sich hier ${probleme.length} Sachen verbessern`;
+  const liste = document.createElement("ul");
+  for (const problem of probleme) {
+    const item = document.createElement("li");
+    const text = document.createElement("p");
+    if (problem.art === "thema") {
+      text.innerHTML = "<strong>Thema fehlt.</strong> Oben ins grosse Feld schreiben, worum es geht. Es wird der Titel bei Google.";
+      item.append(text, button("Zum Thema", "leise", () => titelInput.focus()));
+    } else if (problem.art === "einstieg") {
+      text.innerHTML = "<strong>Kein Einstiegsabsatz.</strong> Am Anfang ein, zwei Sätze schreiben: worum es geht und für wen. Google zeigt sie unter dem Titel.";
+      item.append(text);
+    } else {
+      const bilder = problem.bilder ?? [];
+      text.innerHTML = `<strong>${esc(problem.text)}.</strong> In ein paar Worten beschreiben, was zu sehen ist; Google liest das, Besucher sehen es nicht. Der Knopf öffnet das Feld unter dem Bild.`;
+      item.append(text);
+      for (const bild of bilder) {
+        const zeile = document.createElement("div");
+        zeile.className = "aktionen";
+        const knopf = button("Beschreibung schreiben", "leise", () => zumBild(bild.datei));
+        knopf.title = bild.datei;
+        if (bilder.length > 1) knopf.textContent = `Beschreibung schreiben · ${kurzerName(bild.datei)}`;
+        zeile.append(knopf);
+        // Steht schon etwas im Feld, soll Patrick sehen, warum es nicht zählt.
+        if (bild.grund === "dateiname") {
+          const warum = document.createElement("span");
+          warum.className = "leise";
+          warum.textContent = `Jetzt steht dort nur der Dateiname «${bild.alt}».`;
+          zeile.append(warum);
+        }
+        item.append(zeile);
+      }
+    }
+    liste.append(item);
+  }
+  const fuss = document.createElement("div");
+  fuss.className = "aktionen";
+  fuss.append(button("Seite prüfen lassen", "", () => document.dispatchEvent(new CustomEvent("seite-pruefen"))));
+  const fussText = document.createElement("span");
+  fussText.className = "leise";
+  fussText.textContent = "Der Assistent schlägt Text vor.";
+  fuss.append(fussText);
+  googleHinweise.replaceChildren(kopf, liste, fuss);
+}
+
+/** «Marktperformance-Newsletter33-1024x206.png» → «Marktperformance-Newsletter33». */
+function kurzerName(name: string): string {
+  return name.replace(/\.[a-z0-9]+$/i, "").replace(/-\d+x\d+$/, "").replace(/-scaled$/, "").slice(0, 32);
+}
+
+/**
+ * Springt zum Bild im Text und öffnet das Feld für die Beschreibung. Das Feld zeigt der Editor
+ * erst nach einem Klick auf die Sprechblase oben rechts am Bild; das übernimmt hier der Knopf.
+ */
+function zumBild(name: string): void {
+  const block = [...editorHost.querySelectorAll<HTMLElement>(".milkdown-image-block")].find((el) => {
+    const src = el.querySelector("img")?.getAttribute("src") ?? "";
+    return decodeURIComponent(src.split("/").pop() ?? "") === name;
+  });
+  if (!block) return;
+  block.scrollIntoView({ block: "center", behavior: "smooth" });
+  const feld = () => block.querySelector<HTMLInputElement>(".caption-input");
+  if (!feld()) block.querySelector(".operation-item")?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+  window.setTimeout(() => feld()?.focus({ preventScroll: true }), 80);
 }
 
 /** Nach einem Wechsel an den Anfang der Ansicht. */
@@ -639,8 +867,8 @@ function markCurrent(): void {
   for (const item of root!.querySelectorAll<HTMLButtonElement>("nav button[data-rel]")) {
     item.toggleAttribute("aria-current", item.dataset.rel === current?.rel);
   }
-  for (const item of root!.querySelectorAll<HTMLButtonElement>("nav button[data-anfrage]")) {
-    item.toggleAttribute("aria-current", item.dataset.anfrage === gewaehlt);
+  for (const item of root!.querySelectorAll<HTMLButtonElement>("nav button[data-anfrage], nav button[data-wunsch]")) {
+    item.toggleAttribute("aria-current", (item.dataset.anfrage ?? item.dataset.wunsch) === gewaehlt);
   }
   if (current) (isBrief(current) ? briefeGruppe : seitenGruppe).open = true;
 }
@@ -746,6 +974,7 @@ function showStart(): void {
   briefeSeite.hidden = true;
   wuenscheSeite.hidden = true;
   start.hidden = false;
+  void loadCheck();
   merke("");
   // Auf der Startseite ist das Verzeichnis zugeklappt. Eine geöffnete Seite klappt ihre Gruppe selbst auf.
   for (const gruppe of root!.querySelectorAll<HTMLDetailsElement>("aside details")) gruppe.open = false;
@@ -777,12 +1006,15 @@ async function openPage(rel: string): Promise<void> {
   nummerInput.value = String(current.nummer ?? "");
   fassungenGruppe.open = false;
   setSaved("");
+  googleHinweise.hidden = true;
+  hinweiseFuer = null;
   renderStand();
   merke(current.rel);
   renderBriefe();
   nachOben();
   await mountEditor(current.body);
   void loadHistory(current.rel);
+  void loadSeitenCheck();
   if (brief && current.entwurf && !titelInput.value) titelInput.focus();
 }
 
@@ -816,6 +1048,7 @@ async function save(): Promise<boolean> {
   const neueNummer = current.rel === doc.rel && current.nummer !== doc.nummer;
   if (current.rel === doc.rel) current = { ...current, ...doc };
   setSaved("Gespeichert ✓");
+  spaeterSeitenCheck();
   // Das Verzeichnis zeigt die Nummer und sortiert danach.
   if (neueNummer) void loadList().then(pruefeNummer);
   return true;
@@ -1473,7 +1706,26 @@ async function showBriefe(): Promise<void> {
   nachOben();
 }
 
-const ART_LABEL: Record<Wunsch["art"], string> = { design: "Aussehen der Website", funktion: "Funktion der Redaktion" };
+const ART_LABEL: Record<Wunsch["art"], string> = {
+  // Intern bleiben die alten Werte, damit gespeicherte Wünsche ihre Art behalten.
+  funktion: "Feature",
+  fehler: "Bug",
+  design: "Styling",
+};
+
+/** Ein Bug braucht andere Angaben als ein Feature. Feld und Knopf sagen, welche. */
+function passeWunschFormAn(): void {
+  const fehler = wunschArt.value === "fehler";
+  wunschText.placeholder = fehler
+    ? "Was ist passiert? Was hast du kurz davor gemacht? Was hättest du erwartet?"
+    : "Was fehlt oder soll anders sein, und wozu?";
+  wunschForm.querySelector("#wunsch-senden")!.textContent = fehler ? "Bug melden" : "An Support senden";
+}
+
+/** Browser und Fenstergrösse, damit die Betreuung einen Fehler nachstellen kann. */
+function geraet(): string {
+  return `${navigator.userAgent} · Fenster ${window.innerWidth}×${window.innerHeight}`;
+}
 
 /** Wünsche zeigen Absätze und **fett** wie im Assistenten, sonst reinen Text. */
 function wunschHtml(text: string): string {
@@ -1491,6 +1743,7 @@ async function loadWuensche(): Promise<void> {
   alleWuensche = json.wuensche;
   const offene = alleWuensche.filter((w) => w.status === "offen").length;
   wuenscheZahl.textContent = offene ? `${offene} offen` : "";
+  renderWuenscheListe();
   if (!wuenscheSeite.hidden) renderWuensche();
 }
 
@@ -1514,15 +1767,51 @@ async function aendereWunsch(id: string, aenderung: { status?: Wunsch["status"];
     body: JSON.stringify({ id, ...aenderung }),
   }).catch(() => null);
   if (!response?.ok) {
-    await ask({ titel: "Das hat nicht geklappt", text: response ? await errorText(response, "Der Wunsch liess sich nicht ändern.") : "Keine Verbindung zum Server.", ja: "OK" });
+    await ask({ titel: "Das hat nicht geklappt", text: response ? await errorText(response, "Der Eintrag liess sich nicht ändern.") : "Keine Verbindung zum Server.", ja: "OK" });
     return;
   }
   await loadWuensche();
 }
 
+/** Ein Eintrag im Verzeichnis unter «Support», wie eine Anfrage unter «Kontaktaufnahme». */
+function wunschItem(wunsch: Wunsch): HTMLElement {
+  const item = document.createElement("button");
+  item.type = "button";
+  item.dataset.wunsch = wunsch.id;
+  item.toggleAttribute("aria-current", wunsch.id === gewaehlt);
+  const head = document.createElement("span");
+  head.className = "kopfzeile";
+  head.textContent = `${ART_LABEL[wunsch.art]} · ${eingangFormat.format(new Date(wunsch.eingang))}`;
+  const text = document.createElement("span");
+  text.className = "thema";
+  // Die erste Zeile ohne Markdown. Der Assistent beginnt oft mit «**Was fehlt:**».
+  const erste = wunsch.text.split("\n").find((zeile) => zeile.trim()) ?? "";
+  text.textContent = erste.replace(/\*\*[^*]+:\*\*\s*/, "").replace(/\*\*/g, "").trim().slice(0, 90) || ART_LABEL[wunsch.art];
+  item.append(head, text);
+  item.addEventListener("click", () => void openWunsch(wunsch.id));
+  const zeile = document.createElement("div");
+  zeile.className = "eintrag";
+  zeile.append(item);
+  return zeile;
+}
+
+function renderWuenscheListe(): void {
+  // Im Verzeichnis nur, was noch offen ist. Erledigte stehen in der Übersicht.
+  const offene = alleWuensche.filter((w) => w.status === "offen");
+  wuenscheListe.replaceChildren(...offene.map(wunschItem));
+  if (offene.length === 0) {
+    const leer = document.createElement("p");
+    leer.className = "leise";
+    leer.textContent = alleWuensche.length ? "Alles erledigt." : "Noch nichts an den Support geschickt.";
+    wuenscheListe.append(leer);
+  }
+}
+
 function wunschKarte(wunsch: Wunsch): HTMLElement {
   const karte = document.createElement("li");
+  karte.id = `wunsch-${wunsch.id}`;
   karte.dataset.status = wunsch.status;
+  karte.classList.toggle("gewaehlt", wunsch.id === gewaehlt);
   const kopf = document.createElement("p");
   kopf.className = "kopfzeile";
   kopf.innerHTML = `${wunsch.status === "erledigt" ? `<span class="marke online">Erledigt</span>` : `<span class="marke">Offen</span>`} ${esc(ART_LABEL[wunsch.art])} · ${esc(eingangFormat.format(new Date(wunsch.eingang)))}${
@@ -1554,23 +1843,23 @@ function renderWuensche(): void {
   wuenscheKacheln.replaceChildren(
     wunschKachel("offen", offene.length, "Offen", offene.length ? "warten auf die Betreuung" : "nichts offen"),
     wunschKachel("erledigt", erledigte.length, "Erledigt", erledigte.length ? "umgesetzt oder beantwortet" : "–"),
-    wunschKachel("alle", alleWuensche.length, "Gesamt", "alle Wünsche"),
+    wunschKachel("alle", alleWuensche.length, "Gesamt", "alle Einträge"),
   );
   const sichtbare = wuenscheFilter === "alle" ? alleWuensche : wuenscheFilter === "offen" ? offene : erledigte;
   if (sichtbare.length) wuenscheKarten.replaceChildren(...sichtbare.map(wunschKarte));
   else {
     const leer = document.createElement("li");
     leer.className = "leer";
-    leer.textContent = alleWuensche.length ? "Hier ist nichts." : "Noch keine Wünsche. Oben einen schreiben oder den Assistenten fragen.";
+    leer.textContent = alleWuensche.length ? "Hier ist nichts." : "Noch nichts an den Support geschickt. Oben schreiben oder den Assistenten fragen.";
     wuenscheKarten.replaceChildren(leer);
   }
 }
 
 const WUENSCHE_GESEHEN = "wuensche-gesehen";
 
-/** Die Seite «Wünsche». Beim ersten Besuch verschwindet die Marke „Neu“ im Verzeichnis. */
-async function showWuensche(): Promise<void> {
-  if (!(await flushCommit())) return;
+/** Die Seite «Support». Beim ersten Besuch verschwindet die Marke „Neu“ im Verzeichnis. */
+async function showWuensche(): Promise<boolean> {
+  if (!(await flushCommit())) return false;
   current = null;
   gewaehlt = null;
   markCurrent();
@@ -1579,6 +1868,7 @@ async function showWuensche(): Promise<void> {
   anfragenSeite.hidden = true;
   briefeSeite.hidden = true;
   wuenscheSeite.hidden = false;
+  wuenscheGruppe.open = true;
   merke("wuensche");
   try {
     localStorage.setItem(WUENSCHE_GESEHEN, "1");
@@ -1589,6 +1879,20 @@ async function showWuensche(): Promise<void> {
   await loadWuensche();
   renderWuensche();
   nachOben();
+  return true;
+}
+
+/** Ein Eintrag aus dem Verzeichnis: in der Übersicht zeigen, wie bei einer Anfrage. */
+async function openWunsch(id: string): Promise<void> {
+  if (!(await showWuensche())) return;
+  const wunsch = alleWuensche.find((w) => w.id === id);
+  if (!wunsch) return;
+  gewaehlt = id;
+  // Der Filter muss den gewählten Eintrag zeigen.
+  if (wuenscheFilter !== "alle" && wuenscheFilter !== wunsch.status) wuenscheFilter = wunsch.status;
+  renderWuensche();
+  renderWuenscheListe();
+  document.getElementById(`wunsch-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 /** Die Übersicht: Zahlen oben, darunter die Anfragen des gewählten Filters. */
@@ -1693,7 +1997,7 @@ verzeichnisAuf.addEventListener("click", (event) => {
 document.addEventListener("click", (event) => {
   if (!document.body.classList.contains("verzeichnis-offen")) return;
   const ziel = event.target as Element;
-  if (!verzeichnis.contains(ziel) || ziel.closest("nav button[data-rel], nav button[data-anfrage], button.mehr:not(#mehr), button.gruppe-titel, #heim")) {
+  if (!verzeichnis.contains(ziel) || ziel.closest("nav button[data-rel], nav button[data-anfrage], nav button[data-wunsch], button.mehr:not(#mehr), :not(summary) > button.gruppe-titel, #heim")) {
     zeigeVerzeichnis(false);
   }
 });
@@ -1708,11 +2012,16 @@ root.querySelector("#heim")!.addEventListener("click", async () => {
 });
 root.querySelector("#anfragen-alle")!.addEventListener("click", () => void showAnfragen());
 root.querySelector("#briefe-alle")!.addEventListener("click", () => void showBriefe());
-root.querySelector("#wuensche-link")!.addEventListener("click", () => void showWuensche());
-root.querySelector("#start-wunsch")!.addEventListener("click", async () => {
-  await showWuensche();
-  wunschText.focus();
-});
+root.querySelector("#wuensche-alle")!.addEventListener("click", () => void showWuensche());
+for (const [knopf, art] of [["#start-wunsch", "funktion"], ["#start-fehler", "fehler"]] as const) {
+  root.querySelector(knopf)!.addEventListener("click", async () => {
+    await showWuensche();
+    wunschArt.value = art;
+    passeWunschFormAn();
+    wunschText.focus();
+  });
+}
+wunschArt.addEventListener("change", passeWunschFormAn);
 try {
   wuenscheNeu.hidden = localStorage.getItem(WUENSCHE_GESEHEN) === "1";
 } catch {
@@ -1731,7 +2040,7 @@ wunschForm.addEventListener("submit", async (event) => {
   const response = await fetch("/api/wuensche", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ art: wunschArt.value, text, seite: "" }),
+    body: JSON.stringify({ art: wunschArt.value, text, seite: "", ...(wunschArt.value === "fehler" ? { geraet: geraet() } : {}) }),
   }).catch(() => null);
   knopf.disabled = false;
   if (!response?.ok) {
@@ -1752,14 +2061,22 @@ wunschForm.addEventListener("submit", async (event) => {
 });
 root.querySelector("#briefe-neu")!.addEventListener("click", () => void newBrief());
 briefeSuche.addEventListener("input", () => renderBriefUebersicht());
-// Der Name einer Gruppe öffnet ihre Übersicht. Auf- und zuklappen macht der Rest der Zeile mit dem Pfeil.
-for (const [titel, zeige] of [
-  ["#briefe-titel", showBriefe],
-  ["#anfragen-titel", showAnfragen],
+// Die ganze Zeile einer Gruppe, Pfeil wie Name: aufklappen und die Übersicht zeigen.
+// Steht die Übersicht schon da, klappt derselbe Klick die Gruppe wieder zu.
+for (const [gruppe, seite, zeige] of [
+  [briefeGruppe, briefeSeite, showBriefe],
+  [anfragenGruppe, anfragenSeite, showAnfragen],
+  [wuenscheGruppe, wuenscheSeite, showWuensche],
 ] as const) {
-  root.querySelector(titel)!.addEventListener("click", (event) => {
+  gruppe.querySelector(":scope > summary")!.addEventListener("click", (event) => {
     event.preventDefault();
+    if (gruppe.open && !seite.hidden) {
+      gruppe.open = false;
+      return;
+    }
     void zeige();
+    // Auf dem Telefon macht die Schublade der Übersicht Platz. Nur Zuklappen lässt sie offen.
+    zeigeVerzeichnis(false);
   });
 }
 // Neue Anfragen erscheinen ohne Neuladen.
@@ -1908,7 +2225,26 @@ void mountAssistent(
     },
     // Während des Schreibens den Zustand ersetzen, nicht ändern: keine hundert Rückgängig-Schritte.
     schreibeLive: (markdown) => crepe?.editor.action(replaceAll(forEditor(markdown), true)),
-    speichere: () => scheduleSave(),
+    speichereEntwurf: async (rel, markdown) => {
+      if (current?.rel === rel && crepe && !form.hidden) {
+        crepe.editor.action(replaceAll(forEditor(markdown), true));
+        scheduleSave();
+        return true;
+      }
+      // Patrick ist woanders. Den Entwurf so speichern, wie er auf dem Server steht, nur mit dem neuen Text.
+      const doc = (await fetch(`/api/pages?rel=${encodeURIComponent(rel)}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .catch(() => null)) as Doc | null;
+      if (!doc?.entwurf) return false;
+      const response = await fetch("/api/pages", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...doc, body: markdown }),
+      }).catch(() => null);
+      if (!response?.ok) return false;
+      await loadList();
+      return true;
+    },
     zeigeWuensche: () => void showWuensche(),
     frage: ask,
     oeffneNewsletter: (text) => {

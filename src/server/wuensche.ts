@@ -5,12 +5,12 @@ import { chatDir } from "../paths.ts";
 import { sendTelegram } from "./anfrage.ts";
 
 /**
- * Wünsche von Patrick an die Betreuung der Website: am Aussehen der Website (design)
- * oder an der Redaktion (funktion). Jeder geht per Telegram hinaus und bleibt hier
- * gespeichert, damit Patrick sieht, was daraus geworden ist.
+ * Wünsche von Patrick an die Betreuung der Website: am Aussehen der Website (design),
+ * an der Redaktion (funktion) oder ein Fehler in der Redaktion (fehler). Jeder geht per
+ * Telegram hinaus und bleibt hier gespeichert, damit Patrick sieht, was daraus geworden ist.
  */
 
-export type WunschArt = "design" | "funktion";
+export type WunschArt = "design" | "funktion" | "fehler";
 export type WunschStatus = "offen" | "erledigt";
 
 export interface Wunsch {
@@ -19,6 +19,8 @@ export interface Wunsch {
   text: string;
   /** Die Seite, die beim Schreiben offen war. */
   seite: string;
+  /** Bei einem Fehler: Browser und Gerät, damit er sich nachstellen lässt. */
+  geraet?: string;
   eingang: string;
   status: WunschStatus;
   erledigtAm?: string;
@@ -60,36 +62,40 @@ function aendere<T>(fn: (liste: Wunsch[]) => Promise<T> | T): Promise<T> {
 }
 
 const ART_TITEL: Record<WunschArt, string> = {
-  design: "Designwunsch",
-  funktion: "Funktionswunsch",
+  funktion: "Feature",
+  fehler: "Bug",
+  design: "Styling",
 };
 
 function telegramText(wunsch: Wunsch): string {
   return [
     `${ART_TITEL[wunsch.art]} aus der Redaktion`,
     ...(wunsch.seite ? [`Seite: ${wunsch.seite}`] : []),
+    ...(wunsch.geraet ? [`Gerät: ${wunsch.geraet}`] : []),
     "",
     // Telegram bekommt reinen Text. Sterne aus dem Markdown stören dort nur.
     wunsch.text.replace(/\*\*(.+?)\*\*/g, "$1"),
     "",
-    `Steht in der Redaktion unter «Wünsche» (${wunsch.id}).`,
+    `Steht in der Redaktion unter «Support» (${wunsch.id}).`,
   ].join("\n").slice(0, 4000);
 }
 
 function art(value: unknown): WunschArt {
-  return value === "design" ? "design" : "funktion";
+  return value === "design" || value === "fehler" ? value : "funktion";
 }
 
 /** Speichert den Wunsch und schickt ihn per Telegram. Scheitert Telegram, bleibt er trotzdem gespeichert. */
 export async function neuerWunsch(payload: unknown): Promise<Wunsch> {
   const raw = (payload ?? {}) as Record<string, unknown>;
   const text = String(raw.text ?? "").replace(/\r\n?/g, "\n").trim().slice(0, MAX_TEXT);
-  if (!text) throw new Error("Bitte den Wunsch beschreiben.");
+  const wunschArt = art(raw.art);
+  if (!text) throw new Error(wunschArt === "fehler" ? "Bitte den Bug beschreiben." : "Bitte beschreiben, worum es geht.");
   const wunsch: Wunsch = {
     id: `W-${new Date().toISOString().slice(2, 10).replaceAll("-", "")}-${randomBytes(2).toString("hex")}`,
-    art: art(raw.art),
+    art: wunschArt,
     text,
     seite: String(raw.seite ?? "").trim().slice(0, 300),
+    ...(wunschArt === "fehler" && raw.geraet ? { geraet: String(raw.geraet).slice(0, 300) } : {}),
     eingang: new Date().toISOString(),
     status: "offen",
     telegram: "aus",

@@ -111,7 +111,7 @@ aside .wort {
 }
 aside .wort svg { color: var(--olive); }
 aside .wort:hover { color: var(--olive); background: var(--hover); }
-/* Gruppen: der Pfeil klappt auf und zu, ein Name in Olive beim Darüberfahren öffnet die Übersicht. */
+/* Gruppen: die ganze Zeile klappt auf und zu. Bei Kontaktaufnahme und Newsletter zeigt sie dazu die Übersicht. */
 aside summary, aside .gruppe-zeile {
   display: flex;
   align-items: center;
@@ -143,7 +143,8 @@ aside summary:hover { color: var(--ink); background: var(--hover); }
 aside .gruppe-zeile { padding-left: calc(0.4rem + 0.85rem + 0.4rem); }
 aside .gruppe-titel { font: inherit; text-transform: inherit; letter-spacing: inherit; color: inherit; }
 aside button.gruppe-titel { border: 0; border-radius: 4px; padding: 0; }
-aside button.gruppe-titel:hover { color: var(--olive); text-decoration: underline; text-underline-offset: 0.25em; }
+aside button.gruppe-titel:hover,
+aside summary:hover button.gruppe-titel { color: var(--olive); text-decoration: underline; text-underline-offset: 0.25em; }
 aside .gruppe-zeile .zahl:not(:empty) { padding: 0.05rem 0.45rem; border-radius: 999px; background: var(--olive); color: var(--paper); letter-spacing: 0.04em; }
 aside .gruppe-zeile .marke { font-size: 0.68rem; }
 nav { display: flex; flex-direction: column; gap: 0.15rem; }
@@ -158,7 +159,7 @@ nav button {
 nav .eintrag { display: flex; align-items: flex-start; border-radius: var(--rund-mittel); }
 nav .eintrag > button[data-rel] { flex: 1 1 auto; min-width: 0; }
 nav .eintrag:hover { background: var(--hover); }
-nav .eintrag:has(button[aria-current]), nav button[data-anfrage][aria-current] { background: var(--olive-hauch); }
+nav .eintrag:has(button[aria-current]), nav button[data-anfrage][aria-current], nav button[data-wunsch][aria-current] { background: var(--olive-hauch); }
 nav .eintrag:has(button[aria-current]) .thema { color: var(--olive); font-weight: 600; }
 nav .werkzeuge { display: flex; gap: 0.1rem; padding: 0.35rem 0.25rem 0 0; opacity: 0.35; }
 nav .eintrag:hover .werkzeuge, nav .werkzeuge:focus-within { opacity: 1; }
@@ -285,6 +286,22 @@ textarea.titel:focus { outline: none; border-bottom-color: var(--olive); }
 #nummer:disabled { color: var(--quiet); background: transparent; border-color: var(--line); cursor: not-allowed; }
 .nummer-hinweis { margin: 0.4rem 0 0; font-size: 0.82rem; color: var(--quiet); }
 .nummer-hinweis.fehler { color: var(--rot); }
+/* Was Google auf der offenen Seite fehlt. Ruhig, kein Alarm: es sind Verbesserungen, keine Fehler. */
+.google-hinweise {
+  margin-top: 1.2rem;
+  padding: 0.9rem 1.1rem 1rem;
+  border: 1px solid var(--olive-ring);
+  border-radius: var(--rund-mittel);
+  background: var(--olive-hauch);
+  font-size: 0.9rem;
+}
+.google-hinweise .kopf { margin: 0; font-weight: 600; color: var(--olive); }
+.google-hinweise.erledigt { padding-block: 0.6rem; }
+.google-hinweise ul { margin: 0.6rem 0 0; padding: 0; list-style: none; display: grid; gap: 0.6rem; }
+.google-hinweise li p { margin: 0; line-height: 1.45; }
+.google-hinweise .aktionen { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.8rem; margin-top: 0.45rem; }
+.google-hinweise > .aktionen { margin-top: 0.9rem; }
+.google-hinweise .leise { font-size: 0.82rem; color: var(--quiet); }
 #editor {
   position: relative;
   min-height: 55vh;
@@ -385,7 +402,7 @@ nav .ungelesen .thema { font-weight: 600; }
   margin-bottom: 1rem;
   scroll-margin-top: 1.5rem;
 }
-#anfragen-karten li.gewaehlt { border-color: var(--olive); box-shadow: 0 0 0 3px var(--olive-ring), var(--schatten); }
+#anfragen-karten li.gewaehlt, #wuensche-karten li.gewaehlt { border-color: var(--olive); box-shadow: 0 0 0 3px var(--olive-ring), var(--schatten); }
 #anfragen-karten .kopfzeile { margin: 0; font-size: 0.82rem; color: var(--quiet); }
 #anfragen-karten h2 { font-family: var(--serif); font-weight: 400; font-size: 1.4rem; margin: 0.3rem 0 0.1rem; }
 #anfragen-karten a:not(.knopf) { color: var(--olive); }
@@ -427,6 +444,12 @@ nav .ungelesen .thema { font-weight: 600; }
 .aufgabe li button:hover { background: var(--olive-hauch); }
 .aufgabe li button span { font-size: 0.8rem; color: var(--quiet); }
 .aufgabe > .aktionen { margin-top: auto; }
+/* Der Website-Check liegt über die ganze Breite unter den zwei Karten. */
+.aufgabe.breit { grid-column: 1 / -1; }
+/* Während der Website-Check lädt, pulsiert die Zahl leise statt leer zu sein. */
+.aufgabe.laedt .gross { animation: laedt 1.4s ease-in-out infinite; }
+@keyframes laedt { 50% { opacity: 0.4; } }
+@media (prefers-reduced-motion: reduce) { .aufgabe.laedt .gross { animation: none; } }
 @media (max-width: 1000px) { .aufgaben { grid-template-columns: 1fr; } }
 
 /* Assistent */
@@ -502,7 +525,7 @@ body.mit-assistent { padding-right: 26rem; }
 }
 .assistent .name { flex: 1 1 auto; min-width: 0; }
 .assistent h2 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 1.25rem; line-height: 1.2; }
-.assistent .name p { margin: 0.1rem 0 0; font-size: 0.78rem; color: var(--quiet); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.assistent .name p { margin: 0.1rem 0 0; font-size: 0.78rem; line-height: 1.35; color: var(--quiet); }
 
 /* Verlauf: scrollt selbst, damit die Eingabe unten stehen bleibt. */
 .assistent .verlauf {
@@ -819,6 +842,7 @@ input.suche {
 
 /* Wünsche */
 .wunsch-hinweis { margin: 1.4rem 0 0; font-size: 0.9rem; color: var(--quiet); }
+.wunsch-hinweis + .wunsch-hinweis { margin-top: 0.3rem; }
 .wunsch-hinweis button { color: var(--olive); font-weight: 600; padding-inline: 0.4rem; }
 #wuensche-seite { padding-top: 1.5rem; }
 #wuensche-seite .einleitung { max-width: 38rem; margin: 0 0 1.2rem; line-height: 1.5; }

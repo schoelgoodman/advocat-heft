@@ -13,6 +13,7 @@ import { buildSite, previewPage, rebuildDocuments } from "../render/build.ts";
 import { publishMedia } from "../render/media.ts";
 import { handleAnfrage, listAnfragen, setAnfrageStatus } from "./anfrage.ts";
 import { importWord } from "./word.ts";
+import { seitenCheck, websiteCheck } from "./pruefung.ts";
 import { assistentBereit, clearVerlauf, handleChat, readVerlauf } from "./chat.ts";
 import { aendereWunsch, listWuensche, neuerWunsch } from "./wuensche.ts";
 
@@ -322,6 +323,16 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     const payload = JSON.parse((await readBody(req)).toString("utf8")) as { id?: string; status?: string };
     await setAnfrageStatus(String(payload.id ?? ""), String(payload.status ?? ""));
     sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/check") {
+    const rel = url.searchParams.get("rel");
+    if (rel) {
+      sendJson(res, 200, { probleme: await seitenCheck(safeRel(rel)) });
+      return;
+    }
+    sendJson(res, 200, { befunde: await websiteCheck() });
     return;
   }
 
@@ -787,6 +798,12 @@ async function main(): Promise<void> {
   });
 
   if (setztSeite) watchContent();
+  // Der Website-Check setzt jede Seite einmal. Schon beim Start, damit die Startseite der Redaktion nicht wartet.
+  if (hatRedaktion) {
+    void websiteCheck().catch((error: unknown) => {
+      console.error("Website-Check:", error instanceof Error ? error.message : error);
+    });
+  }
 
   server.listen(PORT, () => {
     if (setztSeite) console.log(`Heft auf http://127.0.0.1:${PORT}`);

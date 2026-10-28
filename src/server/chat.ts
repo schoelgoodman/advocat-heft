@@ -6,6 +6,7 @@ import { publicPath, type ContentDocument } from "../content/document.ts";
 import { absoluteUrl, DEFAULT_DESCRIPTION } from "../design/seo.ts";
 import { chatDir } from "../paths.ts";
 import { pageView } from "../render/build.ts";
+import { bilderOhneBeschreibung } from "./pruefung.ts";
 import { ANLEITUNG } from "./anleitung.ts";
 import { wuenscheText } from "./wuensche.ts";
 
@@ -132,11 +133,10 @@ async function googleText(lage: Lage): Promise<string> {
     // Auf festen Seiten ist ein Bild ganz oben das Titelbild: ein Hintergrund, dessen Beschreibung Google nicht liest.
     const bilder = [...(lage.body ?? "").matchAll(/!\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g)];
     const titelbild = lage.art === "kapitel" && /^!\[/.test((lage.body ?? "").trim()) ? bilder.shift() : undefined;
-    const ohne = bilder.filter((bild) => {
-      const alt = bild[1].trim();
-      const name = (bild[2].split("/").pop() ?? "").replace(/\.[a-z0-9]+$/i, "");
-      return !alt || alt === name || /^[\w-]+$/.test(alt) && /[-_]/.test(alt);
-    });
+    // Wie der Website-Check: geprüft wird die fertige Seite, Karten- und Titelbilder zählen nicht.
+    const ohne = bilderOhneBeschreibung(view.main).map((bild) =>
+      bild.grund === "dateiname" ? `${bild.datei} (steht nur der Dateiname «${bild.alt}»)` : bild.datei,
+    );
     const ersatz = view.description === DEFAULT_DESCRIPTION
       ? " (Ersatztext: die Seite hat keinen Absatz, der sich als Beschreibung eignet)"
       : "";
@@ -150,7 +150,7 @@ async function googleText(lage: Lage): Promise<string> {
         ? [`- Titelbild ${titelbild[2]}: ${titelbild[1].trim() ? `Beschreibung «${titelbild[1].trim()}»` : "ohne Beschreibung"}. Sie erscheint nur beim Teilen der Seite, nicht in der Google-Suche.`]
         : []),
       ohne.length
-        ? `- Bilder im Text ohne brauchbare Beschreibung: ${ohne.map((bild) => bild[2]).join(", ")}`
+        ? `- Bilder im Text ohne brauchbare Beschreibung: ${ohne.join(", ")}`
         : "- Alle Bilder im Text haben eine Beschreibung.",
     ].join("\n");
   } catch {
@@ -164,7 +164,7 @@ async function lageText(lage: Lage, frage: string): Promise<string> {
   if (lage.ansicht === "start") teile.push("Patrick ist auf der Startseite der Redaktion. Keine Seite ist offen.");
   if (lage.ansicht === "anfragen") teile.push("Patrick ist in der Kontaktaufnahme. Keine Seite ist offen.");
   if (lage.ansicht === "briefe") teile.push("Patrick ist in der Übersicht aller Newsletter. Keine Seite ist offen.");
-  if (lage.ansicht === "wuensche") teile.push("Patrick ist auf der Seite «Wünsche». Keine Seite ist offen.");
+  if (lage.ansicht === "wuensche") teile.push("Patrick ist auf der Seite «Support». Keine Seite ist offen.");
   if (lage.ansicht === "blatt") {
     const art = lage.art === "brief" ? "Newsletter" : lage.art === "recht" ? "Rechtliche Seite" : "Feste Seite";
     teile.push(
@@ -175,7 +175,20 @@ async function lageText(lage: Lage, frage: string): Promise<string> {
     if (lage.art !== "recht" && lage.body?.trim()) teile.push(await googleText(lage));
   }
 
-  teile.push(`# Patricks Wünsche an die Betreuung, der neueste zuerst\n${await wuenscheText()}`);
+  // Eine feste Seite darf Aussagen der anderen festen Seiten aufnehmen. «Unser Angebot» etwa hat
+  // kaum eigenen Text, die Seiten zu Privatpersonen, Unternehmen und Stiftungen dafür viel.
+  if (lage.ansicht === "blatt" && lage.art === "kapitel") {
+    const andere = (await loadDocuments().catch(() => []))
+      .filter((doc) => doc.art === "kapitel" && !doc.entwurf && doc.rel !== lage.rel && doc.body.trim());
+    if (andere.length) {
+      teile.push(
+        "# Die anderen festen Seiten im Wortlaut\nQuellen für Aussagen auf der offenen Seite: Was hier steht, darfst du dort aufnehmen.",
+        ...andere.map((doc) => `## ${doc.titel} (${publicPath(doc.rel)})\n"""\n${doc.body.trim()}\n"""`),
+      );
+    }
+  }
+
+  teile.push(`# Was Patrick an den Support geschickt hat, das neueste zuerst\n${await wuenscheText()}`);
 
   const briefe = briefsNewestFirst(await loadDocuments().catch(() => []));
   if (briefe.length) {
