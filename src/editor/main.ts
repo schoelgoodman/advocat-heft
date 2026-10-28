@@ -566,6 +566,21 @@ function renderStartBriefe(): void {
   });
 }
 
+/** Auf dem Telefon steht das Verzeichnis über der Seite. Dort klappt es nicht von selbst auf. */
+const schmal = window.matchMedia("(max-width: 800px)");
+
+/** Nach einem Wechsel an den Anfang der Ansicht. Auf dem Telefon am Verzeichnis vorbei. */
+function nachOben(): void {
+  if (schmal.matches) root!.querySelector("main")!.scrollIntoView();
+  else window.scrollTo({ top: 0 });
+}
+
+/** Jede Ansicht bekommt einen Eintrag im Verlauf des Browsers, damit «Zurück» in der Redaktion bleibt. */
+function merke(hash: string): void {
+  if (decodeURIComponent(location.hash.slice(1)) === hash) return;
+  history.pushState(null, "", hash ? `#${hash}` : location.pathname + location.search);
+}
+
 function markCurrent(): void {
   for (const item of root!.querySelectorAll<HTMLButtonElement>("nav button[data-rel]")) {
     item.toggleAttribute("aria-current", item.dataset.rel === current?.rel);
@@ -573,7 +588,7 @@ function markCurrent(): void {
   for (const item of root!.querySelectorAll<HTMLButtonElement>("nav button[data-anfrage]")) {
     item.toggleAttribute("aria-current", item.dataset.anfrage === gewaehlt);
   }
-  if (current) (isBrief(current) ? briefeGruppe : seitenGruppe).open = true;
+  if (current && !schmal.matches) (isBrief(current) ? briefeGruppe : seitenGruppe).open = true;
 }
 
 /** Hält das Thema im Verzeichnis gleich, während getippt wird. */
@@ -634,6 +649,8 @@ function renderStand(): void {
   nummerInput.value = String(doc.nummer ?? "");
   pruefeNummer();
   aktionen.replaceChildren();
+  // Online sieht das Blatt anders aus: jede Änderung ist sofort auf der Website.
+  form.dataset.stand = doc.entwurf ? "entwurf" : "online";
   if (doc.entwurf) {
     stand.innerHTML = `<span class="marke">Entwurf</span> Nur hier in der Redaktion sichtbar.`;
     aktionen.append(
@@ -645,7 +662,7 @@ function renderStand(): void {
     );
     return;
   }
-  stand.innerHTML = `<span class="marke online">Online</span> Änderungen erscheinen sofort auf der Website.`;
+  stand.innerHTML = `<span class="marke online">Online</span> Jede Änderung erscheint sofort auf der Website.`;
   aktionen.append(button("Kopie anlegen", "leise", () => void copyPage(doc.rel)));
   if (doc.rel !== STARTSEITE) aktionen.append(button("Zurückziehen", "leise", () => void unpublish()));
   const link = document.createElement("a");
@@ -665,14 +682,14 @@ function showStart(): void {
   briefeSeite.hidden = true;
   wuenscheSeite.hidden = true;
   start.hidden = false;
-  history.replaceState(null, "", location.pathname + location.search);
+  merke("");
   // Auf der Startseite ist das Verzeichnis zugeklappt. Eine geöffnete Seite klappt ihre Gruppe selbst auf.
   for (const gruppe of root!.querySelectorAll<HTMLDetailsElement>("aside details")) gruppe.open = false;
   markCurrent();
 }
 
 async function openPage(rel: string): Promise<void> {
-  await flushCommit();
+  if (!(await flushCommit())) return;
   const response = await fetch(`/api/pages?rel=${encodeURIComponent(rel)}`);
   if (!response.ok) {
     showStart();
@@ -697,8 +714,9 @@ async function openPage(rel: string): Promise<void> {
   fassungenGruppe.open = false;
   setSaved("");
   renderStand();
-  history.replaceState(null, "", `#${current.rel}`);
+  merke(current.rel);
   renderBriefe();
+  if (schmal.matches) nachOben();
   await mountEditor(current.body);
   void loadHistory(current.rel);
   if (brief && current.entwurf && !titelInput.value) titelInput.focus();
@@ -726,7 +744,9 @@ async function save(): Promise<boolean> {
     body: JSON.stringify(doc),
   }).catch(() => null);
   if (!response?.ok) {
-    setSaved("Nicht gespeichert. Verbindung prüfen.", "fehler");
+    setSaved("Nicht gespeichert. Die Verbindung fehlt, die Redaktion versucht es gleich wieder.", "fehler");
+    // Der wartende Versuch hält auch die Warnung beim Schliessen des Fensters wach.
+    saveTimer = window.setTimeout(() => void save(), 5000);
     return false;
   }
   const neueNummer = current.rel === doc.rel && current.nummer !== doc.nummer;
@@ -743,9 +763,29 @@ async function saveNow(): Promise<boolean> {
   return save();
 }
 
-async function flushCommit(): Promise<void> {
-  if (saveTimer != null) await saveNow();
-  await fetch("/api/commit", { method: "POST", keepalive: true });
+/**
+ * Vor jedem Wechsel: Wartendes speichern, dann eine Fassung schreiben.
+ * Geht das Speichern nicht, entscheidet Patrick, ob die Änderungen verloren gehen dürfen.
+ */
+async function flushCommit(): Promise<boolean> {
+  if (saveTimer != null && !(await saveNow())) {
+    const weg = await ask({
+      titel: "Nicht gespeichert",
+      text: "Die letzten Änderungen sind noch nicht gespeichert, weil die Verbindung zum Server fehlt. Wer jetzt wechselt, verliert sie.",
+      ja: "Trotzdem wechseln",
+      nein: "Hierbleiben",
+      gefahr: true,
+    });
+    if (!weg) {
+      // «Zurück» im Browser hat die Adresse schon geändert. Sie soll wieder zum offenen Blatt passen.
+      if (current) merke(current.rel);
+      return false;
+    }
+    if (saveTimer != null) window.clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  await fetch("/api/commit", { method: "POST", keepalive: true }).catch(() => null);
+  return true;
 }
 
 async function post(url: string, payload: unknown): Promise<Response> {
@@ -762,7 +802,7 @@ async function errorText(response: Response, fallback: string): Promise<string> 
 }
 
 async function newBrief(): Promise<void> {
-  await flushCommit();
+  if (!(await flushCommit())) return;
   const response = await fetch("/api/briefs", { method: "POST" });
   if (!response.ok) {
     await ask({
@@ -830,6 +870,7 @@ async function publish(rel = current?.rel): Promise<void> {
   const doc = (await response.json()) as Doc;
   if (current?.rel === rel) {
     current = doc;
+    // Die Datei hat jetzt das Thema im Namen. Derselbe Eintrag im Verlauf, nur mit neuer Adresse.
     history.replaceState(null, "", `#${current.rel}`);
     renderStand();
     setSaved("Veröffentlicht ✓");
@@ -1251,7 +1292,7 @@ function renderBriefUebersicht(): void {
 
 /** Die Übersicht der Newsletter, wie die Kontaktaufnahme. */
 async function showBriefe(): Promise<void> {
-  await flushCommit();
+  if (!(await flushCommit())) return;
   current = null;
   gewaehlt = null;
   markCurrent();
@@ -1260,10 +1301,10 @@ async function showBriefe(): Promise<void> {
   anfragenSeite.hidden = true;
   briefeSeite.hidden = false;
   wuenscheSeite.hidden = true;
-  briefeGruppe.open = true;
-  history.replaceState(null, "", "#newsletter");
+  if (!schmal.matches) briefeGruppe.open = true;
+  merke("newsletter");
   renderBriefUebersicht();
-  window.scrollTo({ top: 0 });
+  nachOben();
 }
 
 const ART_LABEL: Record<Wunsch["art"], string> = { design: "Aussehen der Website", funktion: "Funktion der Redaktion" };
@@ -1363,7 +1404,7 @@ const WUENSCHE_GESEHEN = "wuensche-gesehen";
 
 /** Die Seite «Wünsche». Beim ersten Besuch verschwindet die Marke „Neu“ im Verzeichnis. */
 async function showWuensche(): Promise<void> {
-  await flushCommit();
+  if (!(await flushCommit())) return;
   current = null;
   gewaehlt = null;
   markCurrent();
@@ -1372,7 +1413,7 @@ async function showWuensche(): Promise<void> {
   anfragenSeite.hidden = true;
   briefeSeite.hidden = true;
   wuenscheSeite.hidden = false;
-  history.replaceState(null, "", "#wuensche");
+  merke("wuensche");
   try {
     localStorage.setItem(WUENSCHE_GESEHEN, "1");
   } catch {
@@ -1381,12 +1422,12 @@ async function showWuensche(): Promise<void> {
   wuenscheNeu.hidden = true;
   await loadWuensche();
   renderWuensche();
-  window.scrollTo({ top: 0 });
+  nachOben();
 }
 
 /** Die Übersicht: Zahlen oben, darunter die Anfragen des gewählten Filters. */
-async function showAnfragen(): Promise<void> {
-  await flushCommit();
+async function showAnfragen(): Promise<boolean> {
+  if (!(await flushCommit())) return false;
   current = null;
   gewaehlt = null;
   markCurrent();
@@ -1395,15 +1436,16 @@ async function showAnfragen(): Promise<void> {
   anfragenSeite.hidden = false;
   briefeSeite.hidden = true;
   wuenscheSeite.hidden = true;
-  anfragenGruppe.open = true;
-  history.replaceState(null, "", "#anfragen");
+  if (!schmal.matches) anfragenGruppe.open = true;
+  merke("anfragen");
   await loadAnfragen(true);
-  window.scrollTo({ top: 0 });
+  nachOben();
+  return true;
 }
 
 /** Eine Anfrage aus dem Verzeichnis: in der Übersicht zeigen und als gelesen merken. */
 async function openAnfrage(id: string): Promise<void> {
-  await showAnfragen();
+  if (!(await showAnfragen())) return;
   const anfrage = alleAnfragen.find((a) => a.id === id);
   if (!anfrage) return;
   gewaehlt = id;
@@ -1435,13 +1477,24 @@ nummerInput.addEventListener("input", () => {
   pruefeNummer();
   scheduleSave();
 });
-window.addEventListener("pagehide", () => void flushCommit());
+window.addEventListener("pagehide", () => {
+  void fetch("/api/commit", { method: "POST", keepalive: true }).catch(() => null);
+});
 window.addEventListener("beforeunload", (event) => {
   if (saveTimer != null) event.preventDefault();
 });
+// Ist die Verbindung zurück, gleich speichern statt auf den nächsten Versuch zu warten.
+window.addEventListener("online", () => {
+  if (saveTimer != null) void saveNow();
+});
+// Ctrl+S oder Cmd+S speichert sofort, statt dass der Browser die Seite herunterlädt.
+document.addEventListener("keydown", (event) => {
+  if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "s") return;
+  event.preventDefault();
+  if (current && !form.hidden) void saveNow();
+});
 root.querySelector("#heim")!.addEventListener("click", async () => {
-  await flushCommit();
-  showStart();
+  if (await flushCommit()) showStart();
 });
 root.querySelector("#anfragen-alle")!.addEventListener("click", () => void showAnfragen());
 root.querySelector("#briefe-alle")!.addEventListener("click", () => void showBriefe());
@@ -1630,11 +1683,18 @@ void mountAssistent(
   },
   info.assistent === true,
 );
+/** Zeigt die Ansicht zur Adresse: beim Laden und bei «Zurück» oder «Vorwärts» im Browser. */
+async function folge(): Promise<void> {
+  const wanted = decodeURIComponent(location.hash.slice(1));
+  if (wanted === "anfragen") await showAnfragen();
+  else if (wanted === "newsletter") await showBriefe();
+  else if (wanted === "wuensche") await showWuensche();
+  else if (wanted) await openPage(wanted);
+  else if (await flushCommit()) showStart();
+}
+window.addEventListener("popstate", () => void folge());
+
 await loadList();
 await loadAnfragen();
 await loadWuensche();
-const wanted = decodeURIComponent(location.hash.slice(1));
-if (wanted === "anfragen") await showAnfragen();
-else if (wanted === "newsletter") await showBriefe();
-else if (wanted === "wuensche") await showWuensche();
-else if (wanted) await openPage(wanted);
+await folge();

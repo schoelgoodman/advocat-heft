@@ -288,8 +288,9 @@ export async function mountAssistent(anschluss: Anschluss, bereit: boolean): Pro
     if (offen) eingabe.focus();
   }
   spalte.querySelector("[data-zu]")!.addEventListener("click", () => zeige(false));
-  // Beim Öffnen der Redaktion ist der Assistent immer da. Zugeklappt bleibt er nur bis zum Neuladen.
-  zeige(true);
+  // Beim Öffnen der Redaktion ist der Assistent da, wo neben ihm Platz bleibt. Schmaler läge er über
+  // der Seite (auf dem Telefon ganz), dort wartet er hinter dem Knopf. Die Wahl gilt bis zum Neuladen.
+  zeige(!window.matchMedia("(max-width: 1100px)").matches);
 
   // Klickt Patrick ins Eingabefeld, ist die Markierung im Text weg. Darum hier merken.
   document.addEventListener("selectionchange", () => {

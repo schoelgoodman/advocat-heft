@@ -20,13 +20,27 @@
   src: url("/fonts/manrope-600.woff2") format("woff2");
 }
 
+/* Die Redaktion spricht dieselbe Sprache wie der Assistent: weiche Ecken, helle Flächen, leiser Schatten. */
 :root {
   --paper: #f4f0e6;
   --ink: #1c1915;
   --olive: #5f6b45;
-  --line: rgba(28, 25, 21, 0.14);
-  --quiet: rgba(28, 25, 21, 0.6);
   --rot: #9a3b2a;
+  --gelb: #e2c87a;
+  --quiet: rgba(28, 25, 21, 0.62);
+  --line: rgba(28, 25, 21, 0.12);
+  --rand: rgba(28, 25, 21, 0.22);
+  --hover: rgba(28, 25, 21, 0.05);
+  --flaeche: #fffdf9;
+  --flaeche-tief: #f9f7f2;
+  --olive-hauch: rgba(95, 107, 69, 0.1);
+  --olive-ring: rgba(95, 107, 69, 0.18);
+  --rot-hauch: rgba(154, 59, 42, 0.08);
+  --schatten: 0 1px 2px rgba(28, 25, 21, 0.06), 0 4px 16px rgba(28, 25, 21, 0.06);
+  --schatten-hoch: 0 6px 20px rgba(28, 25, 21, 0.14);
+  --rund: 14px;
+  --rund-mittel: 10px;
+  --rund-klein: 8px;
   --sans: Manrope, "Helvetica Neue", sans-serif;
   --serif: Marcellus, Georgia, serif;
 }
@@ -45,46 +59,58 @@ body {
   margin: 0 auto;
   padding: 1.5rem;
 }
+main h1 { font-family: var(--serif); font-weight: 400; font-size: 2.4rem; line-height: 1.15; margin: 0 0 0.4rem; }
 
-/* Knöpfe */
-button, .knopf, input {
+/* Knöpfe und Felder */
+button, .knopf, input, select {
   font: inherit;
   color: var(--ink);
   background: transparent;
-  border: 1px solid rgba(28, 25, 21, 0.25);
-  border-radius: 0;
-  padding: 0.45rem 0.8rem;
+  border: 1px solid var(--rand);
+  border-radius: var(--rund-mittel);
+  padding: 0.45rem 0.85rem;
 }
-button, .knopf { cursor: pointer; text-decoration: none; display: inline-block; }
+button, .knopf { cursor: pointer; text-decoration: none; display: inline-block; transition: background 0.15s, border-color 0.15s, color 0.15s; }
 button:hover, .knopf:hover { border-color: var(--ink); }
+input, select, textarea { background: var(--flaeche); }
+input:focus, select:focus { outline: none; border-color: var(--olive); box-shadow: 0 0 0 3px var(--olive-ring); }
+:focus-visible { outline: 2px solid var(--olive); outline-offset: 2px; }
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline: none; }
 .haupt { background: var(--olive); border-color: var(--olive); color: var(--paper); }
 .haupt:hover { background: var(--ink); border-color: var(--ink); }
-button.leise { border-color: transparent; color: var(--quiet); padding-inline: 0.4rem; }
-button.leise:hover { color: var(--ink); border-color: transparent; text-decoration: underline; }
+button.leise { border-color: transparent; color: var(--quiet); padding-inline: 0.5rem; }
+button.leise:hover { color: var(--ink); border-color: transparent; background: var(--hover); }
 p.leise { color: var(--quiet); font-size: 0.88rem; }
+
+/* Karten: überall dieselbe Fläche */
+:is(.aufgabe, .kachel, .neuer-wunsch, #editor, #vorschau, #anfragen-karten li, #briefe-karten li, #wuensche-karten li) {
+  background: var(--flaeche);
+  border: 1px solid var(--line);
+  border-radius: var(--rund);
+  box-shadow: var(--schatten);
+}
 
 /* Verzeichnis */
 aside {
   position: sticky;
   top: 1.5rem;
   align-self: start;
+  min-width: 0;
   max-height: calc(100vh - 3rem);
   overflow-y: auto;
-  padding-right: 0.3rem;
+  padding: 0.2rem 0.3rem 0.2rem 0.2rem;
 }
 aside .wort {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   margin: 0 0 1rem;
-  padding: 0.2rem 0;
+  padding: 0.3rem 0.5rem 0.3rem 0.3rem;
   border: 0;
   letter-spacing: 0.04em;
-  text-decoration: underline;
-  text-underline-offset: 0.25em;
 }
 aside .wort svg { color: var(--olive); }
-aside .wort:hover, aside .wort:hover svg { color: var(--olive); }
+aside .wort:hover { color: var(--olive); background: var(--hover); }
 aside h2, aside summary {
   font-size: 0.75rem;
   font-weight: 400;
@@ -93,23 +119,25 @@ aside h2, aside summary {
   color: var(--quiet);
   margin: 1.6rem 0 0.5rem;
 }
-aside summary { cursor: pointer; padding: 0.3rem 0; }
-nav { display: flex; flex-direction: column; }
+aside summary { cursor: pointer; padding: 0.3rem 0.3rem; border-radius: var(--rund-klein); }
+aside summary:hover { color: var(--ink); }
+nav { display: flex; flex-direction: column; gap: 0.15rem; }
 nav button {
   text-align: left;
   border: 0;
-  border-left: 2px solid transparent;
+  border-radius: var(--rund-mittel);
   padding: 0.5rem 0.6rem;
   display: grid;
   gap: 0.15rem;
 }
-nav .eintrag { display: flex; align-items: flex-start; border-left: 2px solid transparent; }
-nav .eintrag > button[data-rel] { flex: 1 1 auto; min-width: 0; border-left: 0; }
-nav .eintrag:hover { background: rgba(28, 25, 21, 0.05); }
-nav .eintrag:has(button[aria-current]) { border-left-color: var(--olive); background: rgba(95, 107, 69, 0.1); }
-nav .werkzeuge { display: flex; gap: 0.1rem; padding: 0.35rem 0.2rem 0 0; opacity: 0.35; }
+nav .eintrag { display: flex; align-items: flex-start; border-radius: var(--rund-mittel); }
+nav .eintrag > button[data-rel] { flex: 1 1 auto; min-width: 0; }
+nav .eintrag:hover { background: var(--hover); }
+nav .eintrag:has(button[aria-current]), nav button[data-anfrage][aria-current] { background: var(--olive-hauch); }
+nav .eintrag:has(button[aria-current]) .thema { color: var(--olive); font-weight: 600; }
+nav .werkzeuge { display: flex; gap: 0.1rem; padding: 0.35rem 0.25rem 0 0; opacity: 0.35; }
 nav .eintrag:hover .werkzeuge, nav .werkzeuge:focus-within { opacity: 1; }
-nav button.werkzeug { display: block; border: 0; padding: 0.25rem; color: var(--quiet); line-height: 0; }
+nav button.werkzeug { display: block; border: 0; border-radius: 6px; padding: 0.25rem; color: var(--quiet); line-height: 0; }
 nav button.werkzeug:hover { color: var(--ink); background: rgba(28, 25, 21, 0.08); }
 nav button.werkzeug svg { width: 1rem; height: 1rem; }
 nav .geloescht { align-items: center; justify-content: space-between; gap: 0.4rem; padding: 0.3rem 0 0.3rem 0.6rem; }
@@ -128,37 +156,65 @@ nav .thema {
 
 .marke {
   display: inline-block;
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  padding: 0.1rem 0.4rem;
-  background: #e2c87a;
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+  background: var(--gelb);
   color: var(--ink);
+  vertical-align: 0.05em;
 }
 .marke.online { background: var(--olive); color: var(--paper); }
 
 /* Start */
 #start { padding-top: 3rem; }
-#start h1 { font-family: var(--serif); font-weight: 400; font-size: 2.4rem; margin: 0 0 0.4rem; }
 
 /* Blatt */
 .leiste {
   position: sticky;
-  top: 0;
+  top: 0.5rem;
   z-index: 5;
-  background: var(--paper);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.6rem 1rem;
-  padding: 0.8rem 0;
-  border-bottom: 1px solid var(--line);
+  padding: 0.7rem 0.8rem 0.7rem 1rem;
+  background: var(--flaeche-tief);
+  border: 1px solid var(--line);
+  border-radius: var(--rund);
+  box-shadow: var(--schatten);
 }
 .stand { margin: 0; font-size: 0.88rem; flex: 1 1 16rem; }
 .speicher { margin: 0; font-size: 0.82rem; color: var(--olive); }
 .speicher[data-kind="busy"] { color: var(--quiet); }
-.speicher[data-kind="fehler"] { color: var(--rot); }
+/* Ein Fehler steht in einer eigenen Zeile, nicht übersehbar. */
+.speicher[data-kind="fehler"] {
+  flex-basis: 100%;
+  padding: 0.55rem 0.8rem;
+  border-radius: var(--rund-klein);
+  background: var(--rot-hauch);
+  color: var(--rot);
+  font-size: 0.88rem;
+}
 .aktionen { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+
+/* Online: die Leiste olivgrün, ein pulsierender Punkt, der Rahmen ums Textfeld auch. */
+#blatt[data-stand="online"] .leiste { background: color-mix(in srgb, var(--olive) 9%, var(--paper)); border-color: rgba(95, 107, 69, 0.35); }
+#blatt[data-stand="online"] .stand .marke::before {
+  content: "";
+  display: inline-block;
+  width: 0.45rem;
+  height: 0.45rem;
+  margin-right: 0.35rem;
+  border-radius: 50%;
+  background: #c9e09a;
+  vertical-align: 0.05em;
+  animation: live 2s infinite ease-in-out;
+}
+@keyframes live { 50% { opacity: 0.35; } }
+#blatt[data-stand="online"] #editor { border-color: rgba(95, 107, 69, 0.4); box-shadow: 0 0 0 4px var(--olive-hauch), var(--schatten); }
+
 .kennung { margin: 1.8rem 0 0.2rem; font-size: 0.8rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--quiet); }
 textarea.titel {
   display: block;
@@ -176,10 +232,10 @@ textarea.titel {
 }
 textarea.titel:focus { outline: none; border-bottom-color: var(--olive); }
 .datum { display: flex; align-items: center; gap: 0.6rem; margin: 0.8rem 0 0; font-size: 0.85rem; color: var(--quiet); }
-.datum input { padding: 0.25rem 0.4rem; }
+.datum input { padding: 0.3rem 0.5rem; border-radius: var(--rund-klein); }
 .angaben { display: flex; flex-wrap: wrap; gap: 0 1.6rem; }
 #nummer { width: 5.5rem; }
-#nummer:disabled { color: var(--quiet); border-color: var(--line); cursor: not-allowed; }
+#nummer:disabled { color: var(--quiet); background: transparent; border-color: var(--line); cursor: not-allowed; }
 .nummer-hinweis { margin: 0.4rem 0 0; font-size: 0.82rem; color: var(--quiet); }
 .nummer-hinweis.fehler { color: var(--rot); }
 #editor {
@@ -187,9 +243,9 @@ textarea.titel:focus { outline: none; border-bottom-color: var(--olive); }
   margin-top: 1.2rem;
   font-family: var(--sans);
   font-size: 1.05rem;
-  background: rgba(255, 255, 255, 0.45);
-  border: 1px solid var(--line);
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
+#editor:focus-within { border-color: var(--olive); box-shadow: 0 0 0 3px var(--olive-ring), var(--schatten); }
 /* Schrift wie auf der Website */
 .milkdown {
   background: transparent;
@@ -197,8 +253,10 @@ textarea.titel:focus { outline: none; border-bottom-color: var(--olive); }
   --crepe-font-default: var(--sans);
 }
 .milkdown h1, .milkdown h2, .milkdown h3 { font-weight: 400; font-variant-numeric: lining-nums; }
-.tipp { font-size: 0.8rem; color: var(--quiet); margin: 0.5rem 0 2rem; }
-kbd { font-family: var(--sans); border: 1px solid var(--line); padding: 0 0.3rem; background: #fff; }
+/* Der Rahmen ums ganze Textfeld zeigt den Fokus schon. */
+.milkdown [contenteditable]:focus-visible { outline: none; }
+.tipp { font-size: 0.8rem; color: var(--quiet); margin: 0.6rem 0.2rem 2rem; }
+kbd { font-family: var(--sans); border: 1px solid var(--line); border-radius: 4px; padding: 0 0.3rem; background: #fff; }
 
 /* Fassungen */
 #fassungen-gruppe { border-top: 1px solid var(--line); padding: 0.8rem 0 3rem; }
@@ -206,11 +264,10 @@ kbd { font-family: var(--sans); border: 1px solid var(--line); padding: 0 0.3rem
 #fassungen { list-style: none; padding: 0; margin: 0; font-size: 0.85rem; }
 #fassungen li { display: grid; gap: 0.2rem; padding: 0.55rem 0; border-top: 1px solid var(--line); }
 #fassungen time { color: var(--quiet); font-size: 0.78rem; }
-#fassungen .knoepfe { display: flex; gap: 0.2rem; margin-left: -0.4rem; }
+#fassungen .knoepfe { display: flex; gap: 0.2rem; margin-left: -0.5rem; }
 #vorschau {
   margin-top: 1rem;
   padding: 1rem 1.2rem;
-  border: 1px solid var(--line);
   background: #fff;
   font-family: var(--serif);
   font-size: 0.95rem;
@@ -218,16 +275,11 @@ kbd { font-family: var(--sans); border: 1px solid var(--line); padding: 0 0.3rem
 
 [hidden] { display: none !important; }
 
-@media (max-width: 800px) {
-  .redaktion { grid-template-columns: 1fr; }
-  aside { position: static; max-height: none; }
-}
-
 /* Rückfrage */
 dialog {
   border: 1px solid var(--line);
-  border-radius: 0;
-  background: var(--paper);
+  border-radius: 16px;
+  background: var(--flaeche-tief);
   color: var(--ink);
   padding: 1.6rem 1.8rem;
   max-width: min(28rem, calc(100vw - 2rem));
@@ -244,7 +296,8 @@ aside .mehr { display: block; margin: 0.3rem 0 0; font-size: 0.82rem; }
 /* Kontaktaufnahme */
 aside summary .zahl:not(:empty) {
   margin-left: 0.3rem;
-  padding: 0.05rem 0.4rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
   background: var(--rot);
   color: var(--paper);
   letter-spacing: 0.04em;
@@ -253,19 +306,14 @@ aside summary .zahl:not(:empty) {
 #anfragen-gruppe summary { margin-top: 0; }
 nav .ungelesen .thema { font-weight: 600; }
 .marke.neu { background: var(--rot); color: var(--paper); }
-nav button[data-anfrage][aria-current] { border-left-color: var(--olive); background: rgba(95, 107, 69, 0.1); }
 #anfragen { padding-top: 1.5rem; }
-#anfragen h1 { font-family: var(--serif); font-weight: 400; font-size: 2.4rem; margin: 0 0 0.4rem; }
 #anfragen-karten { list-style: none; padding: 0; margin: 1.5rem 0 3rem; }
 #anfragen-karten li {
   padding: 1.2rem 1.4rem;
   margin-bottom: 1rem;
-  border: 1px solid var(--line);
-  border-left: 2px solid var(--line);
-  background: rgba(255, 255, 255, 0.45);
   scroll-margin-top: 1.5rem;
 }
-#anfragen-karten li.gewaehlt { border-left-color: var(--olive); }
+#anfragen-karten li.gewaehlt { border-color: var(--olive); box-shadow: 0 0 0 3px var(--olive-ring), var(--schatten); }
 #anfragen-karten .kopfzeile { margin: 0; font-size: 0.78rem; color: var(--quiet); }
 #anfragen-karten h2 { font-family: var(--serif); font-weight: 400; font-size: 1.4rem; margin: 0.3rem 0 0.1rem; }
 #anfragen-karten a:not(.knopf) { color: var(--olive); }
@@ -281,15 +329,14 @@ nav button[data-anfrage][aria-current] { border-left-color: var(--olive); backgr
   gap: 0.15rem;
   text-align: left;
   padding: 0.9rem 1rem;
-  background: rgba(255, 255, 255, 0.45);
-  border: 1px solid var(--line);
-  border-top: 2px solid var(--line);
 }
-.kachel[aria-pressed="true"] { border-top-color: var(--olive); background: rgba(95, 107, 69, 0.1); }
+.kachel:hover { border-color: rgba(95, 107, 69, 0.5); }
+.kachel[aria-pressed="true"] { border-color: var(--olive); background: color-mix(in srgb, var(--olive) 8%, var(--flaeche)); }
 .kachel .label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--quiet); }
-.kachel .wert { font-family: var(--serif); font-size: 2.2rem; line-height: 1.1; font-variant-numeric: lining-nums tabular-nums; }
+/* Manrope statt Marcellus: dort sieht die Null aus wie ein O. */
+.kachel .wert { font-size: 2rem; font-weight: 600; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.kachel[aria-pressed="true"] .wert { color: var(--olive); }
 .kachel .unter { font-size: 0.8rem; color: var(--quiet); }
-@media (max-width: 520px) { .kacheln { grid-template-columns: 1fr; } }
 
 /* Startseite: die zwei Aufgaben nebeneinander */
 .aufgaben { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-top: 2rem; }
@@ -297,29 +344,26 @@ nav button[data-anfrage][aria-current] { border-left-color: var(--olive); backgr
   display: flex;
   flex-direction: column;
   padding: 1.3rem 1.4rem 1.4rem;
-  border: 1px solid var(--line);
-  border-top: 3px solid var(--olive);
-  background: rgba(255, 255, 255, 0.45);
 }
-.aufgabe.dringend { border-top-color: var(--rot); }
+.aufgabe.dringend { border-color: rgba(154, 59, 42, 0.35); box-shadow: 0 0 0 3px var(--rot-hauch), var(--schatten); }
 .aufgabe h2 { margin: 0 0 0.6rem; font-size: 0.75rem; font-weight: 400; text-transform: uppercase; letter-spacing: 0.08em; color: var(--quiet); }
+.aufgabe.dringend h2 { color: var(--rot); }
 .aufgabe .gross { margin: 0; font-family: var(--serif); font-size: 1.6rem; line-height: 1.2; font-variant-numeric: lining-nums; }
 .aufgabe p.leise { margin: 0.3rem 0 0.9rem; }
-.aufgabe ul { list-style: none; padding: 0; margin: 0 0 1.2rem; border-top: 1px solid var(--line); }
-.aufgabe li { border-bottom: 1px solid var(--line); }
-.aufgabe li button { display: grid; width: 100%; text-align: left; border: 0; padding: 0.5rem 0.2rem; font-size: 0.92rem; }
-.aufgabe li button:hover { background: rgba(28, 25, 21, 0.05); }
+.aufgabe ul { list-style: none; padding: 0; margin: 0 0 1.2rem; display: grid; gap: 0.15rem; }
+.aufgabe li button { display: grid; width: 100%; text-align: left; border: 0; padding: 0.5rem 0.6rem; font-size: 0.92rem; background: var(--flaeche-tief); }
+.aufgabe li button:hover { background: var(--olive-hauch); }
 .aufgabe li button span { font-size: 0.75rem; color: var(--quiet); }
 .aufgabe > .aktionen { margin-top: auto; }
 @media (max-width: 1000px) { .aufgaben { grid-template-columns: 1fr; } }
 
 /* Assistent */
 .assistent {
-  --a-bg: #f9f7f2;
+  --a-bg: var(--flaeche-tief);
   --a-flaeche: #ffffff;
   --a-rand: rgba(28, 25, 21, 0.1);
-  --a-schatten: 0 1px 2px rgba(28, 25, 21, 0.06), 0 4px 16px rgba(28, 25, 21, 0.06);
-  --a-rund: 14px;
+  --a-schatten: var(--schatten);
+  --a-rund: var(--rund);
   position: fixed;
   top: 0;
   right: 0;
@@ -333,7 +377,7 @@ nav button[data-anfrage][aria-current] { border-left-color: var(--olive); backgr
   font-size: 0.94rem;
 }
 body.mit-assistent { padding-right: 26rem; }
-.assistent button { border-radius: 10px; }
+.assistent button { border-radius: var(--rund-mittel); }
 .assistent .symbol {
   display: grid;
   place-items: center;
@@ -448,8 +492,8 @@ body.mit-assistent { padding-right: 26rem; }
 .assistent li .fehler {
   margin: 0.6rem 0 0;
   padding: 0.5rem 0.7rem;
-  border-radius: 8px;
-  background: rgba(154, 59, 42, 0.08);
+  border-radius: var(--rund-klein);
+  background: var(--rot-hauch);
   color: var(--rot);
   font-size: 0.85rem;
 }
@@ -531,8 +575,8 @@ body.mit-assistent { padding-right: 26rem; }
   gap: 0.45rem;
   margin: 0 0 0.5rem;
   padding: 0.3rem 0.3rem 0.3rem 0.7rem;
-  border-radius: 10px;
-  background: rgba(95, 107, 69, 0.1);
+  border-radius: var(--rund-mittel);
+  background: var(--olive-hauch);
   color: var(--olive);
   font-size: 0.8rem;
 }
@@ -549,7 +593,7 @@ body.mit-assistent { padding-right: 26rem; }
   box-shadow: var(--a-schatten);
   transition: border-color 0.15s, box-shadow 0.15s;
 }
-.assistent .feld:focus-within { border-color: var(--olive); box-shadow: 0 0 0 3px rgba(95, 107, 69, 0.15); }
+.assistent .feld:focus-within { border-color: var(--olive); box-shadow: 0 0 0 3px var(--olive-ring); }
 .assistent textarea {
   flex: 1 1 auto;
   min-width: 0;
@@ -626,7 +670,7 @@ body.mit-assistent { padding-right: 26rem; }
   border-radius: 999px;
   background: var(--olive);
   color: var(--paper);
-  box-shadow: 0 6px 20px rgba(28, 25, 21, 0.22);
+  box-shadow: var(--schatten-hoch);
   transition: transform 0.15s, background 0.15s;
 }
 .assistent-auf:hover { background: var(--ink); transform: translateY(-1px); }
@@ -636,32 +680,23 @@ body.mit-assistent { padding-right: 26rem; }
   body.mit-assistent { padding-right: 0; }
   .assistent { box-shadow: -8px 0 32px rgba(28, 25, 21, 0.15); }
 }
-@media (max-width: 520px) {
-  .assistent { width: 100%; }
-}
 
 /* Übersicht der Newsletter */
 #briefe-seite { padding-top: 1.5rem; }
 .seitenkopf { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.8rem 1.2rem; }
-.seitenkopf h1 { font-family: var(--serif); font-weight: 400; font-size: 2.4rem; margin: 0; }
+.seitenkopf h1 { margin: 0; }
 input.suche {
   display: block;
   width: 100%;
   margin: 0.8rem 0 0.2rem;
-  padding: 0.6rem 0.8rem;
-  background: rgba(255, 255, 255, 0.6);
-  border: 1px solid var(--line);
+  padding: 0.65rem 0.9rem;
+  border-color: var(--line);
+  border-radius: var(--rund-mittel);
+  box-shadow: var(--schatten);
 }
-input.suche:focus { outline: none; border-color: var(--olive); }
 #briefe-karten { list-style: none; padding: 0; margin: 1.2rem 0 3rem; }
-#briefe-karten li {
-  padding: 1.1rem 1.4rem 1.2rem;
-  margin-bottom: 0.9rem;
-  border: 1px solid var(--line);
-  border-left: 2px solid var(--olive);
-  background: rgba(255, 255, 255, 0.45);
-}
-#briefe-karten li[data-entwurf="true"] { border-left-color: #e2c87a; }
+#briefe-karten li { padding: 1.1rem 1.4rem 1.2rem; margin-bottom: 0.9rem; }
+#briefe-karten li[data-entwurf="true"] { border-color: rgba(226, 200, 122, 0.9); }
 #briefe-karten .kopfzeile { margin: 0; font-size: 0.78rem; color: var(--quiet); }
 #briefe-karten h2 { margin: 0.35rem 0 0.3rem; font-family: var(--serif); font-weight: 400; font-size: 1.4rem; line-height: 1.25; }
 #briefe-karten .titel-knopf { border: 0; padding: 0; text-align: left; font: inherit; }
@@ -674,35 +709,33 @@ aside .gruppe-link {
   align-items: center;
   gap: 0.4rem;
   margin: 1.6rem 0 0.5rem;
-  padding: 0.3rem 0;
+  padding: 0.3rem 0.3rem;
   border: 0;
+  border-radius: var(--rund-klein);
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--quiet);
 }
 aside .gruppe-link:hover { color: var(--ink); }
-aside .gruppe-link .zahl:not(:empty) { padding: 0.05rem 0.4rem; background: var(--olive); color: var(--paper); letter-spacing: 0.04em; }
+aside .gruppe-link .zahl:not(:empty) { padding: 0.05rem 0.45rem; border-radius: 999px; background: var(--olive); color: var(--paper); letter-spacing: 0.04em; }
 aside .gruppe-link .marke { font-size: 0.65rem; }
 .wunsch-hinweis { margin: 1.4rem 0 0; font-size: 0.9rem; color: var(--quiet); }
-.wunsch-hinweis button { color: var(--olive); font-weight: 600; padding-inline: 0.2rem; }
+.wunsch-hinweis button { color: var(--olive); font-weight: 600; padding-inline: 0.4rem; }
 #wuensche-seite { padding-top: 1.5rem; }
-#wuensche-seite h1 { font-family: var(--serif); font-weight: 400; font-size: 2.4rem; margin: 0 0 0.4rem; }
 #wuensche-seite .einleitung { max-width: 38rem; margin: 0 0 1.2rem; line-height: 1.5; }
 .neuer-wunsch {
   display: grid;
   gap: 0.6rem;
   padding: 1.1rem 1.2rem;
-  border: 1px solid var(--line);
-  border-top: 2px solid var(--olive);
-  background: rgba(255, 255, 255, 0.45);
 }
 .neuer-wunsch label { display: flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; color: var(--quiet); }
 .neuer-wunsch select, .assistent .wunsch select {
   font: inherit;
   color: var(--ink);
-  background: var(--paper);
-  border: 1px solid rgba(28, 25, 21, 0.25);
+  background: var(--flaeche);
+  border: 1px solid var(--rand);
+  border-radius: var(--rund-klein);
   padding: 0.3rem 0.4rem;
 }
 .neuer-wunsch textarea {
@@ -711,27 +744,22 @@ aside .gruppe-link .marke { font-size: 0.65rem; }
   font: inherit;
   line-height: 1.5;
   color: var(--ink);
-  background: var(--paper);
-  border: 1px solid rgba(28, 25, 21, 0.25);
+  background: #fff;
+  border: 1px solid var(--rand);
+  border-radius: var(--rund-mittel);
   padding: 0.6rem 0.7rem;
 }
-.neuer-wunsch textarea:focus { outline: none; border-color: var(--olive); }
+.neuer-wunsch textarea:focus { outline: none; border-color: var(--olive); box-shadow: 0 0 0 3px var(--olive-ring); }
 .neuer-wunsch .aktionen p { margin: 0; }
 #wuensche-karten { list-style: none; padding: 0; margin: 1.2rem 0 3rem; }
-#wuensche-karten li {
-  padding: 1.1rem 1.4rem;
-  margin-bottom: 0.9rem;
-  border: 1px solid var(--line);
-  border-left: 2px solid #e2c87a;
-  background: rgba(255, 255, 255, 0.45);
-}
-#wuensche-karten li[data-status="erledigt"] { border-left-color: var(--olive); opacity: 0.8; }
-#wuensche-karten li.leer { border-left-color: var(--line); color: var(--quiet); }
+#wuensche-karten li { padding: 1.1rem 1.4rem; margin-bottom: 0.9rem; }
+#wuensche-karten li[data-status="erledigt"] { opacity: 0.8; }
+#wuensche-karten li.leer { color: var(--quiet); box-shadow: none; background: transparent; border-style: dashed; }
 #wuensche-karten .kopfzeile { margin: 0; font-size: 0.78rem; color: var(--quiet); }
 #wuensche-karten .nachricht { margin: 0.7rem 0 0.9rem; line-height: 1.55; overflow-wrap: anywhere; }
 #wuensche-karten .telegram-fehlt { font-size: 0.8rem; color: var(--rot); }
 .assistent .vorschlag.wunsch .inhalt { font-family: var(--sans); font-size: 0.92rem; display: grid; gap: 0.5rem; max-height: none; }
-.assistent .vorschlag.wunsch select { border-radius: 8px; font-size: 0.85rem; justify-self: start; }
+.assistent .vorschlag.wunsch select { border-radius: var(--rund-klein); font-size: 0.85rem; justify-self: start; }
 .assistent .vorschlag.wunsch textarea {
   width: 100%;
   resize: vertical;
@@ -740,8 +768,59 @@ aside .gruppe-link .marke { font-size: 0.65rem; }
   color: var(--ink);
   background: var(--a-flaeche);
   border: 1px solid var(--a-rand);
-  border-radius: 8px;
+  border-radius: var(--rund-klein);
   padding: 0.55rem 0.65rem;
 }
 .assistent .vorschlag.wunsch textarea:focus { outline: none; border-color: var(--olive); }
 .assistent .vorschlag.wunsch textarea[readonly] { color: var(--quiet); background: transparent; }
+
+/* Telefon: eine Spalte, das Verzeichnis knapp oben, die Seite darunter. */
+@media (max-width: 800px) {
+  .redaktion { grid-template-columns: minmax(0, 1fr); gap: 1.2rem; padding: 1rem; }
+  aside { position: static; max-height: none; padding: 0; }
+  aside .wort { margin-bottom: 0.4rem; }
+  aside h2, aside summary, aside .gruppe-link { margin: 0.5rem 0 0.2rem; }
+  #anfragen-gruppe { margin-bottom: 0; }
+  main { scroll-margin-top: 0.5rem; }
+  main h1 { font-size: 2rem; }
+  #start { padding-top: 0.5rem; }
+  .aufgaben { margin-top: 1.2rem; }
+  textarea.titel { font-size: 1.6rem; }
+  /* Die Leiste wäre fast ein Fünftel des Bildschirms. Hier scrollt sie mit; ein Fehler bleibt unten stehen. */
+  .leiste { position: static; padding: 0.6rem 0.7rem; }
+  .speicher[data-kind="fehler"] {
+    position: fixed;
+    left: 0.8rem;
+    right: 0.8rem;
+    bottom: 0.8rem;
+    z-index: 30;
+    background: #f6e4df;
+    box-shadow: var(--schatten-hoch);
+  }
+  #editor { min-height: 45vh; }
+  /* Crepe rückt den Text 120px ein, auf dem Telefon bliebe kaum Platz für ein Wort. */
+  .milkdown .ProseMirror { padding: 1.4rem 1.1rem 2rem 2.4rem; }
+  .milkdown .ProseMirror h1 { font-size: 1.7rem; }
+  .milkdown .ProseMirror h2 { font-size: 1.4rem; }
+  .milkdown .ProseMirror :is(h1, h2, h3) { hyphens: auto; }
+}
+@media (min-width: 801px) and (max-width: 1100px) {
+  .milkdown .ProseMirror { padding: 2.5rem 3.5rem; }
+}
+@media (max-width: 520px) {
+  .assistent { width: 100%; }
+  .kacheln { gap: 0.5rem; }
+  .kachel { padding: 0.7rem 0.75rem; }
+  .kachel .wert { font-size: 1.5rem; }
+  .kachel .unter { display: none; }
+}
+
+/* Wer weniger Bewegung eingestellt hat, bekommt keine. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
