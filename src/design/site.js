@@ -98,21 +98,9 @@
 
   var form = document.querySelector(".anfrage");
   if (form) {
-    var left = form.querySelector("[data-captcha='a']");
-    var right = form.querySelector("[data-captcha='b']");
     var button = form.querySelector("button[type='submit']");
     var error = form.querySelector(".form-fehler");
     var thanks = form.querySelector(".form-danke");
-    var a = 0;
-    var b = 0;
-
-    function newTask() {
-      a = 1 + Math.floor(Math.random() * 9);
-      b = 1 + Math.floor(Math.random() * 9);
-      if (left) left.textContent = String(a);
-      if (right) right.textContent = String(b);
-    }
-
     function fail(message) {
       if (error) {
         error.textContent = message;
@@ -121,17 +109,15 @@
       if (thanks) thanks.hidden = true;
     }
 
-    newTask();
     form.addEventListener("submit", function (event) {
       event.preventDefault();
       var data = new FormData(form);
       var email = String(data.get("email") || "").trim();
-      var answer = Number(String(data.get("captcha") || "").trim());
       var complete = ["vorname", "name", "email", "nachricht"].every(function (name) {
         return String(data.get(name) || "").trim();
       });
-      if (!complete || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || answer !== a + b) {
-        fail("Bitte füllen Sie alle Felder aus und lösen Sie die Rechenaufgabe.");
+      if (!complete || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        fail("Bitte füllen Sie alle Felder aus.");
         return;
       }
       var payload = {
@@ -157,7 +143,6 @@
         })
         .then(function () {
           form.reset();
-          newTask();
           if (thanks) thanks.hidden = false;
         })
         .catch(function (err) {

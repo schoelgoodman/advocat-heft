@@ -87,8 +87,7 @@ h1, h2, h3, h4 {
 .btn,
 .post-meta,
 .suche button,
-.feld span,
-.captcha { font-family: var(--ui); }
+.feld span { font-family: var(--ui); }
 
 a { color: var(--gold-dark); text-underline-offset: 0.18em; text-decoration-thickness: 1px; }
 
@@ -696,24 +695,9 @@ a:hover { color: var(--ink); }
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 1rem 1.5rem;
   margin-top: 0.4rem;
-}
-
-.captcha {
-  display: block;
-  color: var(--text);
-  font-size: 14px;
-}
-
-.anfrage .captcha input {
-  display: inline-block;
-  width: 72px;
-  margin-left: 0.6rem;
-  padding: 10px 12px;
-  text-align: center;
-  vertical-align: middle;
 }
 
 .form-fehler,

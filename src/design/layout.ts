@@ -197,12 +197,9 @@ function formHtml(): string {
     <label class="feld"><span>Nachricht</span><textarea name="nachricht" rows="7" maxlength="10000" required></textarea></label>
     <label class="feld-falle" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
     <div class="anfrage-fuss">
-      <label class="captcha">Was ergibt <span data-captcha="a">4</span> + <span data-captcha="b">5</span>?
-        <input name="captcha" inputmode="numeric" autocomplete="off" required>
-      </label>
       <button class="btn btn-solid" type="submit">Nachricht senden</button>
     </div>
-    <p class="form-fehler" role="alert" hidden>Bitte füllen Sie alle Felder aus und lösen Sie die Rechenaufgabe.</p>
+    <p class="form-fehler" role="alert" hidden>Bitte füllen Sie alle Felder aus.</p>
     <p class="form-danke" role="status" hidden>Vielen Dank. Wir haben Ihre Nachricht erhalten und melden uns bei Ihnen.</p>
   </form>`;
 }
