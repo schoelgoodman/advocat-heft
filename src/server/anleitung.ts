@@ -96,6 +96,7 @@ Einen Newsletter schreiben:
 4. Darunter der Text. Am Anfang einer leeren Zeile «/» tippen öffnet ein Menü: Absatz, Zwischentitel, Kleiner Zwischentitel, Zitat, Aufzählung, Nummerierte Liste, Bild. Text markieren zeigt eine kleine Leiste für fett, kursiv und Link.
 5. Bilder: «/» und «Bild», dann «Bild hochladen» oder eine Bildadresse einfügen. Darunter lässt sich eine Bildunterschrift schreiben.
 6. Gespeichert wird von selbst, oben steht dann «Gespeichert ✓». Es gibt keinen Speichern-Knopf.
+Hat Patrick den Newsletter in Word geschrieben: einen neuen Newsletter anlegen, dann oben «Word importieren» und die .docx-Datei wählen, oder die Datei einfach auf das Textfeld ziehen. Text, Zwischentitel, Listen, fett, kursiv, Links und Bilder kommen mit. Die erste Überschrift wird das Thema, falls noch keins dasteht. Tabellen werden zu Absätzen, Farben und Schriften fallen weg. Geht nur bei Entwürfen; vorhandener Text wird nach einer Rückfrage ersetzt. Alte .doc-Dateien zuerst in Word als .docx speichern.
 7. «Vorschau» öffnet den Newsletter in einem neuen Fenster, so wie er auf der Website aussehen wird.
 8. «Veröffentlichen» stellt ihn auf die Website und auf die Startseite der Website. Ohne Thema geht das nicht.
 Die Leiste oben zeigt den Stand: «Entwurf» mit den Knöpfen «Löschen», «Kopie anlegen», «Vorschau», «Veröffentlichen». Oder «Online» mit «Kopie anlegen», «Zurückziehen» und «Auf der Website ansehen ↗». Bei Online-Seiten erscheint jede Änderung sofort auf der Website.

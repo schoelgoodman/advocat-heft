@@ -286,7 +286,11 @@ function fitTitel(): void {
   titelInput.style.height = `${titelInput.scrollHeight}px`;
 }
 
+/** Eine Meldung, die das nächste „Gespeichert ✓“ nicht gleich überschreibt, etwa nach dem Word-Import. */
+let haltMeldungBis = 0;
+
 function setSaved(text: string, kind: "ok" | "busy" | "fehler" = "ok"): void {
+  if (Date.now() < haltMeldungBis && (text === "Gespeichert ✓" || kind === "busy")) return;
   speicher.textContent = text;
   speicher.dataset.kind = kind;
 }
@@ -592,6 +596,7 @@ function renderStand(): void {
     aktionen.append(
       button("Löschen", "leise", () => void deleteDraft()),
       button("Kopie anlegen", "leise", () => void copyPage(doc.rel)),
+      button("Word importieren", "leise", () => wordInput.click()),
       button("Vorschau", "", () => void openPreview()),
       button("Veröffentlichen", "haupt", () => void publish()),
     );
@@ -1298,6 +1303,72 @@ mehr.addEventListener("click", () => {
   sichtbar += 10;
   renderBriefe();
 });
+
+/** Unsichtbares Dateifeld für «Word importieren». */
+const wordInput = document.createElement("input");
+wordInput.type = "file";
+wordInput.accept = ".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+wordInput.hidden = true;
+root.append(wordInput);
+wordInput.addEventListener("change", () => {
+  const file = wordInput.files?.[0];
+  wordInput.value = "";
+  if (file) void importiereWord(file);
+});
+
+/** Eine Word-Datei ersetzt den Text des offenen Entwurfs. Bilder kommen mit. */
+async function importiereWord(file: File): Promise<void> {
+  if (!current || !crepe) return;
+  if (!current.entwurf) {
+    await ask({ titel: "Nur in einen Entwurf", text: "Word-Dateien lassen sich nur in einen Entwurf importieren. Für einen neuen Newsletter zuerst «Neuen Newsletter schreiben».", ja: "OK" });
+    return;
+  }
+  if (!/\.docx$/i.test(file.name)) {
+    await ask({ titel: "Keine .docx-Datei", text: `«${file.name}» ist keine Word-Datei im Format .docx. Bitte in Word unter «Speichern unter» als «Word-Dokument (.docx)» speichern.`, ja: "OK" });
+    return;
+  }
+  if (forFile(crepe.getMarkdown()).trim()) {
+    const ja = await ask({
+      titel: "Text ersetzen?",
+      text: `Der Entwurf hat schon Text. «${file.name}» ersetzt ihn. Zurück geht es mit Ctrl+Z oder unter «Frühere Fassungen».`,
+      ja: "Ersetzen",
+      nein: "Abbrechen",
+    });
+    if (!ja) return;
+  }
+  const rel = current.rel;
+  setSaved("Word-Datei wird gelesen …", "busy");
+  const response = await fetch(`/api/import?rel=${encodeURIComponent(rel)}`, { method: "POST", body: file }).catch(() => null);
+  if (!response?.ok) {
+    setSaved(response ? await errorText(response, "Die Word-Datei liess sich nicht lesen.") : "Keine Verbindung zum Server.", "fehler");
+    return;
+  }
+  const json = (await response.json()) as { markdown: string; thema: string; bilder: string[]; ausgelassen: number };
+  if (current?.rel !== rel || !crepe) return;
+  // Als normale Änderung: Ctrl+Z holt den alten Text zurück.
+  crepe.editor.action(replaceAll(forEditor(json.markdown)));
+  if (json.thema && !titelInput.value.trim()) setzeThema(json.thema);
+  if (!(await saveNow())) return;
+  const bilder = json.bilder.length === 1 ? "1 Bild" : `${json.bilder.length} Bilder`;
+  const fehlend = json.ausgelassen
+    ? ` · ${json.ausgelassen} ${json.ausgelassen === 1 ? "Bild ist" : "Bilder sind"} in einem Format, das die Website nicht zeigt. Bitte selbst einsetzen.`
+    : "";
+  setSaved(`Word importiert ✓ · ${bilder}${fehlend}`, fehlend ? "fehler" : "ok");
+  haltMeldungBis = Date.now() + (fehlend ? 15_000 : 6000);
+}
+
+// Eine .docx auf den Text ziehen importiert sie. Bilder und alles andere behandelt der Editor wie bisher.
+editorHost.addEventListener(
+  "drop",
+  (event) => {
+    const file = [...(event.dataTransfer?.files ?? [])].find((f) => /\.docx$/i.test(f.name));
+    if (!file) return;
+    event.preventDefault();
+    event.stopPropagation();
+    void importiereWord(file);
+  },
+  true,
+);
 
 function setzeThema(text: string): void {
   titelInput.value = isBrief(current) ? thema(text) : text.trim();

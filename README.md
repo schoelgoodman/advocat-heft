@@ -29,6 +29,10 @@ Der Assistent hat keine Werkzeuge. Der Server schickt ihm die Anleitung (`src/se
 
 Wünsche zum Aussehen fasst er als Designwunsch zusammen. «Wunsch senden» schickt ihn über denselben Telegram-Bot wie die Anfragen. Der Verlauf liegt in `CHAT_DIR` (lokal `dev-chat/`, auf Neo `<appdata>/advocat/chat`), nicht im Inhalts-Git. «Neues Gespräch» leert ihn.
 
+## Word-Import
+
+In einem Entwurf liest «Word importieren» (oder eine .docx, auf den Text gezogen) eine Word-Datei ein (`src/server/word.ts`, mit mammoth). Es bleibt, was die Website kennt: Zwischentitel, Absätze, Listen, Zitate, fett, kursiv, Links, Bilder. Ganz fette kurze Absätze und von Hand gesetzte Punkte (•, –) gelten als Zwischentitel bzw. Liste, Tabellen werden zu Zeilen mit « · ». Die erste Überschrift wird das Thema. Bilder landen als `media/word-…` im Inhalt; EMF und WMF zeigt kein Browser, die meldet die Redaktion. Alte .doc-Dateien gehen nicht.
+
 ## Neo
 
 Das Plugin ist die Flake in diesem Repo. Sie baut das Image selbst (`modules/packages/advocat-heft.nix`, nix2container); `advocat-image.service` lädt es vor dem Container in Docker. Nach einer Änderung an `package-lock.json` muss `npmDepsHash` dort neu: `prefetch-npm-deps package-lock.json`. Die ausführliche Anleitung für den Server steht in `DEPLOY.md`. Kurz:

@@ -19,6 +19,7 @@
     "@milkdown/crepe": "^7.18.0",
     "chokidar": "^4.0.3",
     "happy-dom": "^20.0.11",
+    "mammoth": "^1.13.0",
     "simple-git": "^3.28.0",
     "tsx": "^4.20.6",
     "vite": "^7.1.12"

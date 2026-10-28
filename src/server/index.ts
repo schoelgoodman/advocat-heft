@@ -10,6 +10,7 @@ import { commitIfChanged, ensureContentGit, logFile, restoreFile, showFile } fro
 import { anfragenDir, contentDir, repoRoot, siteDir } from "../paths.ts";
 import { buildSite, previewPage, rebuildDocuments } from "../render/build.ts";
 import { handleAnfrage, listAnfragen, setAnfrageStatus } from "./anfrage.ts";
+import { importWord } from "./word.ts";
 import { assistentBereit, clearVerlauf, handleChat, readVerlauf, sendDesignwunsch } from "./chat.ts";
 
 // Lokal stehen Schlüssel wie XAI_API_KEY in .env (gitignoriert). Auf Neo setzt sie der Container.
@@ -480,6 +481,25 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     if (setztSeite) await copyMediaFile(media);
     pendingFiles.add(`media/${name}`);
     sendJson(res, 200, { url: `../media/${name}` });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/import") {
+    const rel = safeRel(url.searchParams.get("rel") ?? "");
+    if (!(await readDoc(rel)).entwurf) throw new Error("Word-Dateien lassen sich nur in einen Entwurf importieren.");
+    const bytes = await readBody(req);
+    if (bytes.length > 30 * 1024 * 1024) throw new Error("Die Word-Datei ist zu gross (höchstens 30 MB).");
+    // .docx ist ein Zip. Alte .doc-Dateien beginnen anders und kann mammoth nicht lesen.
+    if (bytes.subarray(0, 2).toString("latin1") !== "PK") {
+      throw new Error("Das ist keine .docx-Datei. Bitte in Word als «Word-Dokument (.docx)» speichern.");
+    }
+    const ergebnis = await importWord(bytes);
+    for (const bild of ergebnis.bilder) {
+      if (setztSeite) await copyMediaFile(path.join(contentDir(), bild));
+      pendingFiles.add(bild);
+    }
+    console.log(`Word-Import in ${rel}: ${ergebnis.bilder.length} Bilder`);
+    sendJson(res, 200, ergebnis);
     return;
   }
 
