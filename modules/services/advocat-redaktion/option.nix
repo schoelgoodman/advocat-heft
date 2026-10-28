@@ -16,6 +16,24 @@
           options =
             {
               enabled = mkEnableOption "Advocat Redaktion" {rank = 0;};
+              assistent = {
+                xaiApiKey = mkOption {
+                  type = types.str;
+                  default = "";
+                  rank = 10;
+                  description = ''
+                    API-Schlüssel von xAI (console.x.ai, beginnt mit xai-) für den Assistenten
+                    rechts in der Redaktion. Leer: der Assistent ist aus, die Redaktion läuft sonst normal.
+                    Der Assistent hat keine Werkzeuge und keinen Zugriff auf den Server.
+                  '';
+                };
+                modell = mkOption {
+                  type = types.str;
+                  default = "grok-4.7";
+                  rank = 20;
+                  description = "Modell bei xAI für den Assistenten.";
+                };
+              };
             }
             // neo.mkReverseProxyOptions {
               subdomain = "redaktion";

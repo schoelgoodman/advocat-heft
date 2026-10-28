@@ -31,6 +31,7 @@
             "${appdata}/content"
             "${appdata}/site"
             "${appdata}/anfragen"
+            "${appdata}/chat"
           ];
         };
 
@@ -42,8 +43,18 @@
             CONTENT_DIR = "/content";
             SITE_DIR = "/site";
             ANFRAGEN_DIR = "/anfragen";
+            CHAT_DIR = "/chat";
+            XAI_MODEL = cfg.assistent.modell;
             PUBLIC_URL = optionalString (domain != null) "https://${seite.subdomain}.${domain}";
             PORT = "4321";
+          }
+          // optionalAttrs (cfg.assistent.xaiApiKey != "") {
+            XAI_API_KEY = cfg.assistent.xaiApiKey;
+          }
+          # Designwünsche aus dem Assistenten gehen an denselben Telegram-Chat wie die Anfragen.
+          // optionalAttrs (seite.telegram.botToken != "" && seite.telegram.chatId != "") {
+            TELEGRAM_BOT_TOKEN = seite.telegram.botToken;
+            TELEGRAM_CHAT_ID = seite.telegram.chatId;
           };
           image = cfg.containers.advocat-redaktion;
           user = "${toString config.neo.core.uid}:${toString config.neo.core.gid}";
@@ -54,6 +65,8 @@
             "${appdata}/site:/site:ro"
             # Die Anfragen schreibt die Seite. Die Redaktion schreibt daneben nur _status.json.
             "${appdata}/anfragen:/anfragen"
+            # Der Verlauf des Assistenten. Nicht im Inhalts-Git.
+            "${appdata}/chat:/chat"
           ];
           networks = ["internal"];
         };

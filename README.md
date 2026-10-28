@@ -21,6 +21,14 @@ Die Chat-ID findet man so: dem Bot eine Nachricht schreiben, dann `https://api.t
 
 Die Redaktion zeigt alle Anfragen unter „Kontaktaufnahme“ (`GET /api/anfragen`, neueste zuerst). Auf Neo bindet der Container `advocat-redaktion` den Ordner dafür nur lesend ein.
 
+## Assistent
+
+Rechts in der Redaktion sitzt ein Assistent: Er erklärt die Redaktion und schreibt mit Patrick an den Texten. Dahinter steht ein Modell bei xAI (`XAI_API_KEY`, Modell `XAI_MODEL`, Standard `grok-4.7`). Lokal steht der Schlüssel in `.env` (gitignoriert); der Server liest die Datei ausserhalb von `NODE_ENV=production` selbst. Ohne Schlüssel ist der Assistent aus, die Redaktion läuft sonst normal.
+
+Der Assistent hat keine Werkzeuge. Der Server schickt ihm die Anleitung (`src/server/anleitung.ts`), die offene Seite samt Markierung und die drei neuesten Newsletter, dazu jeden, den Patrick mit Nummer nennt. Änderungen am Text kommen als Vorschlag; erst «Übernehmen» setzt sie ein, als normale Änderung im Editor (Ctrl+Z, Fassungen). Ändert sich die Redaktion, muss `anleitung.ts` mit.
+
+Wünsche zum Aussehen fasst er als Designwunsch zusammen. «Wunsch senden» schickt ihn über denselben Telegram-Bot wie die Anfragen. Der Verlauf liegt in `CHAT_DIR` (lokal `dev-chat/`, auf Neo `<appdata>/advocat/chat`), nicht im Inhalts-Git. «Neues Gespräch» leert ihn.
+
 ## Neo
 
 Das Plugin ist die Flake in diesem Repo. Sie baut das Image selbst (`modules/packages/advocat-heft.nix`, nix2container); `advocat-image.service` lädt es vor dem Container in Docker. Nach einer Änderung an `package-lock.json` muss `npmDepsHash` dort neu: `prefetch-npm-deps package-lock.json`. Die ausführliche Anleitung für den Server steht in `DEPLOY.md`. Kurz:

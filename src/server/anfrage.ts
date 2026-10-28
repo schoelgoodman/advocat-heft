@@ -94,7 +94,7 @@ function telegramText(anfrage: Anfrage, file: string): string {
   ].join("\n").slice(0, 4000);
 }
 
-async function sendTelegram(text: string): Promise<"gesendet" | "fehler" | "aus"> {
+export async function sendTelegram(text: string): Promise<"gesendet" | "fehler" | "aus"> {
   const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
   const chat = process.env.TELEGRAM_CHAT_ID?.trim();
   if (!token || !chat) return "aus";

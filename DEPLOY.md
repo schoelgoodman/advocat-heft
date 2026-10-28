@@ -54,6 +54,10 @@ Besitzer und Rechte wie die anderen Ordner unter `<appdata>/advocat` setzen (Neo
 
 `site/` nicht anfassen. Der Dienst setzt das HTML bei jedem Start neu.
 
+## Assistent
+
+Für den Assistenten in der Redaktion bei **Services → Advocat Redaktion** unter `assistent.xaiApiKey` den xAI-Schlüssel eintragen (bekommt man vom Betreiber, nicht raten). Apply. Ohne Schlüssel bleibt der Assistent aus. Designwünsche nutzen den Telegram-Bot von Advocat Finanz; dort muss nichts zusätzlich eingetragen werden.
+
 ## 3. Prüfen
 
 - `systemctl status advocat-image` ist `active (exited)`, `docker image ls advocat-heft` zeigt genau einen Tag.

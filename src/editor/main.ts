@@ -1,8 +1,10 @@
 import * as crepeModule from "@milkdown/crepe";
+import * as milkdownUtils from "@milkdown/kit/utils";
 import "@milkdown/crepe/theme/common/style.css";
 import "@milkdown/crepe/theme/frame.css";
 import "./redaktion.css";
 import type { Art, ContentDocument } from "../content/document.ts";
+import { mountAssistent, type Lage } from "./assistent.ts";
 
 interface CrepeApi {
   markdownUpdated(fn: (ctx: unknown, markdown: string, prev: string) => void): void;
@@ -13,6 +15,7 @@ interface CrepeEditor {
   destroy(): Promise<unknown>;
   getMarkdown(): string;
   on(fn: (api: CrepeApi) => void): unknown;
+  editor: { action(fn: unknown): void };
 }
 
 interface CrepeCtor {
@@ -35,6 +38,8 @@ interface CrepeCtor {
 }
 
 const Crepe = (crepeModule as unknown as { Crepe: CrepeCtor }).Crepe;
+// Die Typen von @milkdown/utils lösen unter NodeNext nicht auf. Daher von Hand, wie bei Crepe.
+const { replaceAll } = milkdownUtils as unknown as { replaceAll(markdown: string, flush?: boolean): unknown };
 
 interface PageSummary {
   rel: string;
@@ -44,6 +49,7 @@ interface PageSummary {
   nummer: number | null;
   entwurf: boolean;
   href: string;
+  auszug: string;
 }
 
 type Doc = ContentDocument & { href: string };
@@ -75,6 +81,7 @@ let sichtbar = 10;
 let alleAnfragen: Anfrage[] = [];
 let anfragenStand = "";
 let anfragenFilter: AnfragenFilter = "offen";
+let briefeFilter: "alle" | "entwuerfe" | "online" = "alle";
 let gewaehlt: string | null = null;
 
 root.innerHTML = `
@@ -84,15 +91,16 @@ root.innerHTML = `
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 11 12 4l9 7M6 9.5V20h4.5v-5.5h3V20H18V9.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
         Redaktion
       </button>
-      <details id="anfragen-gruppe" open>
+      <details id="anfragen-gruppe">
         <summary>Kontaktaufnahme <span class="zahl" id="anfragen-zahl"></span></summary>
         <nav id="anfragen-liste"></nav>
         <button type="button" class="leise mehr" id="anfragen-alle">Übersicht aller Anfragen</button>
       </details>
-      <details id="briefe-gruppe" open>
+      <details id="briefe-gruppe">
         <summary>Newsletter</summary>
         <nav id="briefe"></nav>
         <button type="button" class="leise mehr" id="mehr" hidden></button>
+        <button type="button" class="leise mehr" id="briefe-alle">Übersicht aller Newsletter</button>
       </details>
       <details id="seiten-gruppe">
         <summary>Übrige Seiten</summary>
@@ -118,6 +126,16 @@ root.innerHTML = `
         <p class="leise" id="anfragen-text"></p>
         <ol id="anfragen-karten"></ol>
       </section>
+      <section id="briefe-seite" hidden>
+        <div class="seitenkopf">
+          <h1>Newsletter</h1>
+          <button type="button" class="haupt" id="briefe-neu">Neuen Newsletter schreiben</button>
+        </div>
+        <div class="kacheln" id="briefe-kacheln" role="group" aria-label="Newsletter filtern"></div>
+        <input type="search" class="suche" id="briefe-suche" placeholder="Nach Thema oder Nummer suchen …" aria-label="Newsletter suchen">
+        <p class="leise" id="briefe-text"></p>
+        <ol id="briefe-karten"></ol>
+      </section>
       <form id="blatt" hidden>
         <div class="leiste">
           <p class="stand" id="stand"></p>
@@ -126,7 +144,11 @@ root.innerHTML = `
         </div>
         <p class="kennung" id="kennung"></p>
         <textarea id="titel" class="titel" rows="1" autocomplete="off"></textarea>
-        <label class="datum" id="datum-feld">Datum <input type="date" id="datum"></label>
+        <div class="angaben" id="angaben">
+          <label class="datum" id="nummer-feld">Nummer <input type="number" id="nummer" min="1" max="9999" step="1" inputmode="numeric"></label>
+          <label class="datum" id="datum-feld">Datum <input type="date" id="datum"></label>
+        </div>
+        <p class="nummer-hinweis" id="nummer-hinweis" hidden></p>
         <div id="editor"></div>
         <p class="tipp">Tipp: Am Anfang einer leeren Zeile <kbd>/</kbd> tippen für Zwischentitel, Liste oder Bild. Text markieren für fett, kursiv oder Link.</p>
         <details id="fassungen-gruppe">
@@ -162,6 +184,11 @@ const anfragenGruppe = root.querySelector<HTMLDetailsElement>("#anfragen-gruppe"
 const anfragenListe = root.querySelector<HTMLElement>("#anfragen-liste")!;
 const anfragenZahl = root.querySelector<HTMLElement>("#anfragen-zahl")!;
 const anfragenSeite = root.querySelector<HTMLElement>("#anfragen")!;
+const briefeSeite = root.querySelector<HTMLElement>("#briefe-seite")!;
+const briefeKacheln = root.querySelector<HTMLElement>("#briefe-kacheln")!;
+const briefeSuche = root.querySelector<HTMLInputElement>("#briefe-suche")!;
+const briefeText = root.querySelector<HTMLElement>("#briefe-text")!;
+const briefeKarten = root.querySelector<HTMLOListElement>("#briefe-karten")!;
 const anfragenText = root.querySelector<HTMLElement>("#anfragen-text")!;
 const anfragenKacheln = root.querySelector<HTMLElement>("#anfragen-kacheln")!;
 const startAnfragen = root.querySelector<HTMLElement>("#start-anfragen")!;
@@ -175,6 +202,9 @@ const kennung = root.querySelector<HTMLElement>("#kennung")!;
 const titelInput = root.querySelector<HTMLTextAreaElement>("#titel")!;
 const datumFeld = root.querySelector<HTMLElement>("#datum-feld")!;
 const datumInput = root.querySelector<HTMLInputElement>("#datum")!;
+const nummerFeld = root.querySelector<HTMLElement>("#nummer-feld")!;
+const nummerInput = root.querySelector<HTMLInputElement>("#nummer")!;
+const nummerHinweis = root.querySelector<HTMLElement>("#nummer-hinweis")!;
 const editorHost = root.querySelector<HTMLElement>("#editor")!;
 const fassungenGruppe = root.querySelector<HTMLDetailsElement>("#fassungen-gruppe")!;
 const fassungen = root.querySelector<HTMLOListElement>("#fassungen")!;
@@ -434,12 +464,13 @@ function renderBriefe(): void {
   mehr.textContent = `Ältere anzeigen (noch ${rest})`;
   markCurrent();
   renderStartBriefe();
+  if (!briefeSeite.hidden) renderBriefUebersicht();
 }
 
 /** Eine Karte auf der Startseite: Titel, eine grosse Zeile, Kleingedrucktes, eine kurze Liste, ein Knopf. */
 function aufgabe(
   host: HTMLElement,
-  options: { titel: string; gross: string; leise: string; liste: { label: string; info: string; onClick: () => void }[]; knopf: HTMLButtonElement },
+  options: { titel: string; gross: string; leise: string; liste: { label: string; info: string; onClick: () => void }[]; knopf: HTMLButtonElement | HTMLButtonElement[] },
 ): void {
   const titel = document.createElement("h2");
   titel.textContent = options.titel;
@@ -459,7 +490,10 @@ function aufgabe(
     item.append(link);
     liste.append(item);
   }
-  host.replaceChildren(titel, gross, leise, ...(options.liste.length ? [liste] : []), options.knopf);
+  const knoepfe = document.createElement("div");
+  knoepfe.className = "aktionen";
+  knoepfe.append(...[options.knopf].flat());
+  host.replaceChildren(titel, gross, leise, ...(options.liste.length ? [liste] : []), knoepfe);
 }
 
 function renderStartBriefe(): void {
@@ -481,7 +515,7 @@ function renderStartBriefe(): void {
       ? `Zuletzt erschienen: Nr. ${zuletzt.nummer ?? ""} am ${shortDate(zuletzt.datum)}.`
       : "Der erste Newsletter erscheint, sobald Sie ihn veröffentlichen.",
     liste,
-    knopf: neu,
+    knopf: [neu, button("Zur Übersicht", "", () => void showBriefe())],
   });
 }
 
@@ -502,22 +536,42 @@ function updateListLabel(): void {
   if (item) item.textContent = titelInput.value.trim() || "Noch ohne Thema";
 }
 
+/** Die Nummer aus dem Feld. Nur ein Entwurf darf sie ändern: online hängt die Adresse daran. */
+function gewaehlteNummer(): number | null {
+  if (!current || !isBrief(current) || !current.entwurf) return current?.nummer ?? null;
+  const wert = Number(nummerInput.value);
+  return Number.isInteger(wert) && wert > 0 && wert < 10_000 ? wert : current.nummer;
+}
+
+/** Warnt, wenn ein anderer Newsletter dieselbe Nummer hat. Verboten ist es erst beim Veröffentlichen. */
+function pruefeNummer(): void {
+  const nummer = gewaehlteNummer();
+  const andere = alleBriefe.filter((page) => page.rel !== current?.rel && page.nummer === nummer);
+  const online = andere.find((page) => !page.entwurf);
+  nummerHinweis.hidden = andere.length === 0 || !current?.entwurf;
+  nummerHinweis.textContent = online
+    ? `Nr. ${nummer} ist schon online: «${thema(online.titel)}». So lässt er sich nicht veröffentlichen.`
+    : `Nr. ${nummer} hat auch ${andere.length === 1 ? "ein anderer Entwurf" : `${andere.length} andere Entwürfe`}.`;
+  nummerHinweis.classList.toggle("fehler", online != null);
+}
+
 function collect(): ContentDocument {
   if (!current || !crepe) throw new Error("Keine Seite");
   const brief = isBrief(current);
+  const nummer = gewaehlteNummer();
   return {
     rel: current.rel,
     art: current.art,
-    nummer: current.nummer,
+    nummer,
     entwurf: current.entwurf,
-    titel: brief ? briefTitel(current.nummer, titelInput.value) : titelInput.value.trim() || current.titel,
+    titel: brief ? briefTitel(nummer, titelInput.value) : titelInput.value.trim() || current.titel,
     datum: brief ? datumInput.value || current.datum : current.datum,
     body: forFile(crepe.getMarkdown()).trim(),
   };
 }
 
 function same(a: ContentDocument, b: ContentDocument): boolean {
-  return a.titel === b.titel && a.datum === b.datum && a.body.trim() === b.body.trim();
+  return a.titel === b.titel && a.datum === b.datum && a.nummer === b.nummer && a.body.trim() === b.body.trim();
 }
 
 function viewHref(doc: Doc): string {
@@ -528,6 +582,10 @@ function viewHref(doc: Doc): string {
 function renderStand(): void {
   if (!current) return;
   const doc = current;
+  nummerInput.disabled = !doc.entwurf;
+  nummerFeld.title = doc.entwurf ? "" : "Die Nummer lässt sich nur im Entwurf ändern. Online hängt die Adresse daran.";
+  nummerInput.value = String(doc.nummer ?? "");
+  pruefeNummer();
   aktionen.replaceChildren();
   if (doc.entwurf) {
     stand.innerHTML = `<span class="marke">Entwurf</span> Nur hier in der Redaktion sichtbar.`;
@@ -556,8 +614,11 @@ function showStart(): void {
   gewaehlt = null;
   form.hidden = true;
   anfragenSeite.hidden = true;
+  briefeSeite.hidden = true;
   start.hidden = false;
   history.replaceState(null, "", location.pathname + location.search);
+  // Auf der Startseite ist das Verzeichnis zugeklappt. Eine geöffnete Seite klappt ihre Gruppe selbst auf.
+  for (const gruppe of root!.querySelectorAll<HTMLDetailsElement>("aside details")) gruppe.open = false;
   markCurrent();
 }
 
@@ -573,6 +634,7 @@ async function openPage(rel: string): Promise<void> {
   const brief = isBrief(current);
   start.hidden = true;
   anfragenSeite.hidden = true;
+  briefeSeite.hidden = true;
   form.hidden = false;
   kennung.textContent = brief ? `Newsletter ${current.nummer ?? ""}` : current.art === "recht" ? "Rechtliches" : "Seite";
   titelInput.placeholder = brief ? "Thema, z. B. Revision des Erbrechts" : "Titel";
@@ -580,6 +642,8 @@ async function openPage(rel: string): Promise<void> {
   fitTitel();
   datumFeld.hidden = !brief;
   datumInput.value = current.datum;
+  nummerFeld.hidden = !brief;
+  nummerInput.value = String(current.nummer ?? "");
   fassungenGruppe.open = false;
   setSaved("");
   renderStand();
@@ -615,8 +679,11 @@ async function save(): Promise<boolean> {
     setSaved("Nicht gespeichert. Verbindung prüfen.", "fehler");
     return false;
   }
+  const neueNummer = current.rel === doc.rel && current.nummer !== doc.nummer;
   if (current.rel === doc.rel) current = { ...current, ...doc };
   setSaved("Gespeichert ✓");
+  // Das Verzeichnis zeigt die Nummer und sortiert danach.
+  if (neueNummer) void loadList().then(pruefeNummer);
   return true;
 }
 
@@ -1066,6 +1133,88 @@ async function setStatus(id: string, status: Anfrage["status"]): Promise<void> {
   await loadAnfragen(true);
 }
 
+function briefKachel(filter: typeof briefeFilter, wert: number, label: string, unter: string): HTMLButtonElement {
+  const element = document.createElement("button");
+  element.type = "button";
+  element.className = "kachel";
+  element.setAttribute("aria-pressed", String(briefeFilter === filter));
+  element.innerHTML = `<span class="label">${esc(label)}</span><span class="wert">${wert}</span><span class="unter">${esc(unter)}</span>`;
+  element.addEventListener("click", () => {
+    briefeFilter = filter;
+    renderBriefUebersicht();
+  });
+  return element;
+}
+
+function briefKarte(page: PageSummary): HTMLElement {
+  const karte = document.createElement("li");
+  karte.dataset.entwurf = String(page.entwurf);
+  const kopf = document.createElement("p");
+  kopf.className = "kopfzeile";
+  kopf.innerHTML = page.entwurf
+    ? `<span class="marke">Entwurf</span> Nr. ${page.nummer ?? ""} · ${esc(shortDate(page.datum))}`
+    : `<span class="marke online">Online</span> Nr. ${page.nummer ?? ""} · ${esc(shortDate(page.datum))}`;
+  const titel = document.createElement("h2");
+  const link = button(thema(page.titel) || "Noch ohne Thema", "titel-knopf", () => void openPage(page.rel));
+  titel.append(link);
+  const text = document.createElement("p");
+  text.className = "auszug";
+  text.textContent = page.auszug || "Noch kein Text.";
+  const knoepfe = document.createElement("div");
+  knoepfe.className = "aktionen";
+  knoepfe.append(button("Bearbeiten", "", () => void openPage(page.rel)));
+  if (page.entwurf) knoepfe.append(button("Veröffentlichen", "haupt", () => void publish(page.rel)));
+  else {
+    const ansehen = document.createElement("a");
+    ansehen.className = "knopf";
+    ansehen.href = `${publicOrigin}${page.href}`;
+    ansehen.target = "_blank";
+    ansehen.rel = "noopener";
+    ansehen.textContent = "Auf der Website ansehen ↗";
+    knoepfe.append(ansehen);
+  }
+  knoepfe.append(button("Kopie anlegen", "leise", () => void copyPage(page.rel)));
+  karte.append(kopf, titel, text, knoepfe);
+  return karte;
+}
+
+/** Alle Newsletter auf einen Blick: Zahlen oben, Suche, darunter die Karten. Entwürfe zuerst. */
+function renderBriefUebersicht(): void {
+  const entwuerfe = alleBriefe.filter((page) => page.entwurf);
+  const online = alleBriefe.filter((page) => !page.entwurf);
+  const zuletzt = online[0];
+  briefeKacheln.replaceChildren(
+    briefKachel("entwuerfe", entwuerfe.length, "Entwürfe", entwuerfe.length ? "warten aufs Veröffentlichen" : "keine offenen"),
+    briefKachel("online", online.length, "Online", zuletzt ? `zuletzt Nr. ${zuletzt.nummer ?? ""} am ${shortDate(zuletzt.datum)}` : "noch keiner"),
+    briefKachel("alle", alleBriefe.length, "Gesamt", "alle Newsletter"),
+  );
+  const suche = briefeSuche.value.trim().toLowerCase();
+  const sichtbare = alleBriefe
+    .filter((page) => (briefeFilter === "alle" ? true : briefeFilter === "entwuerfe" ? page.entwurf : !page.entwurf))
+    .filter((page) => !suche || page.titel.toLowerCase().includes(suche) || String(page.nummer ?? "") === suche.replace(/^nr\.?\s*/, ""));
+  if (suche) briefeText.textContent = sichtbare.length ? `${sichtbare.length} Treffer für «${briefeSuche.value.trim()}».` : `Nichts gefunden für «${briefeSuche.value.trim()}».`;
+  else if (briefeFilter === "entwuerfe") briefeText.textContent = sichtbare.length ? "Entwürfe, nur hier in der Redaktion sichtbar." : "Keine offenen Entwürfe.";
+  else if (briefeFilter === "online") briefeText.textContent = "Veröffentlichte Newsletter, der neueste zuerst.";
+  else briefeText.textContent = "Alle Newsletter. Entwürfe zuerst, dann der neueste.";
+  briefeKarten.replaceChildren(...sichtbare.map(briefKarte));
+}
+
+/** Die Übersicht der Newsletter, wie die Kontaktaufnahme. */
+async function showBriefe(): Promise<void> {
+  await flushCommit();
+  current = null;
+  gewaehlt = null;
+  markCurrent();
+  start.hidden = true;
+  form.hidden = true;
+  anfragenSeite.hidden = true;
+  briefeSeite.hidden = false;
+  briefeGruppe.open = true;
+  history.replaceState(null, "", "#newsletter");
+  renderBriefUebersicht();
+  window.scrollTo({ top: 0 });
+}
+
 /** Die Übersicht: Zahlen oben, darunter die Anfragen des gewählten Filters. */
 async function showAnfragen(): Promise<void> {
   await flushCommit();
@@ -1075,6 +1224,7 @@ async function showAnfragen(): Promise<void> {
   start.hidden = true;
   form.hidden = true;
   anfragenSeite.hidden = false;
+  briefeSeite.hidden = true;
   anfragenGruppe.open = true;
   history.replaceState(null, "", "#anfragen");
   await loadAnfragen(true);
@@ -1109,6 +1259,12 @@ titelInput.addEventListener("input", () => {
   scheduleSave();
 });
 datumInput.addEventListener("input", () => scheduleSave());
+nummerInput.addEventListener("input", () => {
+  if (!current || !isBrief(current)) return;
+  kennung.textContent = `Newsletter ${gewaehlteNummer() ?? ""}`;
+  pruefeNummer();
+  scheduleSave();
+});
 window.addEventListener("pagehide", () => void flushCommit());
 window.addEventListener("beforeunload", (event) => {
   if (saveTimer != null) event.preventDefault();
@@ -1118,6 +1274,15 @@ root.querySelector("#heim")!.addEventListener("click", async () => {
   showStart();
 });
 root.querySelector("#anfragen-alle")!.addEventListener("click", () => void showAnfragen());
+root.querySelector("#briefe-alle")!.addEventListener("click", () => void showBriefe());
+root.querySelector("#briefe-neu")!.addEventListener("click", () => void newBrief());
+briefeSuche.addEventListener("input", () => renderBriefUebersicht());
+// Wie bei der Kontaktaufnahme: „Newsletter“ öffnet die Übersicht. Zuklappen geht, wenn sie schon offen ist.
+briefeGruppe.querySelector("summary")!.addEventListener("click", (event) => {
+  if (!briefeSeite.hidden && briefeGruppe.open) return;
+  event.preventDefault();
+  void showBriefe();
+});
 // Ein Klick auf „Kontaktaufnahme“ öffnet die Übersicht. Zuklappen geht, wenn sie schon offen ist.
 anfragenGruppe.querySelector("summary")!.addEventListener("click", (event) => {
   if (!anfragenSeite.hidden && anfragenGruppe.open) return;
@@ -1134,10 +1299,60 @@ mehr.addEventListener("click", () => {
   renderBriefe();
 });
 
-const info = (await fetch("/api/info").then((response) => response.json()).catch(() => ({}))) as { publicUrl?: string };
+function setzeThema(text: string): void {
+  titelInput.value = isBrief(current) ? thema(text) : text.trim();
+  fitTitel();
+  updateListLabel();
+  scheduleSave();
+}
+
+/** Was der Assistent sieht und wie er Text einsetzt. */
+function lage(): Lage {
+  if (!current || !crepe || form.hidden) {
+    return { ansicht: !anfragenSeite.hidden ? "anfragen" : !briefeSeite.hidden ? "briefe" : "start" };
+  }
+  const doc = collect();
+  return { ansicht: "blatt", rel: doc.rel, art: doc.art, titel: doc.titel, datum: doc.datum, entwurf: doc.entwurf, body: doc.body };
+}
+
+const info = (await fetch("/api/info").then((response) => response.json()).catch(() => ({}))) as {
+  publicUrl?: string;
+  assistent?: boolean;
+};
 publicOrigin = info.publicUrl ?? "";
+void mountAssistent(
+  {
+    lage,
+    offen: () => (current && crepe && !form.hidden ? { rel: current.rel, titel: collect().titel } : null),
+    markdown: () => (crepe && current ? forFile(crepe.getMarkdown()).trim() : null),
+    // Als normale Änderung im Editor: Ctrl+Z macht sie rückgängig, gespeichert wird wie beim Tippen.
+    setzeText: (markdown) => crepe?.editor.action(replaceAll(forEditor(markdown))),
+    setzeThema,
+    neuerNewsletter: async (text) => {
+      // Ein leerer Entwurf, der schon offen ist, wird genommen statt einen zweiten anzulegen.
+      const leer = current && isBrief(current) && current.entwurf && crepe && !form.hidden && !collect().body.trim();
+      if (!leer) {
+        await newBrief();
+        if (!current || !isBrief(current) || !current.entwurf) return null;
+      }
+      setzeThema(text);
+      return current!.rel;
+    },
+    // Während des Schreibens den Zustand ersetzen, nicht ändern: keine hundert Rückgängig-Schritte.
+    schreibeLive: (markdown) => crepe?.editor.action(replaceAll(forEditor(markdown), true)),
+    speichere: () => scheduleSave(),
+    oeffneNewsletter: (text) => {
+      const page = alleBriefe.find((item) => thema(item.titel) === text.trim());
+      if (page) void openPage(page.rel);
+      return page != null;
+    },
+    editor: editorHost,
+  },
+  info.assistent === true,
+);
 await loadList();
 await loadAnfragen();
 const wanted = decodeURIComponent(location.hash.slice(1));
 if (wanted === "anfragen") await showAnfragen();
+else if (wanted === "newsletter") await showBriefe();
 else if (wanted) await openPage(wanted);

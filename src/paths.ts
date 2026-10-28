@@ -25,3 +25,11 @@ export function siteDir(): string {
 export function anfragenDir(): string {
   return path.resolve(process.env.ANFRAGEN_DIR ?? path.join(repoRoot, "dev-anfragen"));
 }
+
+/**
+ * Der Verlauf des Assistenten in der Redaktion. Nicht im Inhalts-Git:
+ * ein Gespräch ist keine Fassung eines Textes.
+ */
+export function chatDir(): string {
+  return path.resolve(process.env.CHAT_DIR ?? path.join(repoRoot, "dev-chat"));
+}

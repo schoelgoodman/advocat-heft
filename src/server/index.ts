@@ -10,6 +10,16 @@ import { commitIfChanged, ensureContentGit, logFile, restoreFile, showFile } fro
 import { anfragenDir, contentDir, repoRoot, siteDir } from "../paths.ts";
 import { buildSite, previewPage, rebuildDocuments } from "../render/build.ts";
 import { handleAnfrage, listAnfragen, setAnfrageStatus } from "./anfrage.ts";
+import { assistentBereit, clearVerlauf, handleChat, readVerlauf, sendDesignwunsch } from "./chat.ts";
+
+// Lokal stehen Schlüssel wie XAI_API_KEY in .env (gitignoriert). Auf Neo setzt sie der Container.
+if (process.env.NODE_ENV !== "production") {
+  try {
+    process.loadEnvFile(path.join(repoRoot, ".env"));
+  } catch {
+    // Keine .env.
+  }
+}
 
 const PORT = Number(process.env.PORT ?? 4321);
 
@@ -93,8 +103,21 @@ async function writeDoc(doc: ContentDocument): Promise<void> {
   await fs.writeFile(file, serializeDocument(doc), "utf8");
 }
 
+/** Der Anfang des Textes ohne Markdown, für die Übersicht der Newsletter. */
+function auszug(body: string): string {
+  const text = body
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/^#{1,6}\s+.*$/gm, " ")
+    .replace(/[*_>`]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text.length > 220 ? `${text.slice(0, 220).replace(/\s+\S*$/, "")} …` : text;
+}
+
 function summary(doc: ContentDocument) {
   return {
+    auszug: doc.art === "brief" ? auszug(doc.body) : "",
     rel: doc.rel,
     titel: doc.titel,
     art: doc.art,
@@ -249,7 +272,31 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
   }
 
   if (req.method === "GET" && url.pathname === "/api/info") {
-    sendJson(res, 200, { publicUrl: PUBLIC_URL });
+    sendJson(res, 200, { publicUrl: PUBLIC_URL, assistent: assistentBereit() });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/chat") {
+    res.setHeader("cache-control", "no-store");
+    sendJson(res, 200, { verlauf: await readVerlauf() });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/chat") {
+    await handleChat(JSON.parse((await readBody(req)).toString("utf8")), res);
+    return;
+  }
+
+  if (req.method === "DELETE" && url.pathname === "/api/chat") {
+    await clearVerlauf();
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/designwunsch") {
+    const telegram = await sendDesignwunsch(JSON.parse((await readBody(req)).toString("utf8")));
+    if (telegram !== "gesendet") throw new Error(telegram === "aus" ? "Telegram ist nicht eingerichtet." : "Telegram hat nicht geantwortet.");
+    sendJson(res, 200, { ok: true });
     return;
   }
 
@@ -276,6 +323,8 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
       body: String(payload.body ?? ""),
     };
     if (doc.nummer != null && !Number.isFinite(doc.nummer)) doc.nummer = null;
+    // Online hängt die Adresse an der Nummer. Ändern geht nur im Entwurf.
+    if (before && !before.entwurf) doc.nummer = before.nummer;
     await writeDoc(doc);
     await updateSite([rel]);
     scheduleCommit(commitMessage(doc), rel);
@@ -342,10 +391,17 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     await flushPending();
     const doc = await readDoc(oldRel);
     if (doc.art === "brief" && !thema(doc.titel)) throw new Error("Bitte zuerst ein Thema eingeben.");
+    if (doc.art === "brief") {
+      const doppelt = (await loadDocuments()).find(
+        (other) => other.art === "brief" && !other.entwurf && other.rel !== oldRel && other.nummer === doc.nummer,
+      );
+      if (doppelt) throw new Error(`Nr. ${doc.nummer} ist schon online: ${doppelt.titel}. Bitte eine andere Nummer wählen.`);
+    }
     let rel = oldRel;
     const stem = `${String(doc.nummer ?? 0).padStart(4, "0")}-newsletter-${doc.nummer}`;
     const slug = slugify(thema(doc.titel));
-    if (doc.art === "brief" && path.posix.basename(oldRel, ".md") === stem && slug) {
+    // Ein Entwurf heisst noch „0039-newsletter-39“. Wurde die Nummer geändert, stimmt die alte Zahl im Namen nicht mehr.
+    if (doc.art === "brief" && /^\d{4}-newsletter-\d+$/.test(path.posix.basename(oldRel, ".md")) && slug) {
       const next = `briefe/${stem}-${slug}.md`;
       const taken = await fs.stat(path.join(contentDir(), next)).then(() => true, () => false);
       if (!taken) rel = next;
@@ -634,6 +690,7 @@ async function main(): Promise<void> {
   server.listen(PORT, () => {
     if (setztSeite) console.log(`Heft auf http://127.0.0.1:${PORT}`);
     if (hatRedaktion) console.log(`Redaktion auf http://127.0.0.1:${PORT}${ROLLE === "redaktion" ? "/" : "/redaktion"}`);
+    if (hatRedaktion && !assistentBereit()) console.log("Assistent aus: XAI_API_KEY fehlt.");
     if (!setztSeite) return;
     console.log(`Anfragen nach ${anfragenDir()}`);
     if (!process.env.TELEGRAM_BOT_TOKEN || !process.env.TELEGRAM_CHAT_ID) {
