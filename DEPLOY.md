@@ -25,15 +25,16 @@ Beim ersten Start legt der Dienst zwei leere Ordner an:
 
 ## 2. Inhalt einspielen
 
-Der Inhalt hängt als `advocat-content.zip` am Release `content-2026-10-25`. Das Zip enthält den Inhalt von `dev-content/` direkt (kein Oberordner), samt `.git`. Das `.git` muss mit: die Redaktion schreibt dort ihre Fassungen.
+Der Inhalt hängt als `advocat-content.zip` am Release `content-2026-10-29` (Stand 29.10.2026, ersetzt `content-2026-10-25`). Das Zip enthält den Inhalt von `dev-content/` direkt (kein Oberordner), samt `.git`. Das `.git` muss mit: die Redaktion schreibt dort ihre Fassungen.
 
 ```sh
-curl -fL -o /tmp/advocat-content.zip https://github.com/schoelgoodman/advocat-heft/releases/download/content-2026-10-25/advocat-content.zip
-echo "900dde296f56c3b5d50316e7784dcd9501aa2e8715a6ee8c8a5dd410ff75ac96  /tmp/advocat-content.zip" | sha256sum -c
+curl -fL -o /tmp/advocat-content.zip https://github.com/schoelgoodman/advocat-heft/releases/download/content-2026-10-29/advocat-content.zip
+echo "7c108e29e221c2e8a71e1097aa83bf87d26d369d4c579fef811d84f7ef2964eb  /tmp/advocat-content.zip" | sha256sum -c
 
-systemctl stop docker-advocat
+# Beide Container schreiben in content/, darum beide anhalten.
+systemctl stop docker-advocat docker-advocat-redaktion
 unzip -q /tmp/advocat-content.zip -d <appdata>/advocat/content
-systemctl start docker-advocat
+systemctl start docker-advocat docker-advocat-redaktion
 ```
 
 Danach muss es so aussehen:
@@ -42,7 +43,7 @@ Danach muss es so aussehen:
 <appdata>/advocat/content/
 ├── .git/
 ├── README.md
-├── briefe/     35 Newsletter
+├── briefe/     35 Newsletter und ein Entwurf (Nr. 40)
 ├── kapitel/    9 feste Seiten
 ├── media/      Bilder
 └── recht/      Impressum, Datenschutz, Disclaimer
@@ -65,4 +66,4 @@ Für den Assistenten in der Redaktion bei **Services → Advocat Redaktion** unt
 - `https://advocat.<domain>` zeigt die Startseite mit Bildern.
 - `https://advocat.<domain>/redaktion` antwortet 404. Das ist richtig.
 - `https://redaktion.<domain>/` verlangt tinyauth und zeigt danach die Redaktion direkt an der Wurzel (`/redaktion` springt auf `/`). `redaktion.<domain>` nicht in die Custom Domains eintragen.
-- `git -C <appdata>/advocat/content log --oneline` zeigt `Übernahme aus WordPress`.
+- `git -C <appdata>/advocat/content log --oneline` zeigt oben `Kapitel: Unser Angebot`, weiter unten `Übernahme aus WordPress`.
