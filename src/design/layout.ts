@@ -623,11 +623,19 @@ function serializeFlow(root: HTMLElement): string {
   };
   for (const node of [...root.childNodes]) {
     if (node.nodeType === 3 && !(node.textContent ?? "").trim()) continue;
+    if (!node.isConnected) continue;
     if (node.nodeType === 1) {
       const el = node as HTMLElement;
       if (isBlock(el)) {
-        flush(el.classList.contains("karten-home") ? "inhalt-intro" : "");
-        parts.push(el.classList.contains("karten-home") ? `<section class="karten-band">${el.outerHTML}</section>` : el.outerHTML);
+        const home = el.classList.contains("karten-home");
+        flush(home ? "inhalt-intro" : "");
+        if (home) {
+          // «Zu unserem Angebot» gehört zu den Karten, nicht allein in den weissen Raum darunter.
+          const next = el.nextElementSibling;
+          const more = next?.classList.contains("aktionen") ? next : null;
+          more?.remove();
+          parts.push(`<section class="karten-band">${el.outerHTML}${more ? more.outerHTML : ""}</section>`);
+        } else parts.push(el.outerHTML);
         continue;
       }
     }

@@ -409,6 +409,8 @@ a:hover { color: var(--ink); }
 
 .karten-home { max-width: var(--breite); margin: 0 auto; }
 
+.karten-band .aktionen { margin: 2.5rem 0 0; }
+
 .karten-seite {
   max-width: calc(var(--breite) + 2 * var(--rand));
   margin: 3rem auto;
