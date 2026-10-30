@@ -923,7 +923,6 @@ html.cookie-ok .cookies { display: none; }
 
   .kontakt-mobil { display: inline-block; margin-top: 0.6rem; }
 
-  .karten,
   .kontakt-grid,
   .impressum-reihe,
   .spalten,
@@ -946,7 +945,11 @@ html.cookie-ok .cookies { display: none; }
 
   .blaettern { grid-column: 1; }
 
-  .karte { aspect-ratio: 16 / 7; }
+  .karten { gap: 1rem; }
+
+  .karte { padding: 1rem 1.1rem; font-size: 1.15rem; }
+
+  .karte::after { padding-left: 0.5rem; }
 }
 
 @media (max-width: 767px) {
@@ -966,6 +969,10 @@ html.cookie-ok .cookies { display: none; }
   .band .aktionen { grid-column: 1; grid-row: auto; margin-top: 1.5rem; }
 
   .feld-reihe { grid-template-columns: 1fr; gap: 0; }
+
+  .karten { grid-template-columns: 1fr; }
+
+  .karte { aspect-ratio: 16 / 7; padding: 1.4rem 1.5rem; font-size: 1.45rem; }
 
   .fuss-innen { flex-direction: column; align-items: flex-start; }
 
