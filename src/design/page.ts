@@ -87,6 +87,7 @@ export function pageShell(view: PageView): string {
   <link rel="stylesheet" href="/heft.css">
 </head>
 <body>
+  <a class="springen" href="#inhalt">Zum Inhalt springen</a>
   <header class="kopf">
     <div class="kopf-innen">
       <a class="logo" href="/"><img src="/brand/logo.svg" alt="Advocat Finanz" width="231" height="50"></a>
@@ -98,7 +99,7 @@ export function pageShell(view: PageView): string {
       <button class="burger" type="button" aria-expanded="false" aria-controls="menu" aria-label="Menü"><span></span><span></span><span></span></button>
     </div>
   </header>
-  <main>${view.main}</main>
+  <main id="inhalt" tabindex="-1">${view.main}</main>
   <footer class="fuss">
     <div class="fuss-innen">
       <div class="fuss-text">
