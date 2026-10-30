@@ -38,6 +38,45 @@
     });
   }
 
+  // Bilder im Newsletter, die kleiner als ihre echte Grösse erscheinen (z.B. Tabellen auf dem
+  // Handy), lassen sich antippen und in voller Grösse ansehen.
+  var zoomDialog = null;
+  function openZoom(image) {
+    if (!zoomDialog) {
+      zoomDialog = document.createElement("dialog");
+      zoomDialog.className = "bild-gross";
+      zoomDialog.setAttribute("aria-label", "Bild in voller Grösse");
+      zoomDialog.innerHTML = '<button type="button" class="bild-gross-zu" aria-label="Schliessen">×</button><div class="bild-gross-flaeche"></div>';
+      zoomDialog.addEventListener("click", function (event) {
+        if (event.target === zoomDialog || event.target.closest(".bild-gross-zu")) zoomDialog.close();
+      });
+      document.body.appendChild(zoomDialog);
+    }
+    var copy = document.createElement("img");
+    copy.src = image.currentSrc || image.src;
+    copy.alt = image.alt;
+    copy.width = image.naturalWidth;
+    zoomDialog.querySelector(".bild-gross-flaeche").replaceChildren(copy);
+    zoomDialog.showModal();
+  }
+  function markZoomable(image) {
+    if (image.closest("a, .bild-zoom")) return;
+    if (image.naturalWidth < image.clientWidth * 1.3) return;
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "bild-zoom";
+    button.setAttribute("aria-label", "Bild vergrössern" + (image.alt ? ": " + image.alt : ""));
+    image.replaceWith(button);
+    button.appendChild(image);
+    button.addEventListener("click", function () {
+      openZoom(image);
+    });
+  }
+  document.querySelectorAll(".einzel .prosa img").forEach(function (image) {
+    if (image.complete) markZoomable(image);
+    else image.addEventListener("load", function () { markZoomable(image); }, { once: true });
+  });
+
   var indexNode = document.getElementById("suchindex");
   var search = document.querySelector(".suche");
   var list = document.querySelector(".archiv .beitraege");
