@@ -595,13 +595,28 @@ function layoutKontakt(root: HTMLElement): string {
   return `${wrap.outerHTML}${map}`;
 }
 
+/** Ein Newsletter als Karte; der Titellink deckt die ganze Karte ab. */
+function teaserCard(teaser: Teaser): string {
+  return `<article class="teaser"><p class="post-meta"><time datetime="${esc(teaser.datum)}">${esc(shortDate(teaser.datum))}</time></p><h3 class="teaser-titel"><a href="${esc(teaser.href)}">${esc(teaser.titel)}</a></h3>${teaser.excerpt ? `<p class="teaser-text">${esc(teaser.excerpt)}</p>` : ""}<span class="teaser-mehr" aria-hidden="true">Weiterlesen →</span></article>`;
+}
+
+/** «Unsere Neuigkeiten»: die drei neuesten als Kartenreihe in voller Breite, «Mehr Neuigkeiten» darunter. */
 function insertTeasers(root: HTMLElement, teasers: Teaser[]): void {
   for (const heading of root.querySelectorAll("h1,h2,h3")) {
     if (!/^unsere neuigkeiten$/i.test(plain(heading))) continue;
-    const block = root.ownerDocument.createElement("div");
-    block.className = "beitraege";
-    block.innerHTML = teasers.slice(0, 3).map(articleHtml).join("");
-    heading.parentElement?.insertBefore(block, heading.nextSibling);
+    const doc = root.ownerDocument;
+    const next = heading.nextElementSibling;
+    const more = next?.classList.contains("aktionen") ? next : null;
+    const grid = doc.createElement("div");
+    grid.className = "teaser-raster";
+    grid.innerHTML = teasers.slice(0, 3).map(teaserCard).join("");
+    const title = doc.createElement("h2");
+    title.textContent = plain(heading);
+    const nodes: Element[] = [title, grid];
+    if (more) nodes.push(more);
+    heading.replaceWith(title);
+    section(doc, false, nodes);
+    title.closest(".abschnitt")?.classList.add("neuigkeiten-start");
     break;
   }
   for (const heading of root.querySelectorAll("h1,h2")) {

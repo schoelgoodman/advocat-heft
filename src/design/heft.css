@@ -515,6 +515,65 @@ a:hover { color: var(--ink); }
 
 .einzel .prosa p { font-size: 17px; }
 
+/* Neuigkeiten auf der Startseite */
+
+.teaser-raster {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.5rem;
+}
+
+.teaser {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 1.6rem 1.6rem 1.4rem;
+  border: 1px solid var(--line);
+  border-radius: var(--rund);
+  background: #fff;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.teaser:hover {
+  border-color: var(--gold);
+  box-shadow: 0 10px 30px rgba(20, 18, 15, 0.08);
+  transform: translateY(-2px);
+}
+
+.teaser .post-meta { margin: 0 0 0.6rem; }
+
+.abschnitt .teaser-titel {
+  margin: 0 0 0.8rem;
+  font-size: 1.3rem;
+  line-height: 1.3;
+}
+
+.teaser-titel a { color: var(--ink); text-decoration: none; }
+
+/* Die ganze Karte ist der Link. */
+.teaser-titel a::after { content: ""; position: absolute; inset: 0; }
+
+.teaser-text {
+  display: -webkit-box;
+  margin: 0 0 1.2rem;
+  overflow: hidden;
+  font-size: 15px;
+  line-height: 1.65;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
+.teaser-mehr {
+  margin-top: auto;
+  color: var(--gold-dark);
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.teaser:hover .teaser-mehr { color: var(--ink); }
+
+.neuigkeiten-start .aktionen { margin: 2.5rem 0 0; }
+
 /* Kontakt-Band */
 
 .band {
@@ -945,6 +1004,7 @@ a:hover { color: var(--ink); }
 
   .kontakt-grid,
   .impressum-reihe,
+  .teaser-raster,
   .spalten,
   .archiv { grid-template-columns: 1fr; }
 
