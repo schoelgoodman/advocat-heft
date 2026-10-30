@@ -89,7 +89,7 @@ export function pageShell(view: PageView): string {
 <body>
   <header class="kopf">
     <div class="kopf-innen">
-      <a class="logo" href="/"><img src="/media/Logo_Advocat_Finanz_2c.png" alt="Advocat Finanz" width="231" height="50"></a>
+      <a class="logo" href="/"><img src="/brand/logo.svg" alt="Advocat Finanz" width="231" height="50"></a>
       <nav id="menu" class="nav" aria-label="Hauptnavigation">
         ${links}
         <a class="btn btn-solid kontakt-mobil" href="/kontakt">Kontakt</a>
