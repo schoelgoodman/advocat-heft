@@ -440,6 +440,17 @@ function leistungsSpalten(root: HTMLElement): void {
   close();
 }
 
+/** Sprungmenü unter dem Titelbild: je Leistungsabschnitt (Text links, Leistungen rechts) ein Link. */
+function sprungMenu(root: HTMLElement): string {
+  const links: string[] = [];
+  for (const heading of root.querySelectorAll(".spalten-2-1 > .spalte:first-child > h2:first-child")) {
+    const id = heading.getAttribute("id");
+    if (id) links.push(`<a href="#${esc(id)}">${esc(plain(heading))}</a>`);
+  }
+  if (links.length < 2) return "";
+  return `<nav class="sprung" aria-label="Auf dieser Seite"><div class="sprung-innen">${links.join("")}</div></nav>`;
+}
+
 function headingNamed(root: HTMLElement, pattern: RegExp): HTMLElement | null {
   return ([...root.children] as HTMLElement[]).find((el) => headingLevel(el) === 2 && pattern.test(plain(el))) ?? null;
 }
@@ -822,7 +833,7 @@ export function renderDocument(input: RenderInput): PageView {
       view.main = `${hero}${layoutKontakt(root)}`;
       return view;
     }
-    view.main = `${hero}${serializeFlow(root)}`;
+    view.main = `${hero}${sprungMenu(root)}${serializeFlow(root)}`;
     return view;
   } finally {
     window.happyDOM.close();
