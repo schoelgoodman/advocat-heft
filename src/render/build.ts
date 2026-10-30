@@ -7,7 +7,7 @@ import { pageShell } from "../design/page.ts";
 import { robotsTxt, sitemapXml, type SitemapEntry } from "../design/seo.ts";
 import { repoRoot, siteDir, contentDir } from "../paths.ts";
 import { markdownToHtml } from "./crepe.ts";
-import { publishMedia } from "./media.ts";
+import { publishMedia, pruneVariants, VARIANT_DIR } from "./media.ts";
 
 const FONTS: Record<string, string> = {
   "manrope-400.woff2": "@fontsource/manrope/files/manrope-latin-400-normal.woff2",
@@ -50,9 +50,10 @@ async function copyMediaDir(from: string, to: string): Promise<void> {
 }
 
 /** Leert den Ordner, lässt ihn aber stehen. Auf Neo ist SITE_DIR ein Bind-Mount, rmdir gibt dort EBUSY. */
-async function emptyDir(dir: string): Promise<void> {
+async function emptyDir(dir: string, keep = new Set<string>()): Promise<void> {
   await fs.mkdir(dir, { recursive: true });
   for (const name of await fs.readdir(dir)) {
+    if (keep.has(name)) continue;
     await fs.rm(path.join(dir, name), { recursive: true, force: true });
   }
 }
@@ -146,7 +147,9 @@ export async function buildSite(): Promise<{ pages: number; index: string }> {
   const briefs = briefsNewestFirst(docs);
   const teasers = teasersFor(briefs);
   const site = siteDir();
-  await emptyDir(site);
+  // Die Bildfassungen bleiben stehen: sie neu zu rechnen kostet beim Start eine halbe Minute.
+  await emptyDir(site, new Set(["media"]));
+  await emptyDir(path.join(site, "media"), new Set([VARIANT_DIR]));
 
   const media = path.join(contentDir(), "media");
   try {
@@ -154,6 +157,7 @@ export async function buildSite(): Promise<{ pages: number; index: string }> {
   } catch {
     // Noch keine Bilder.
   }
+  await pruneVariants(path.join(site, "media"), new Set(await fs.readdir(media).catch(() => [] as string[])));
   await copyAssets();
 
   let index = "Willkommen";

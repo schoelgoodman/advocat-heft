@@ -1,5 +1,6 @@
 import { Window } from "happy-dom";
 import { publicPath, type Art } from "../content/document.ts";
+import { mediaVariants } from "../render/media.ts";
 import { clip, DEFAULT_DESCRIPTION, DEFAULT_IMAGE } from "./seo.ts";
 
 export interface Teaser {
@@ -156,8 +157,22 @@ function soloAnchor(el: Element): HTMLAnchorElement | null {
   return anchor;
 }
 
-function cssUrl(src: string): string {
-  return src.replaceAll("'", "%27").replaceAll("(", "%28").replaceAll(")", "%29");
+/** Bildbreite im Textfluss: Handy fast randlos, sonst die Textspalte. */
+const SIZES_PROSA = "(max-width: 820px) calc(100vw - 2.5rem), 760px";
+const SIZES_HERO = "(max-width: 767px) 100vw, min(1120px, 100vw - 7rem)";
+const SIZES_CARD = "(max-width: 767px) calc(100vw - 2.5rem), (max-width: 1240px) 33vw, 360px";
+
+/** `srcset` aus den kleineren Fassungen, oder leer: dann lädt der Browser das Original. */
+function srcset(src: string): string {
+  return mediaVariants(src).map((variant) => `${variant.url} ${variant.width}w`).join(", ");
+}
+
+/** Ein Hintergrundbild als echtes <img>, damit der Browser die passende Grösse wählt. */
+function coverImage(className: string, src: string, sizes: string, eager: boolean): string {
+  const set = srcset(src);
+  const responsive = set ? ` srcset="${esc(set)}" sizes="${sizes}"` : "";
+  const loading = eager ? ` fetchpriority="high"` : ` loading="lazy" decoding="async"`;
+  return `<img class="${className}" src="${esc(src)}"${responsive} alt=""${loading}>`;
 }
 
 function articleHtml(teaser: Teaser): string {
@@ -166,7 +181,7 @@ function articleHtml(teaser: Teaser): string {
 }
 
 function cardAnchor(src: string, label: string, href: string): string {
-  return `<a class="karte" href="${esc(href)}" style="--bild:url('${cssUrl(src)}')"><span>${esc(label)}</span></a>`;
+  return `<a class="karte" href="${esc(href)}">${coverImage("karte-bild", src, SIZES_CARD, false)}<span>${esc(label)}</span></a>`;
 }
 
 function standardCards(): string {
@@ -276,7 +291,7 @@ function takeHero(root: HTMLElement, input: RenderInput): string {
       sub = hyphenate(plain(subNode));
       subNode.remove();
     }
-    return `<section class="held held-start" style="background-image:linear-gradient(180deg, rgba(24,22,19,0.38) 0%, rgba(24,22,19,0.58) 100%), url('${cssUrl(src)}')"><div class="held-innen">${tree}<h1 class="held-titel">${esc(title)}</h1><p class="held-untertitel">${esc(sub)}</p></div></section>`;
+    return `<section class="held held-start">${coverImage("held-bild", src, SIZES_HERO, true)}<div class="held-innen">${tree}<h1 class="held-titel">${esc(title)}</h1><p class="held-untertitel">${esc(sub)}</p></div></section>`;
   }
 
   let title = input.titel;
@@ -285,7 +300,7 @@ function takeHero(root: HTMLElement, input: RenderInput): string {
     title = plain(heading);
     heading.remove();
   }
-  return `<section class="held held-seite" style="background-image:linear-gradient(180deg, rgba(24,22,19,0.38) 0%, rgba(24,22,19,0.58) 100%), url('${cssUrl(src)}')"><h1>${esc(title)}</h1></section>`;
+  return `<section class="held held-seite">${coverImage("held-bild", src, SIZES_HERO, true)}<h1>${esc(title)}</h1></section>`;
 }
 
 function extractCards(root: HTMLElement, home: boolean): void {
@@ -704,6 +719,11 @@ export function renderDocument(input: RenderInput): PageView {
       }
       if (!image.getAttribute("alt")) image.setAttribute("alt", "");
       if (image.getAttribute("title") === "") image.removeAttribute("title");
+      const set = srcset(image.getAttribute("src") ?? "");
+      if (set) {
+        image.setAttribute("srcset", set);
+        image.setAttribute("sizes", SIZES_PROSA);
+      }
     }
     const firstImage = root.querySelector("img");
     const firstSrc = firstImage?.getAttribute("src");

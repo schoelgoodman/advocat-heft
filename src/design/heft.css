@@ -227,11 +227,33 @@ a:hover { color: var(--ink); }
 /* Bühne */
 
 .held {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   width: min(var(--breite), 100% - 2 * var(--rand));
   margin: 1.5rem auto 0;
-  background-size: cover;
-  background-position: center;
+  background: var(--ink);
   color: #fff;
+}
+
+.held-bild,
+.karte-bild {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: cover;
+}
+
+/* Abdunkeln, damit die Schrift auf jedem Bild lesbar bleibt. */
+.held::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(180deg, rgba(24, 22, 19, 0.38) 0%, rgba(24, 22, 19, 0.58) 100%);
 }
 
 .held-start {
@@ -405,9 +427,7 @@ a:hover { color: var(--ink); }
   font-size: 1.45rem;
   line-height: 1.2;
   text-decoration: none;
-  background-image: linear-gradient(180deg, rgba(20, 18, 15, 0) 35%, rgba(20, 18, 15, 0.62) 100%), var(--bild);
-  background-position: center;
-  background-size: cover;
+  background: var(--ink);
   isolation: isolate;
 }
 
@@ -416,7 +436,8 @@ a:hover { color: var(--ink); }
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: rgba(20, 18, 15, 0);
+  background-color: rgba(20, 18, 15, 0);
+  background-image: linear-gradient(180deg, rgba(20, 18, 15, 0) 35%, rgba(20, 18, 15, 0.62) 100%);
   transition: background-color 0.25s ease;
 }
 
@@ -434,7 +455,7 @@ a:hover { color: var(--ink); }
 
 .karte:hover { color: #fff; }
 
-.karte:hover::before { background: rgba(20, 18, 15, 0.22); }
+.karte:hover::before { background-color: rgba(20, 18, 15, 0.22); }
 
 .karte:hover::after { opacity: 1; transform: translateX(4px); }
 
