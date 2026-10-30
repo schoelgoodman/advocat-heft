@@ -515,6 +515,40 @@ a:hover { color: var(--ink); }
 
 .einzel .prosa p { font-size: 17px; }
 
+.zurueck { margin: 0 0 1.5rem; font-size: 14.5px; }
+
+.zurueck a { color: var(--muted); text-decoration: none; }
+
+.zurueck a:hover { color: var(--ink); }
+
+.brief-nav {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-top: 3rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--line);
+}
+
+.brief-nav a {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1.1rem 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: var(--rund);
+  text-decoration: none;
+  transition: border-color 0.2s ease;
+}
+
+.brief-nav a:hover { border-color: var(--gold); }
+
+.brief-nav-weiter { grid-column: 2; text-align: right; }
+
+.brief-nav-label { color: var(--muted); font-size: 13.5px; font-weight: 500; }
+
+.brief-nav-titel { color: var(--ink); font-family: var(--serif); font-size: 1.1rem; line-height: 1.35; }
+
 /* Neuigkeiten auf der Startseite */
 
 .teaser-raster {
@@ -1082,6 +1116,12 @@ a:hover { color: var(--ink); }
   .band .aktionen { grid-column: 1; grid-row: auto; margin-top: 1.5rem; }
 
   .feld-reihe { grid-template-columns: 1fr; gap: 0; }
+
+  .brief-nav { grid-template-columns: 1fr; }
+
+  .brief-nav-weiter { grid-column: 1; text-align: left; }
+
+  .brief-nav > span:empty { display: none; }
 
   .karte-frame { height: 320px; }
 

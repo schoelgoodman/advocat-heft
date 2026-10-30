@@ -678,6 +678,18 @@ function describe(root: HTMLElement): string {
   return text ? clip(text) : "";
 }
 
+/** Am Ende eines Newsletters: der vorherige und der nächste. Die Liste ist neueste zuerst. */
+function briefNav(input: RenderInput): string {
+  const here = publicPath(input.rel);
+  const index = input.teasers.findIndex((teaser) => teaser.href === here);
+  if (index === -1) return "";
+  const link = (teaser: Teaser | undefined, className: string, label: string) =>
+    teaser
+      ? `<a class="${className}" href="${esc(teaser.href)}"><span class="brief-nav-label">${label}</span><span class="brief-nav-titel">${esc(teaser.titel)}</span></a>`
+      : "<span></span>";
+  return `<nav class="brief-nav" aria-label="Weitere Newsletter">${link(input.teasers[index + 1], "brief-nav-zurueck", "← Vorheriger Newsletter")}${link(input.teasers[index - 1], "brief-nav-weiter", "Nächster Newsletter →")}</nav>`;
+}
+
 function pageHref(page: number): string {
   return page <= 1 ? "/neuigkeiten" : `/neuigkeiten/page/${page}`;
 }
@@ -765,7 +777,7 @@ export function renderDocument(input: RenderInput): PageView {
     const hero = takeHero(root, input);
     if (input.art === "brief") {
       view.article = { datum: input.datum };
-      view.main = `<article class="beitrag einzel"><h1>${esc(input.titel)}</h1><p class="post-meta"><time datetime="${esc(input.datum)}">${esc(longDate(input.datum))}</time></p><div class="prosa">${root.innerHTML}</div></article>${standardCards()}${standardBand()}`;
+      view.main = `<article class="beitrag einzel"><p class="zurueck"><a href="/neuigkeiten">← Alle Neuigkeiten</a></p><h1>${esc(input.titel)}</h1><p class="post-meta"><time datetime="${esc(input.datum)}">${esc(longDate(input.datum))}</time></p><div class="prosa">${root.innerHTML}</div>${briefNav(input)}</article>${standardCards()}${standardBand()}`;
       return view;
     }
     if (input.rel === "kapitel/neuigkeiten.md") {
