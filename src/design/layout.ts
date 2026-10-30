@@ -211,11 +211,11 @@ function standardBand(): string {
 function formHtml(): string {
   return `<form class="anfrage" action="/kontakt" method="post" novalidate>
     <div class="feld-reihe">
-      <label class="feld"><span>Vorname</span><input name="vorname" autocomplete="given-name" maxlength="100" required></label>
-      <label class="feld"><span>Name</span><input name="name" autocomplete="family-name" maxlength="100" required></label>
+      <label class="feld"><span>Vorname</span><input name="vorname" autocomplete="given-name" maxlength="100" required aria-describedby="fehler-vorname"><span class="feld-fehler" id="fehler-vorname" hidden></span></label>
+      <label class="feld"><span>Name</span><input name="name" autocomplete="family-name" maxlength="100" required aria-describedby="fehler-name"><span class="feld-fehler" id="fehler-name" hidden></span></label>
     </div>
-    <label class="feld"><span>E-Mail-Adresse</span><input name="email" type="email" autocomplete="email" maxlength="200" required></label>
-    <label class="feld"><span>Nachricht</span><textarea name="nachricht" rows="7" maxlength="10000" required></textarea></label>
+    <label class="feld"><span>E-Mail-Adresse</span><input name="email" type="email" autocomplete="email" maxlength="200" required aria-describedby="fehler-email"><span class="feld-fehler" id="fehler-email" hidden></span></label>
+    <label class="feld"><span>Nachricht</span><textarea name="nachricht" rows="7" maxlength="10000" required aria-describedby="fehler-nachricht"></textarea><span class="feld-fehler" id="fehler-nachricht" hidden></span></label>
     <label class="feld-falle" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
     <div class="anfrage-fuss">
       <button class="btn btn-solid" type="submit">Nachricht senden</button>

@@ -164,15 +164,48 @@
       if (thanks) thanks.hidden = true;
     }
 
+    // Fehler direkt am Feld: roter Rahmen, Satz darunter, vorgelesen über aria-describedby.
+    var MISSING = {
+      vorname: "Bitte geben Sie Ihren Vornamen ein.",
+      name: "Bitte geben Sie Ihren Namen ein.",
+      email: "Bitte geben Sie Ihre E-Mail-Adresse ein.",
+      nachricht: "Bitte schreiben Sie uns eine Nachricht.",
+    };
+    function fieldError(name, message) {
+      var field = form.elements[name];
+      var note = document.getElementById("fehler-" + name);
+      if (!field || !note) return;
+      note.textContent = message || "";
+      note.hidden = !message;
+      if (message) field.setAttribute("aria-invalid", "true");
+      else field.removeAttribute("aria-invalid");
+    }
+    Object.keys(MISSING).forEach(function (name) {
+      var field = form.elements[name];
+      if (field) field.addEventListener("input", function () {
+        if (field.getAttribute("aria-invalid")) fieldError(name, "");
+      });
+    });
+
     form.addEventListener("submit", function (event) {
       event.preventDefault();
       var data = new FormData(form);
       var email = String(data.get("email") || "").trim();
-      var complete = ["vorname", "name", "email", "nachricht"].every(function (name) {
-        return String(data.get(name) || "").trim();
+      var first = null;
+      Object.keys(MISSING).forEach(function (name) {
+        var value = String(data.get(name) || "").trim();
+        var message = !value
+          ? MISSING[name]
+          : name === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+            ? "Diese E-Mail-Adresse scheint nicht zu stimmen."
+            : "";
+        fieldError(name, message);
+        if (message && !first) first = form.elements[name];
       });
-      if (!complete || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        fail("Bitte füllen Sie alle Felder aus.");
+      if (first) {
+        if (error) error.hidden = true;
+        if (thanks) thanks.hidden = true;
+        first.focus();
         return;
       }
       var payload = {

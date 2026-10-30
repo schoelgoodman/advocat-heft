@@ -975,6 +975,12 @@ h2[id] { scroll-margin-top: 96px; }
 
 .anfrage textarea { min-height: 170px; resize: vertical; }
 
+.anfrage [aria-invalid="true"] { border-color: #a1453a; }
+
+.anfrage [aria-invalid="true"]:focus { border-color: #a1453a; box-shadow: 0 0 0 3px rgba(161, 69, 58, 0.18); }
+
+.feld .feld-fehler { margin: 0.4rem 0 0; color: #8f3a30; font-size: 14px; font-weight: 500; }
+
 .anfrage input:focus,
 .anfrage textarea:focus {
   outline: none;
