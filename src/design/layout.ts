@@ -193,8 +193,10 @@ function knopfText(label: string): string {
   return label.replace(/^kontaktieren sie uns/i, "Kontaktieren Sie uns");
 }
 
+/** Neben dem Knopf Telefon und Mail: auf dem Handy ein Tipp bis zum Anruf. */
 function bandHtml(heading: string, paragraph: string, label: string, href: string): string {
-  return `<aside class="band"><div class="band-innen"><h2>${esc(heading)}</h2><p>${esc(paragraph)}</p><p class="aktionen"><a class="btn btn-solid" href="${esc(href)}">${esc(knopfText(label))}</a></p></div></aside>`;
+  const direkt = `<p class="band-direkt"><a href="tel:+41712423030">+41 71 242 30 30</a><a href="mailto:office@advocat-finanz.ch">office@advocat-finanz.ch</a></p>`;
+  return `<aside class="band"><div class="band-innen"><h2>${esc(heading)}</h2><p>${esc(paragraph)}</p><div class="aktionen"><a class="btn btn-solid" href="${esc(href)}">${esc(knopfText(label))}</a>${direkt}</div></div></aside>`;
 }
 
 function standardBand(): string {
