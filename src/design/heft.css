@@ -905,6 +905,8 @@ html.cookie-ok .cookies { display: none; }
 
   .nav a { font-size: 16px; }
 
+  .nav a.btn { padding: 12px 22px; font-size: 12.5px; }
+
   .kontakt-mobil { display: inline-block; margin-top: 0.6rem; }
 
   .karten,
