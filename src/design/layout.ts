@@ -689,14 +689,19 @@ function archiveHtml(input: RenderInput): string {
   const recent = input.teasers.slice(0, 5).map((teaser) =>
     `<li><a href="${esc(teaser.href)}">${esc(teaser.titel)}</a></li>`,
   ).join("");
-  const older = page < pages ? `<a class="aelter" href="${pageHref(page + 1)}">« Ältere Einträge</a>` : "<span></span>";
-  const newer = page > 1 ? `<a class="neuer" href="${pageHref(page - 1)}">Neuere Einträge »</a>` : "<span></span>";
+  const numbers = Array.from({ length: pages }, (_, index) => index + 1).map((n) =>
+    n === page
+      ? `<span class="seitenzahl" aria-current="page">${n}</span>`
+      : `<a class="seitenzahl" href="${pageHref(n)}" aria-label="Seite ${n}">${n}</a>`,
+  ).join("");
+  const newer = page > 1 ? `<a class="neuer" href="${pageHref(page - 1)}">← Neuere</a>` : "";
+  const older = page < pages ? `<a class="aelter" href="${pageHref(page + 1)}">Ältere →</a>` : "";
   const index = JSON.stringify(
     input.teasers.map((teaser) => ({ ...teaser, datumAnzeige: shortDate(teaser.datum) })),
   ).replaceAll("<", "\\u003c");
   return `<div class="archiv">
     <div class="beitraege">${slice.map(articleHtml).join("")}</div>
-    <nav class="blaettern" aria-label="Seiten">${older}${newer}</nav>
+    ${pages > 1 ? `<nav class="blaettern" aria-label="Seiten">${newer}${numbers}${older}</nav>` : ""}
     <aside class="seite">
       <form class="suche" action="/neuigkeiten" method="get" role="search">
         <input type="search" name="s" placeholder="Beiträge durchsuchen" aria-label="Suchen">

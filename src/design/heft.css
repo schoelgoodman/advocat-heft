@@ -642,16 +642,44 @@ a:hover { color: var(--ink); }
 
 .blaettern {
   display: flex;
+  flex-wrap: wrap;
   grid-column: 1;
-  justify-content: space-between;
+  align-items: center;
+  gap: 0.4rem;
   margin-top: 0.5rem;
   font-family: var(--ui);
-  font-size: 14px;
+  font-size: 14.5px;
 }
 
-.blaettern a { color: var(--ink); text-decoration: none; }
+.blaettern a,
+.blaettern span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  height: 40px;
+  padding: 0 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: var(--rund);
+  color: var(--ink);
+  text-decoration: none;
+}
 
-.blaettern a:hover { color: var(--gold-dark); }
+.blaettern[hidden] { display: none; }
+
+.blaettern a:hover { border-color: var(--ink); }
+
+.blaettern [aria-current="page"] { border-color: var(--ink); background: var(--ink); color: #fff; }
+
+/* Im Archiv reichen drei Zeilen Vorschau; der Newsletter selbst ist einen Klick entfernt. */
+.archiv .post-content p {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.archiv .beitrag { padding-bottom: 1.6rem; margin-bottom: 1.6rem; }
 
 .seite {
   grid-column: 2;
