@@ -89,14 +89,14 @@ export function shortDate(iso: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
   if (!match) return "";
   const month = SHORT_MONTHS[Number(match[2]) - 1] ?? "";
-  return `${month} ${Number(match[3])}, ${match[1]}`;
+  return `${Number(match[3])}. ${month} ${match[1]}`;
 }
 
 export function longDate(iso: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
   if (!match) return "";
   const month = LONG_MONTHS[Number(match[2]) - 1] ?? "";
-  return `${match[3]}. ${month} ${match[1]}`;
+  return `${Number(match[3])}. ${month} ${match[1]}`;
 }
 
 export function excerptFromMarkdown(markdown: string, limit = 490): string {
