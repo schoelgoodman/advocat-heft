@@ -44,11 +44,11 @@
 :root {
   --ink: #1f1e1b;
   --text: #4b4944;
-  --muted: #86837b;
+  --muted: #716e67;
   --line: #e4e0d6;
   --paper: #f6f4ee;
   --gold: #baaa80;
-  --gold-dark: #8a7745;
+  --gold-dark: #7c6b3e;
   --serif: Marcellus, Georgia, serif;
   --sans: Manrope, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
   --ui: var(--sans);
