@@ -981,6 +981,21 @@ html.cookie-ok .cookies { display: none; }
 
   .fuss-innen { flex-direction: column; align-items: flex-start; }
 
+  /* Fuss: Adresse, Telefon und Mail je auf eine Zeile, Rechtliches als Reihe. */
+  .fuss-text .trenner { display: none; }
+
+  .fuss-text p:first-child a { display: block; padding: 0.2rem 0; }
+
+  .fuss-text strong { display: block; margin-bottom: 0.3rem; }
+
+  .fuss-text strong + br { display: none; }
+
+  .copy { display: flex; flex-wrap: wrap; gap: 0.2rem 1.1rem; margin-top: 1rem; }
+
+  .copy span:first-child { flex-basis: 100%; }
+
+  .copy a { padding: 0.35rem 0; }
+
   .cookies { right: 0.75rem; bottom: 0.75rem; left: 0.75rem; max-width: none; }
 }
 

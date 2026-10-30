@@ -103,8 +103,8 @@ export function pageShell(view: PageView): string {
     <div class="fuss-innen">
       <div class="fuss-text">
         <p><strong>Advocat Finanz AG</strong><br>
-        <a href="https://maps.app.goo.gl/poLBfgcPVnj2UWaW9">Rosenbergstrasse 50 | CH-9000 St. Gallen</a> | <a href="tel:+41712423030">Tel. +41 71 242 30 30</a> | <a href="mailto:office@advocat-finanz.ch">office@advocat-finanz.ch</a></p>
-        <p class="copy">©${year} Advocat Finanz AG | <a href="/impressum">Impressum</a> | <a href="/disclaimer">Disclaimer</a> | <a href="/datenschutz">Datenschutz</a></p>
+        <a href="https://maps.app.goo.gl/poLBfgcPVnj2UWaW9">Rosenbergstrasse 50 | CH-9000 St. Gallen</a><span class="trenner"> | </span><a href="tel:+41712423030">Tel. +41 71 242 30 30</a><span class="trenner"> | </span><a href="mailto:office@advocat-finanz.ch">office@advocat-finanz.ch</a></p>
+        <p class="copy"><span>©${year} Advocat Finanz AG</span><span class="trenner"> | </span><a href="/impressum">Impressum</a><span class="trenner"> | </span><a href="/disclaimer">Disclaimer</a><span class="trenner"> | </span><a href="/datenschutz">Datenschutz</a></p>
       </div>
       <a class="fuss-claim" href="/"><img src="/brand/claim-footer.png" alt="Vermögen und Recht – ein Leben lang" width="240" height="48" loading="lazy"></a>
     </div>
