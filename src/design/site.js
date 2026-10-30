@@ -1,17 +1,17 @@
 (function () {
-  function acceptCookies() {
-    try {
-      localStorage.setItem("advocat-cookie", "1");
-    } catch (error) {
-      /* Privater Modus ohne Speicher. */
-    }
-    document.documentElement.classList.add("cookie-ok");
+  // Google Maps lädt erst auf Klick; vorher geht nichts an Google.
+  var mapButton = document.querySelector(".karte-laden");
+  if (mapButton) {
+    mapButton.addEventListener("click", function () {
+      var holder = mapButton.closest(".karte-platzhalter");
+      var frame = document.createElement("iframe");
+      frame.className = "karte-frame";
+      frame.src = holder.getAttribute("data-src");
+      frame.title = holder.getAttribute("data-title");
+      frame.setAttribute("referrerpolicy", "no-referrer-when-downgrade");
+      holder.replaceWith(frame);
+    });
   }
-
-  var cookieOk = document.querySelector(".cookie-ok");
-  var cookieClose = document.querySelector(".cookie-x");
-  if (cookieOk) cookieOk.addEventListener("click", acceptCookies);
-  if (cookieClose) cookieClose.addEventListener("click", acceptCookies);
 
   var burger = document.querySelector(".burger");
   var menu = document.getElementById("menu");

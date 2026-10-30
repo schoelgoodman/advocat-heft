@@ -84,7 +84,6 @@ export function pageShell(view: PageView): string {
   <link rel="apple-touch-icon" href="/brand/webclip.png">
   <link rel="preload" href="/fonts/manrope-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/heft.css">
-  <script>try{if(localStorage.getItem("advocat-cookie")==="1")document.documentElement.classList.add("cookie-ok")}catch(e){}</script>
 </head>
 <body>
   <header class="kopf">
@@ -109,11 +108,6 @@ export function pageShell(view: PageView): string {
       <a class="fuss-claim" href="/"><img src="/brand/claim-footer.png" alt="Vermögen und Recht – ein Leben lang" width="240" height="48" loading="lazy"></a>
     </div>
   </footer>
-  <div id="cookie-notice" class="cookies" role="dialog" aria-label="Cookie Compliance">
-    <p>Diese Website benutzt Cookies. Wenn Sie die Website weiter nutzen, gehen wir von Ihrem Einverständnis aus.</p>
-    <button type="button" class="cookie-ok">OK</button>
-    <button type="button" class="cookie-x" aria-label="Schliessen">×</button>
-  </div>
   <script src="/site.js" defer></script>
 </body>
 </html>

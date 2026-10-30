@@ -62,6 +62,8 @@ const ADDRESS_LINES: Record<string, string[]> = {
   ],
 };
 
+const MAPS_LINK = "https://maps.app.goo.gl/poLBfgcPVnj2UWaW9";
+
 const SHORT_MONTHS = ["Jan.", "Feb.", "März", "Apr.", "Mai", "Juni", "Juli", "Aug.", "Sep.", "Okt.", "Nov.", "Dez."];
 const LONG_MONTHS = [
   "Januar", "Februar", "März", "April", "Mai", "Juni",
@@ -229,13 +231,13 @@ function repair(root: HTMLElement, doc: Document): void {
     const anchor = soloAnchor(paragraph);
     const href = anchor?.getAttribute("href") ?? "";
     if (anchor && /google\.com\/maps\/embed|\/maps\/embed/.test(href)) {
-      const frame = doc.createElement("iframe");
-      frame.className = "karte-frame";
-      frame.setAttribute("src", href);
-      frame.setAttribute("title", "Advocat Finanz AG auf der Karte");
-      frame.setAttribute("loading", "lazy");
-      frame.setAttribute("referrerpolicy", "no-referrer-when-downgrade");
-      paragraph.replaceWith(frame);
+      // Die Karte lädt erst auf Klick (site.js), damit ohne Zustimmung nichts an Google geht.
+      const holder = doc.createElement("div");
+      holder.className = "karte-frame karte-platzhalter";
+      holder.setAttribute("data-src", href);
+      holder.setAttribute("data-title", "Advocat Finanz AG auf der Karte");
+      holder.innerHTML = `<p>Die Karte stammt von Google Maps. Erst wenn Sie sie laden, werden Daten an Google übertragen.</p><p><button type="button" class="btn btn-ghost karte-laden">Karte laden</button></p><p><a href="${MAPS_LINK}">In Google Maps öffnen</a></p>`;
+      paragraph.replaceWith(holder);
     }
   }
 }
@@ -548,7 +550,7 @@ function layoutImpressum(root: HTMLElement): string {
 }
 
 function layoutKontakt(root: HTMLElement): string {
-  const frame = root.querySelector("iframe");
+  const frame = root.querySelector(".karte-frame");
   frame?.remove();
   const kids = [...root.children] as HTMLElement[];
   const split = kids.findIndex((el) => headingLevel(el) > 0 && /^unser standort$/i.test(plain(el)));
