@@ -208,7 +208,14 @@ a:hover { color: var(--ink); }
   height: 1.5px;
   margin: 5px 0;
   background: var(--ink);
+  transition: transform 0.2s ease, opacity 0.2s ease;
 }
+
+.burger[aria-expanded="true"] span:nth-child(1) { transform: translateY(6.5px) rotate(45deg); }
+
+.burger[aria-expanded="true"] span:nth-child(2) { opacity: 0; }
+
+.burger[aria-expanded="true"] span:nth-child(3) { transform: translateY(-6.5px) rotate(-45deg); }
 
 /* Bühne */
 

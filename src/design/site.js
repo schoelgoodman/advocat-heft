@@ -16,9 +16,25 @@
   var burger = document.querySelector(".burger");
   var menu = document.getElementById("menu");
   if (burger && menu) {
-    burger.addEventListener("click", function () {
-      var open = menu.classList.toggle("offen");
+    function setMenu(open) {
+      menu.classList.toggle("offen", open);
       burger.setAttribute("aria-expanded", open ? "true" : "false");
+      burger.setAttribute("aria-label", open ? "Menü schliessen" : "Menü");
+    }
+    burger.addEventListener("click", function () {
+      setMenu(!menu.classList.contains("offen"));
+    });
+    menu.addEventListener("click", function (event) {
+      if (event.target.closest("a")) setMenu(false);
+    });
+    document.addEventListener("click", function (event) {
+      if (menu.classList.contains("offen") && !event.target.closest(".kopf")) setMenu(false);
+    });
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape" && menu.classList.contains("offen")) {
+        setMenu(false);
+        burger.focus();
+      }
     });
   }
 
