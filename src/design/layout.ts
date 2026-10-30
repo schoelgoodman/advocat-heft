@@ -279,8 +279,8 @@ function takeHero(root: HTMLElement, input: RenderInput): string {
     let sub = "Vermögen und recht - ein leben lang";
     const signet = firstElement(root);
     if (signet && isImgOnly(signet)) {
-      const alt = signet.querySelector("img")?.getAttribute("alt") || "Advocat Finanz Webclip";
-      tree = `<img class="held-baum" src="${esc(imageSrc(signet))}" alt="${esc(alt)}" width="256" height="256">`;
+      // Schmuck: der Titel darunter sagt schon «Advocat Finanz». Screenreader überspringen den Baum.
+      tree = `<img class="held-baum" src="${esc(imageSrc(signet))}" alt="" width="256" height="256">`;
       signet.remove();
     }
     const titleNode = firstElement(root);
