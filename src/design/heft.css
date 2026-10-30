@@ -55,6 +55,7 @@
   --breite: 1120px;
   --rand: clamp(1.25rem, 4vw, 3.5rem);
   --rund: 6px;
+  --rund-gross: 12px;
 }
 
 *,
@@ -232,6 +233,7 @@ a:hover { color: var(--ink); }
   overflow: hidden;
   width: min(var(--breite), 100% - 2 * var(--rand));
   margin: 1.5rem auto 0;
+  border-radius: var(--rund-gross);
   background: var(--ink);
   color: #fff;
 }
@@ -295,7 +297,7 @@ a:hover { color: var(--ink); }
 .held-seite {
   display: flex;
   align-items: flex-end;
-  min-height: 300px;
+  min-height: 260px;
   padding: 3rem clamp(1.5rem, 4vw, 3rem);
 }
 
@@ -429,6 +431,7 @@ a:hover { color: var(--ink); }
   font-size: 1.45rem;
   line-height: 1.2;
   text-decoration: none;
+  border-radius: var(--rund-gross);
   background: var(--ink);
   isolation: isolate;
 }
@@ -1100,11 +1103,11 @@ a:hover { color: var(--ink); }
 }
 
 @media (max-width: 767px) {
-  .held { width: 100%; margin-top: 0; }
+  .held { width: 100%; margin-top: 0; border-radius: 0; }
 
-  .held-start { min-height: 60vh; padding: 4rem 1.25rem; }
+  .held-start { min-height: min(56vh, 480px); padding: 3.5rem 1.25rem; }
 
-  .held-seite { min-height: 220px; }
+  .held-seite { min-height: 180px; padding-bottom: 1.75rem; }
 
   .held-untertitel { font-size: 11.5px; letter-spacing: 0.18em; }
 
