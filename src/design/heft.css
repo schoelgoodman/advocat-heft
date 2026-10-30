@@ -934,16 +934,21 @@ html.cookie-ok .cookies { display: none; }
 
   .kontakt-grid { gap: 2.5rem; }
 
+  /* Suche zuoberst; «Neueste Beiträge» wiederholt nur die Liste darunter. */
   .seite {
     position: static;
     grid-column: 1;
-    grid-row: auto;
-    margin-top: 2rem;
-    padding-top: 2rem;
-    border-top: 1px solid var(--line);
+    grid-row: 1;
+    margin-bottom: 2.5rem;
   }
 
-  .blaettern { grid-column: 1; }
+  .archiv .beitraege { grid-row: 2; }
+
+  .blaettern { grid-row: 3; }
+
+  .seite .suche { margin-bottom: 0; }
+
+  .seite section { display: none; }
 
   .karten { gap: 1rem; }
 
