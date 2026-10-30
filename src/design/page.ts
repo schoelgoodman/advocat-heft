@@ -83,6 +83,7 @@ export function pageShell(view: PageView): string {
   <link rel="icon" href="/brand/favicon.png" type="image/png" sizes="32x32">
   <link rel="apple-touch-icon" href="/brand/webclip.png">
   <link rel="preload" href="/fonts/manrope-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/marcellus-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/heft.css">
 </head>
 <body>
