@@ -678,6 +678,12 @@ function describe(root: HTMLElement): string {
   return text ? clip(text) : "";
 }
 
+/** Lesezeit bei rund 200 Wörtern pro Minute, mindestens eine. */
+function readingMinutes(root: HTMLElement): number {
+  const words = plain(root).split(" ").filter(Boolean).length;
+  return Math.max(1, Math.round(words / 200));
+}
+
 /** Am Ende eines Newsletters: der vorherige und der nächste. Die Liste ist neueste zuerst. */
 function briefNav(input: RenderInput): string {
   const here = publicPath(input.rel);
@@ -777,7 +783,7 @@ export function renderDocument(input: RenderInput): PageView {
     const hero = takeHero(root, input);
     if (input.art === "brief") {
       view.article = { datum: input.datum };
-      view.main = `<article class="beitrag einzel"><p class="zurueck"><a href="/neuigkeiten">← Alle Neuigkeiten</a></p><h1>${esc(input.titel)}</h1><p class="post-meta"><time datetime="${esc(input.datum)}">${esc(longDate(input.datum))}</time></p><div class="prosa">${root.innerHTML}</div>${briefNav(input)}</article>${standardCards()}${standardBand()}`;
+      view.main = `<article class="beitrag einzel"><p class="zurueck"><a href="/neuigkeiten">← Alle Neuigkeiten</a></p><h1>${esc(input.titel)}</h1><p class="post-meta"><time datetime="${esc(input.datum)}">${esc(longDate(input.datum))}</time> · ${readingMinutes(root)} Min. Lesezeit</p><div class="prosa">${root.innerHTML}</div>${briefNav(input)}</article>${standardCards()}${standardBand()}`;
       return view;
     }
     if (input.rel === "kapitel/neuigkeiten.md") {
