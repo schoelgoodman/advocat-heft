@@ -110,9 +110,16 @@ aside .wort {
   letter-spacing: 0.04em;
 }
 aside .wort svg { color: var(--olive); }
-/* «Zur Website» steht direkt unter «Redaktion»; der Abstand zu den Gruppen kommt danach. */
-aside #heim { margin-bottom: 0.15rem; }
-aside a.wort { color: inherit; font: inherit; text-decoration: none; }
+/* «Zur Website»: ein Knopf wie die übrigen, unter «Redaktion», vor den Gruppen. */
+aside .zur-website {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 1.2rem 0.3rem;
+  background: var(--flaeche);
+}
+aside .zur-website svg { color: var(--olive); }
+aside .zur-website:hover { border-color: var(--olive); color: var(--olive); }
 aside .wort:hover { color: var(--olive); background: var(--hover); }
 /* Gruppen: die ganze Zeile klappt auf und zu. Bei Kontaktaufnahme und Newsletter zeigt sie dazu die Übersicht. */
 aside summary, aside .gruppe-zeile {
