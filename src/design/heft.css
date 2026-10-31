@@ -146,6 +146,8 @@ main:focus { outline: none; }
 }
 
 .logo img { display: block; height: 40px; width: auto; }
+/* Langes Drücken aufs Logo öffnet die Redaktion. Ohne das zeigt das Handy vorher sein Menü. */
+.logo { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 
 .nav {
   display: flex;

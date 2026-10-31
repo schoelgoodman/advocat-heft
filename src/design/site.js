@@ -38,6 +38,50 @@
     });
   }
 
+  // Versteckter Weg in die Redaktion: Logo 3 Sekunden gedrückt halten, oder irgendwo auf der
+  // Seite das Wort tippen. Die Redaktion selbst verlangt weiterhin das Login.
+  var logo = document.querySelector(".logo[data-redaktion]");
+  if (logo) {
+    var redaktion = logo.getAttribute("data-redaktion");
+    var holdTimer = null;
+    var held = false;
+    function stopHold() {
+      clearTimeout(holdTimer);
+      holdTimer = null;
+    }
+    logo.addEventListener("pointerdown", function (event) {
+      if (event.button !== 0) return;
+      held = false;
+      stopHold();
+      holdTimer = setTimeout(function () {
+        held = true;
+        location.href = redaktion;
+      }, 3000);
+    });
+    ["pointerup", "pointerleave", "pointercancel"].forEach(function (type) {
+      logo.addEventListener(type, stopHold);
+    });
+    // Nach dem Halten nicht noch auf die Startseite springen; das Menü vom langen Drücken unterdrücken.
+    logo.addEventListener("click", function (event) {
+      if (held) event.preventDefault();
+    });
+    logo.addEventListener("contextmenu", function (event) {
+      if (holdTimer || held) event.preventDefault();
+    });
+    logo.addEventListener("dragstart", function (event) {
+      event.preventDefault();
+    });
+
+    var WORD = "rosalieohrosalie";
+    var typed = "";
+    document.addEventListener("keydown", function (event) {
+      if (event.ctrlKey || event.metaKey || event.altKey || event.key.length !== 1) return;
+      if (event.target.closest("input, textarea, select, [contenteditable]")) return;
+      typed = (typed + event.key.toLowerCase()).slice(-WORD.length);
+      if (typed === WORD) location.href = redaktion;
+    });
+  }
+
   // Bilder im Newsletter, die kleiner als ihre echte Grösse erscheinen (z.B. Tabellen auf dem
   // Handy), lassen sich antippen und in voller Grösse ansehen.
   var zoomDialog = null;
