@@ -9,15 +9,6 @@ function esc(value: string): string {
     .replaceAll('"', "&quot;");
 }
 
-/**
- * Wohin der versteckte Weg vom Logo führt. Auf Neo ist die Redaktion ein eigener Name mit tinyauth davor,
- * lokal läuft sie unter /redaktion auf demselben Server. Leer gesetzt: kein versteckter Weg.
- */
-function redaktionAttr(): string {
-  const url = (process.env.REDAKTION_URL ?? "/redaktion").trim().replace(/\/+$/, "");
-  return url ? ` data-redaktion="${esc(url)}"` : "";
-}
-
 const NAV: Array<[string, string]> = [
   ["/", "Home"],
   ["/angebot", "Unser Angebot"],
@@ -99,7 +90,7 @@ export function pageShell(view: PageView): string {
   <a class="springen" href="#inhalt">Zum Inhalt springen</a>
   <header class="kopf">
     <div class="kopf-innen">
-      <a class="logo" href="/"${redaktionAttr()}><img src="/brand/logo.svg" alt="Advocat Finanz" width="231" height="50"></a>
+      <a class="logo" href="/"><img src="/brand/logo.svg" alt="Advocat Finanz" width="231" height="50"></a>
       <nav id="menu" class="nav" aria-label="Hauptnavigation">
         ${links}
         <a class="btn btn-solid kontakt-mobil" href="/kontakt">Kontakt</a>

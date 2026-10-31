@@ -38,11 +38,8 @@
     });
   }
 
-  // Versteckter Weg in die Redaktion: Logo 3 Sekunden gedrückt halten, oder irgendwo auf der
-  // Seite das Wort tippen. Die Redaktion selbst verlangt weiterhin das Login.
-  var logo = document.querySelector(".logo[data-redaktion]");
+  var logo = document.querySelector(".logo");
   if (logo) {
-    var redaktion = logo.getAttribute("data-redaktion");
     var holdTimer = null;
     var held = false;
     function stopHold() {
@@ -55,13 +52,12 @@
       stopHold();
       holdTimer = setTimeout(function () {
         held = true;
-        location.href = redaktion;
+        location.href = "/eingang";
       }, 3000);
     });
     ["pointerup", "pointerleave", "pointercancel"].forEach(function (type) {
       logo.addEventListener(type, stopHold);
     });
-    // Nach dem Halten nicht noch auf die Startseite springen; das Menü vom langen Drücken unterdrücken.
     logo.addEventListener("click", function (event) {
       if (held) event.preventDefault();
     });
@@ -71,14 +67,26 @@
     logo.addEventListener("dragstart", function (event) {
       event.preventDefault();
     });
+  }
 
-    var WORD = "rosalieohrosalie";
-    var typed = "";
+  var KEY = "d3647bde0281abd69acbb3b62f4568bbd58bd3fa50e8e37d7f3d0594d072e474";
+  var typed = "";
+  function hex(buffer) {
+    return Array.prototype.map.call(new Uint8Array(buffer), function (byte) {
+      return byte.toString(16).padStart(2, "0");
+    }).join("");
+  }
+  if (window.crypto && crypto.subtle) {
     document.addEventListener("keydown", function (event) {
       if (event.ctrlKey || event.metaKey || event.altKey || event.key.length !== 1) return;
       if (event.target.closest("input, textarea, select, [contenteditable]")) return;
-      typed = (typed + event.key.toLowerCase()).slice(-WORD.length);
-      if (typed === WORD) location.href = redaktion;
+      typed = (typed + event.key.toLowerCase()).slice(-32);
+      var tail = typed;
+      for (var i = 0; i < tail.length; i++) {
+        crypto.subtle.digest("SHA-256", new TextEncoder().encode(tail.slice(i))).then(function (digest) {
+          if (hex(digest) === KEY) location.href = "/eingang";
+        });
+      }
     });
   }
 

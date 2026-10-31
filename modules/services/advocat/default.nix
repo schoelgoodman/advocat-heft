@@ -59,7 +59,7 @@
             SITE_DIR = "/site";
             ANFRAGEN_DIR = "/anfragen";
             SITE_URL = cfg.siteUrl;
-            # Ziel des versteckten Wegs vom Logo. Leer: das Logo führt nur auf die Startseite.
+            # Wohin /eingang springt (versteckter Weg in die Redaktion). Leer: /eingang ist 404.
             REDAKTION_URL = optionalString (domain != null && redaktion.enabled) "https://${redaktion.subdomain}.${domain}";
             TELEGRAM_BOT_TOKEN = cfg.telegram.botToken;
             TELEGRAM_CHAT_ID = cfg.telegram.chatId;
