@@ -110,6 +110,9 @@ aside .wort {
   letter-spacing: 0.04em;
 }
 aside .wort svg { color: var(--olive); }
+/* «Zur Website» steht direkt unter «Redaktion»; der Abstand zu den Gruppen kommt danach. */
+aside #heim { margin-bottom: 0.15rem; }
+aside a.wort { color: inherit; font: inherit; text-decoration: none; }
 aside .wort:hover { color: var(--olive); background: var(--hover); }
 /* Gruppen: die ganze Zeile klappt auf und zu. Bei Kontaktaufnahme und Newsletter zeigt sie dazu die Übersicht. */
 aside summary, aside .gruppe-zeile {
