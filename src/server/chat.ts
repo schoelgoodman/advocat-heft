@@ -188,11 +188,21 @@ async function lageText(lage: Lage, frage: string): Promise<string> {
     }
   }
 
+  // Die übrigen Seiten mit ihrer heutigen Adresse: Patrick kann sie umbenennen.
+  const uebrige = (await loadDocuments().catch(() => [])).filter((doc) => doc.art !== "brief");
+  if (uebrige.length) {
+    teile.push(
+      `# Die übrigen Seiten mit ihrer Adresse heute\n${uebrige
+        .map((doc) => `- ${doc.titel}: Adresse ${publicPath(doc.rel)}, Verweis «${doc.rel}»${doc.entwurf ? " (Entwurf, nicht online)" : " (online)"}`)
+        .join("\n")}`,
+    );
+  }
+
   teile.push(`# Was Patrick an den Support geschickt hat, das neueste zuerst\n${await wuenscheText()}`);
 
   const briefe = briefsNewestFirst(await loadDocuments().catch(() => []));
   if (briefe.length) {
-    teile.push(`# Alle Newsletter\n${briefe.map(briefKopf).join("\n")}`);
+    teile.push(`# Alle Newsletter, Verweis für Aktionen jeweils «newsletter-<Nummer>»\n${briefe.map(briefKopf).join("\n")}`);
     // Nennt Patrick einen Newsletter mit Nummer, geht der auch ganz mit.
     const genannt = new Set([...frage.matchAll(/(?:newsletter|nr\.?|nummer)\s*(\d{1,3})/gi)].map((m) => Number(m[1])));
     const vorbilder = briefe.filter((doc) => !doc.entwurf && doc.rel !== lage.rel).slice(0, VORBILDER);

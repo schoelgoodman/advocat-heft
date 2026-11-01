@@ -2,8 +2,24 @@
  * Der Assistent: eine Spalte rechts, auf jeder Ansicht der Redaktion.
  * Er schlägt vor. Einsetzen, Rückgängig und Senden macht Patrick per Knopf.
  * Einzige Ausnahme: Bittet Patrick um einen neuen Newsletter, legt die Redaktion
- * selbst einen Entwurf an und schreibt den Text live hinein. Veröffentlichen bleibt bei Patrick.
+ * selbst einen Entwurf an und schreibt den Text live hinein.
+ * Aktionen (veröffentlichen, zurückziehen, löschen, Kopie, Adresse, öffnen) erscheinen als Karte
+ * mit einem Knopf: Erst Patricks Klick führt sie aus.
  */
+
+/** Was der Assistent mit einer Seite tun kann. Endgültig löschen gehört nicht dazu. */
+export type AktionArt = "oeffnen" | "veroeffentlichen" | "zurueckziehen" | "loeschen" | "kopie" | "adresse";
+
+/** Eine Seite, wie die Karte sie braucht. */
+export interface SeiteKurz {
+  rel: string;
+  titel: string;
+  brief: boolean;
+  nummer: number | null;
+  entwurf: boolean;
+  href: string;
+  startseite: boolean;
+}
 
 export interface Lage {
   ansicht: "start" | "anfragen" | "briefe" | "wuensche" | "blatt";
@@ -44,6 +60,15 @@ export interface Anschluss {
   zeigeWuensche(): void;
   /** Öffnet den Newsletter mit diesem Thema, falls es ihn gibt. */
   oeffneNewsletter(thema: string): boolean;
+  /**
+   * Die Seite zu einem Verweis des Assistenten: Dateipfad («kapitel/faq.md»), «newsletter-36»,
+   * Adresse («/faq») oder «offen». Ein String ist der Grund, warum es keine eindeutige gibt.
+   */
+  seite(verweis: string): SeiteKurz | string;
+  /** Wie die Redaktion aus einer Eingabe eine Adresse macht, ohne Schrägstrich. */
+  adresseAus(text: string): string;
+  /** Führt die Aktion ohne weitere Rückfrage aus. Gibt den Fehler zurück, oder null. */
+  aktion(art: AktionArt, rel: string, adresse?: string): Promise<string | null>;
   /** Das Element mit dem Text, um eine Markierung darin zu erkennen. */
   editor: HTMLElement;
 }
@@ -61,11 +86,14 @@ type Teil =
   | { art: "text-ganz" | "anfuegen" | "titel"; neu: string }
   | { art: "wunsch"; wunschArt: WunschArt; text: string }
   | { art: "newsletter"; thema: string; neu: string; fertig: boolean }
+  | { art: "aktion"; aktion: AktionArt; seite: string; adresse: string; roh: string }
   | { art: "wartet" };
+
+const AKTIONEN: AktionArt[] = ["oeffnen", "veroeffentlichen", "zurueckziehen", "loeschen", "kopie", "adresse"];
 
 type WunschArt = "design" | "funktion" | "fehler";
 
-const BLOCK = /<vorschlag art="(ersetzen|text|anfuegen|titel)">([\s\S]*?)<\/vorschlag>|<(?:wunsch art="(design|funktion|fehler)"|designwunsch)>([\s\S]*?)<\/(?:wunsch|designwunsch)>|<neuer-newsletter thema="([^"]*)">([\s\S]*?)<\/neuer-newsletter>/g;
+const BLOCK = /<vorschlag art="(ersetzen|text|anfuegen|titel)">([\s\S]*?)<\/vorschlag>|<(?:wunsch art="(design|funktion|fehler)"|designwunsch)>([\s\S]*?)<\/(?:wunsch|designwunsch)>|<neuer-newsletter thema="([^"]*)">([\s\S]*?)<\/neuer-newsletter>|<aktion\s([^>]*?)\/?>(?:\s*<\/aktion>)?/g;
 
 /** Ein neuer Newsletter, auch halb geschrieben. Das Thema muss schon ganz dastehen. */
 const NEUER_NEWSLETTER = /<neuer-newsletter thema="([^"]*)">([\s\S]*?)(<\/neuer-newsletter>|$)/;
@@ -88,7 +116,10 @@ function zerlege(antwort: string, fertig: boolean): Teil[] {
   const teile: Teil[] = [];
   let rest = antwort;
   if (!fertig) {
-    const offen = Math.max(rest.lastIndexOf("<vorschlag"), rest.lastIndexOf("<wunsch"), rest.lastIndexOf("<designwunsch"), rest.lastIndexOf("<neuer-newsletter"));
+    // Eine Aktion ist ein einzelnes Tag: offen, solange ihr «>» fehlt.
+    const aktionAb = rest.lastIndexOf("<aktion");
+    const aktionOffen = aktionAb >= 0 && !rest.includes(">", aktionAb) ? aktionAb : -1;
+    const offen = Math.max(rest.lastIndexOf("<vorschlag"), rest.lastIndexOf("<wunsch"), rest.lastIndexOf("<designwunsch"), rest.lastIndexOf("<neuer-newsletter"), aktionOffen);
     const zu = Math.max(rest.lastIndexOf("</vorschlag>"), rest.lastIndexOf("</wunsch>"), rest.lastIndexOf("</designwunsch>"), rest.lastIndexOf("</neuer-newsletter>"));
     let schnitt = offen > zu ? offen : -1;
     // Ein angefangenes Tag am Ende („<vors“) nicht als Text zeigen.
@@ -111,6 +142,14 @@ function zerlege(antwort: string, fertig: boolean): Teil[] {
     if (match[4] != null) {
       // Ältere Antworten im Verlauf kennen nur <designwunsch>.
       teile.push({ art: "wunsch", wunschArt: match[3] === "funktion" || match[3] === "fehler" ? match[3] : "design", text: ohneRand(match[4]) });
+      continue;
+    }
+    if (match[7] != null) {
+      const attribute = Object.fromEntries([...match[7].matchAll(/([a-z]+)="([^"]*)"/g)].map((m) => [m[1], m[2].trim()]));
+      const aktion = attribute.art as AktionArt;
+      if (AKTIONEN.includes(aktion)) {
+        teile.push({ art: "aktion", aktion, seite: attribute.seite ?? "offen", adresse: attribute.adresse ?? "", roh: match[0] });
+      }
       continue;
     }
     if (match[5] != null) {
@@ -362,7 +401,7 @@ export async function mountAssistent(anschluss: Anschluss, bereit: boolean): Pro
     item.innerHTML = `
       <span class="zeichen gross" aria-hidden="true">${ICON.funke}</span>
       <h3>Hallo Patrick</h3>
-      <p>Ich helfe dir mit der Redaktion und beim Schreiben. Ich sehe die offene Seite und die früheren Newsletter. Änderungen schlage ich vor, einsetzen tust du sie mit «Übernehmen».</p>
+      <p>Ich helfe dir mit der Redaktion und beim Schreiben. Ich sehe die offene Seite und die früheren Newsletter. Änderungen schlage ich vor, einsetzen tust du sie mit «Übernehmen». Veröffentlichen, zurückziehen, löschen, kopieren oder eine Adresse ändern bereite ich als Karte vor; ausgeführt wird erst mit deinem Klick.</p>
       <p>Fehlt dir etwas in der Redaktion oder soll die Website anders aussehen? Oder funktioniert etwas nicht? Sag es mir, ich schreibe es für den Support auf.</p>`;
     const liste = document.createElement("div");
     liste.className = "beispiele";
@@ -548,6 +587,120 @@ export async function mountAssistent(anschluss: Anschluss, bereit: boolean): Pro
     return element;
   }
 
+  /** Aktionen, die Patrick in dieser Sitzung schon ausgelöst hat (für Kopien, die man sonst nicht sieht). */
+  const ausgefuehrt = new Set<string>();
+
+  const AKTION_KNOPF: Record<AktionArt, string> = {
+    oeffnen: "Öffnen",
+    veroeffentlichen: "Veröffentlichen",
+    zurueckziehen: "Zurückziehen",
+    loeschen: "In den Papierkorb",
+    kopie: "Kopie anlegen",
+    adresse: "Adresse ändern",
+  };
+
+  /** Was die Aktion bewirkt, für die Karte. */
+  function aktionText(teil: Extract<Teil, { art: "aktion" }>, seite: SeiteKurz): string {
+    switch (teil.aktion) {
+      case "oeffnen":
+        return "Öffnet die Seite in der Mitte.";
+      case "veroeffentlichen":
+        return seite.brief
+          ? "Erscheint sofort auf der Website, im Archiv Neuigkeiten und auf der Startseite."
+          : "Erscheint sofort auf der Website.";
+      case "zurueckziehen":
+        return "Verschwindet von der Website. Der Text bleibt hier als Entwurf.";
+      case "loeschen":
+        return "Kommt in den Papierkorb. Von dort lässt sich der Entwurf zurückholen.";
+      case "kopie":
+        return seite.brief ? "Neuer Entwurf mit demselben Text und der nächsten Nummer." : "Neuer Entwurf mit demselben Text.";
+      case "adresse":
+        return `Neu /${anschluss.adresseAus(teil.adresse)} statt ${seite.href}. Die alte Adresse leitet weiter, Links auf allen Seiten werden angepasst.`;
+    }
+  }
+
+  /** Warum die Aktion nicht (mehr) geht, oder null. «✓» am Ende: schon so, wie gewünscht. */
+  function aktionHindernis(teil: Extract<Teil, { art: "aktion" }>, seite: SeiteKurz): string | null {
+    if (teil.aktion === "veroeffentlichen" && !seite.entwurf) return "Ist online ✓";
+    if (teil.aktion === "zurueckziehen" && seite.startseite) return "Die Startseite bleibt immer online.";
+    if (teil.aktion === "zurueckziehen" && seite.entwurf) return "Ist nur noch Entwurf ✓";
+    if (teil.aktion === "loeschen" && !seite.entwurf) return "Nur Entwürfe lassen sich löschen. Zuerst zurückziehen.";
+    if (teil.aktion === "adresse") {
+      if (seite.brief) return "Newsletter haben immer die Adresse /newsletter-<Nummer>.";
+      if (seite.startseite) return "Die Startseite hat immer die Adresse «/».";
+      const slug = anschluss.adresseAus(teil.adresse);
+      if (!slug) return "Keine gültige Adresse angegeben.";
+      if (seite.href === `/${slug}`) return `Hat die Adresse /${slug} ✓`;
+    }
+    if (teil.aktion === "kopie" && ausgefuehrt.has(teil.roh)) return "Kopie angelegt ✓";
+    return null;
+  }
+
+  /** Die Aktionskarten im Verlauf, um sie nach einer Aktion neu zu zeichnen. */
+  const aktionTeile = new WeakMap<HTMLElement, Extract<Teil, { art: "aktion" }>>();
+
+  /** Nach einer Aktion: Jede Aktionskarte zeigt den neuen Stand (z. B. «Löschen» geht erst nach dem Zurückziehen). */
+  function aktionenNeu(): void {
+    for (const alt of verlaufListe.querySelectorAll<HTMLElement>(".vorschlag.aktion")) {
+      const teil = aktionTeile.get(alt);
+      if (teil) alt.replaceWith(aktionKarte(teil));
+    }
+  }
+
+  /** Eine Aktion als Karte. Nichts passiert ohne Patricks Klick. */
+  function aktionKarte(teil: Extract<Teil, { art: "aktion" }>): HTMLElement {
+    const element = aktionKarteBauen(teil);
+    aktionTeile.set(element, teil);
+    return element;
+  }
+
+  function aktionKarteBauen(teil: Extract<Teil, { art: "aktion" }>): HTMLElement {
+    const seite = anschluss.seite(teil.seite);
+    if (typeof seite === "string") {
+      const text = teil.aktion === "loeschen" && ausgefuehrt.has(teil.roh) ? "Liegt im Papierkorb ✓" : seite;
+      const element = karte(`Aktion · ${AKTION_KNOPF[teil.aktion]}`, `<p class="alt">${esc(text)}</p>`, []);
+      element.classList.add("aktion");
+      return element;
+    }
+    const name = seite.brief ? seite.titel : `${seite.titel} (${seite.href})`;
+    const stand = seite.entwurf ? "Entwurf" : "online";
+    const hindernis = aktionHindernis(teil, seite);
+    const ausfuehren = knopf(AKTION_KNOPF[teil.aktion], teil.aktion === "loeschen" ? "haupt gefahr" : "haupt", async () => {
+      ausfuehren.disabled = true;
+      ausfuehren.textContent = "Läuft …";
+      melde(element, "");
+      const fehler = await anschluss.aktion(teil.aktion, seite.rel, teil.adresse);
+      if (fehler) {
+        ausfuehren.disabled = false;
+        ausfuehren.textContent = AKTION_KNOPF[teil.aktion];
+        melde(element, fehler);
+        return;
+      }
+      ausgefuehrt.add(teil.roh);
+      if (teil.aktion === "oeffnen") {
+        ausfuehren.disabled = false;
+        ausfuehren.textContent = AKTION_KNOPF[teil.aktion];
+        return;
+      }
+      aktionenNeu();
+    });
+    const ansehen = knopf("Seite öffnen", "leise", () => void anschluss.aktion("oeffnen", seite.rel));
+    const knoepfe = teil.aktion === "oeffnen" ? [ausfuehren] : [ausfuehren, ansehen];
+    if (teil.aktion === "loeschen") knoepfe.pop();
+    const element = karte(
+      `Aktion · ${AKTION_KNOPF[teil.aktion]}`,
+      `<p class="zwischentitel">${esc(name)}</p><p class="alt">Jetzt ${stand}. ${esc(aktionText(teil, seite))}</p>`,
+      knoepfe,
+    );
+    element.classList.add("aktion");
+    if (hindernis) {
+      ausfuehren.disabled = true;
+      if (hindernis.endsWith("✓")) ausfuehren.textContent = hindernis;
+      else melde(element, hindernis);
+    }
+    return element;
+  }
+
   /** Der neue Newsletter: wächst beim Schreiben mit, danach ein Knopf zum Öffnen. */
   function newsletterKarte(teil: Extract<Teil, { art: "newsletter" }>): HTMLElement {
     const woerter = teil.neu.split(/\s+/).filter(Boolean).length;
@@ -583,6 +736,7 @@ export async function mountAssistent(anschluss: Anschluss, bereit: boolean): Pro
         }
         if (teil.art === "wunsch") return wunschKarte(teil);
         if (teil.art === "newsletter") return newsletterKarte(teil);
+        if (teil.art === "aktion") return aktionKarte(teil);
         return vorschlagKarte(teil, rel);
       }),
     );

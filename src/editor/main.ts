@@ -4,7 +4,7 @@ import "@milkdown/crepe/theme/common/style.css";
 import "@milkdown/crepe/theme/frame.css";
 import "./redaktion.css";
 import type { Art, ContentDocument } from "../content/document.ts";
-import { mountAssistent, type Lage } from "./assistent.ts";
+import { mountAssistent, type AktionArt, type Lage, type SeiteKurz } from "./assistent.ts";
 
 interface CrepeApi {
   markdownUpdated(fn: (ctx: unknown, markdown: string, prev: string) => void): void;
@@ -1129,20 +1129,31 @@ async function aendereAdresse(): Promise<void> {
       zeigeAdresse();
       return;
     }
-    if (!(await saveNow())) {
-      zeigeAdresse();
-      return;
+    const fehler = await adresseSetzen(doc.rel, slug);
+    if (fehler) {
+      await ask({ titel: "Adresse nicht geändert", text: fehler, ja: "OK" });
+      if (current?.rel === doc.rel) zeigeAdresse();
     }
-    setSaved("Ändert die Adresse …", "busy");
-    const response = await post("/api/adresse", { rel: doc.rel, adresse: slug }).catch(() => null);
-    if (!response?.ok) {
-      setSaved("");
-      await ask({ titel: "Adresse nicht geändert", text: response ? await errorText(response, "Das ging nicht.") : "Keine Verbindung zum Server.", ja: "OK" });
-      zeigeAdresse();
-      return;
-    }
-    const neu = (await response.json()) as Doc & { angepasst?: number };
-    if (current?.rel !== doc.rel) return;
+  } finally {
+    adresseLaeuft = false;
+  }
+}
+
+/**
+ * Gibt einer übrigen Seite eine neue Adresse, offen oder nicht. Der Server leitet die alte weiter
+ * und passt die Links an. Gibt den Fehler zurück, oder null, wenn es geklappt hat.
+ */
+async function adresseSetzen(rel: string, slug: string): Promise<string | null> {
+  const offen = current?.rel === rel;
+  if (offen && !(await saveNow())) return "Die Seite liess sich vorher nicht speichern.";
+  if (offen) setSaved("Ändert die Adresse …", "busy");
+  const response = await post("/api/adresse", { rel, adresse: slug }).catch(() => null);
+  if (!response?.ok) {
+    if (current?.rel === rel) setSaved("");
+    return response ? await errorText(response, "Das ging nicht.") : "Keine Verbindung zum Server.";
+  }
+  const neu = (await response.json()) as Doc & { angepasst?: number };
+  if (current?.rel === rel) {
     const textGeaendert = neu.body.trim() !== current.body.trim();
     current = { ...current, adresse: neu.adresse, frueher: neu.frueher, href: neu.href, body: neu.body };
     zeigeAdresse();
@@ -1154,10 +1165,9 @@ async function aendereAdresse(): Promise<void> {
         ? `Neue Adresse ${neu.href} ✓ Links auf ${andere === 1 ? "einer Seite" : `${andere} Seiten`} angepasst.`
         : `Neue Adresse ${neu.href} ✓`,
     );
-    await loadList();
-  } finally {
-    adresseLaeuft = false;
   }
+  await loadList();
+  return null;
 }
 
 function scheduleSave(): void {
@@ -1274,24 +1284,24 @@ async function melde(offen: boolean, text: string): Promise<void> {
 }
 
 /** Ohne `rel` das offene Blatt. Aus dem Verzeichnis auch jede andere Seite. */
-async function publish(rel = current?.rel): Promise<void> {
-  if (!rel) return;
+async function publish(rel = current?.rel, ohneFrage = false): Promise<boolean> {
+  if (!rel) return false;
   const offen = current?.rel === rel;
   if (offen) {
     if (isBrief(current) && !titelInput.value.trim()) {
       titelInput.focus();
       setSaved("Bitte zuerst ein Thema eingeben.", "fehler");
-      return;
+      return false;
     }
-    if (!(await saveNow())) return;
+    if (!(await saveNow())) return false;
   }
   const page = offen ? current : alleSeiten.find((item) => item.rel === rel);
-  if (!page) return;
+  if (!page) return false;
   if (isBrief(page) && !thema(page.titel)) {
     await ask({ titel: "Noch ohne Thema", text: "Bitte den Newsletter öffnen und zuerst ein Thema eingeben.", ja: "OK" });
-    return;
+    return false;
   }
-  const ja = await ask({
+  const ja = ohneFrage || await ask({
     titel: "Jetzt veröffentlichen?",
     text: isBrief(page)
       ? `„${page.titel}“ erscheint sofort auf der Website und auf der Startseite.`
@@ -1299,12 +1309,12 @@ async function publish(rel = current?.rel): Promise<void> {
     ja: "Veröffentlichen",
     nein: "Noch nicht",
   });
-  if (!ja) return;
+  if (!ja) return false;
   if (offen) setSaved("Veröffentlicht …", "busy");
   const response = await post("/api/publish", { rel });
   if (!response.ok) {
     await melde(current?.rel === rel, await errorText(response, "Veröffentlichen fehlgeschlagen."));
-    return;
+    return false;
   }
   const doc = (await response.json()) as Doc;
   if (current?.rel === rel) {
@@ -1316,25 +1326,26 @@ async function publish(rel = current?.rel): Promise<void> {
     void loadHistory(current.rel);
   }
   await loadList();
+  return true;
 }
 
-async function unpublish(rel = current?.rel): Promise<void> {
-  if (!rel) return;
+async function unpublish(rel = current?.rel, ohneFrage = false): Promise<boolean> {
+  if (!rel) return false;
   const offen = current?.rel === rel;
-  if (offen && !(await saveNow())) return;
+  if (offen && !(await saveNow())) return false;
   const page = offen ? current : alleSeiten.find((item) => item.rel === rel);
-  if (!page) return;
-  const ja = await ask({
+  if (!page) return false;
+  const ja = ohneFrage || await ask({
     titel: "Von der Website nehmen?",
     text: `„${page.titel}“ verschwindet von der Website. Der Text bleibt hier als Entwurf erhalten.`,
     ja: "Zurückziehen",
     nein: "Abbrechen",
   });
-  if (!ja) return;
+  if (!ja) return false;
   const response = await post("/api/unpublish", { rel });
   if (!response.ok) {
     await melde(current?.rel === rel, await errorText(response, "Zurückziehen fehlgeschlagen."));
-    return;
+    return false;
   }
   const doc = (await response.json()) as Doc;
   if (current?.rel === rel) {
@@ -1344,20 +1355,22 @@ async function unpublish(rel = current?.rel): Promise<void> {
     void loadHistory(current.rel);
   }
   await loadList();
+  return true;
 }
 
 /** Legt eine Kopie als Entwurf an und öffnet sie. Ein Newsletter bekommt die nächste Nummer. */
-async function copyPage(rel: string): Promise<void> {
-  if (current?.rel === rel && !(await saveNow())) return;
+async function copyPage(rel: string): Promise<boolean> {
+  if (current?.rel === rel && !(await saveNow())) return false;
   const response = await post("/api/copy", { rel });
   if (!response.ok) {
     await melde(current?.rel === rel, await errorText(response, "Die Kopie liess sich nicht anlegen."));
-    return;
+    return false;
   }
   const doc = (await response.json()) as Doc;
   await loadList();
   await openPage(doc.rel);
   setSaved("Kopie angelegt ✓");
+  return true;
 }
 
 async function restoreFromTrash(rel: string): Promise<void> {
@@ -1382,15 +1395,24 @@ async function deleteDraft(): Promise<void> {
     gefahr: true,
   });
   if (!ja || !current?.entwurf) return;
-  if (saveTimer != null) window.clearTimeout(saveTimer);
-  saveTimer = null;
-  const response = await fetch(`/api/pages?rel=${encodeURIComponent(current.rel)}`, { method: "DELETE" });
-  if (!response.ok) {
-    setSaved(await errorText(response, "Löschen fehlgeschlagen."), "fehler");
-    return;
+  await deletePage(current.rel);
+}
+
+/** Legt einen Entwurf in den Papierkorb. Ist er offen, geht die Redaktion zur Startseite. */
+async function deletePage(rel: string): Promise<boolean> {
+  const offen = current?.rel === rel;
+  if (offen) {
+    if (saveTimer != null) window.clearTimeout(saveTimer);
+    saveTimer = null;
   }
-  showStart();
+  const response = await fetch(`/api/pages?rel=${encodeURIComponent(rel)}`, { method: "DELETE" });
+  if (!response.ok) {
+    await melde(offen, await errorText(response, "Löschen fehlgeschlagen."));
+    return false;
+  }
+  if (current?.rel === rel) showStart();
   await loadList();
+  return true;
 }
 
 interface Revision {
@@ -2408,10 +2430,67 @@ void mountAssistent(
       if (page) void openPage(page.rel);
       return page != null;
     },
+    seite: findeSeite,
+    adresseAus,
+    aktion: fuehreAus,
     editor: editorHost,
   },
   info.assistent === true,
 );
+/** Die Seite zu einem Verweis des Assistenten, oder warum es keine eindeutige gibt. */
+function findeSeite(verweis: string): SeiteKurz | string {
+  const kurz = (page: PageSummary): SeiteKurz => ({
+    rel: page.rel,
+    titel: page.titel,
+    brief: isBrief(page),
+    nummer: page.nummer,
+    entwurf: page.entwurf,
+    href: page.href,
+    startseite: page.rel === STARTSEITE,
+  });
+  const text = verweis.trim();
+  if (text === "offen") {
+    if (!current || form.hidden) return "Es ist gerade keine Seite offen.";
+    const page = alleSeiten.find((item) => item.rel === current!.rel);
+    return page ? kurz(page) : "Die offene Seite ist nicht mehr in der Liste.";
+  }
+  const exakt = alleSeiten.find((item) => item.rel === text);
+  if (exakt) return kurz(exakt);
+  const nummer = text.match(/^\/?(?:newsletter|nr\.?)[\s-]*(\d{1,4})$/i);
+  if (nummer) {
+    const treffer = alleBriefe.filter((item) => item.nummer === Number(nummer[1]));
+    if (treffer.length === 1) return kurz(treffer[0]);
+    return treffer.length
+      ? `Es gibt ${treffer.length} Newsletter mit der Nummer ${nummer[1]}. Bitte selbst im Verzeichnis wählen.`
+      : `Einen Newsletter ${nummer[1]} gibt es nicht.`;
+  }
+  const pfad = `/${text.replace(/^\s*(https?:\/\/)?[^/]*advocat-finanz\.ch/i, "").replace(/^\/+|\/+$/g, "")}`;
+  const page = alleSeiten.find((item) => item.href === pfad);
+  return page ? kurz(page) : `Die Seite «${text}» gibt es nicht (mehr).`;
+}
+
+/** Führt eine Aktion von einer Karte des Assistenten aus. Der Klick auf der Karte ist die Rückfrage. */
+async function fuehreAus(art: AktionArt, rel: string, adresse = ""): Promise<string | null> {
+  const nicht = "Hat nicht geklappt. Die Meldung steht in der Redaktion.";
+  switch (art) {
+    case "oeffnen":
+      await openPage(rel);
+      return current?.rel === rel ? null : "Die Seite liess sich nicht öffnen.";
+    case "veroeffentlichen":
+      return (await publish(rel, true)) ? null : nicht;
+    case "zurueckziehen":
+      return (await unpublish(rel, true)) ? null : nicht;
+    case "loeschen":
+      return (await deletePage(rel)) ? null : nicht;
+    case "kopie":
+      return (await copyPage(rel)) ? null : nicht;
+    case "adresse": {
+      const slug = adresseAus(adresse);
+      return slug ? adresseSetzen(rel, slug) : "Keine gültige Adresse.";
+    }
+  }
+}
+
 /** Zeigt die Ansicht zur Adresse: beim Laden und bei «Zurück» oder «Vorwärts» im Browser. */
 async function folge(): Promise<void> {
   const wanted = decodeURIComponent(location.hash.slice(1));
