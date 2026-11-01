@@ -1283,23 +1283,6 @@ h2[id] { scroll-margin-top: 96px; }
 
 .spalte-profil p { margin-bottom: 0.4em; }
 
-/* Impressum */
-
-.impressum-links img { max-width: 240px; }
-
-.impressum-reihe {
-  display: grid;
-  grid-template-columns: 0.8fr 1.2fr;
-  gap: 3rem;
-  align-items: start;
-  max-width: calc(var(--breite) + 2 * var(--rand));
-  margin: 0 auto;
-  padding: 3rem var(--rand);
-  border-bottom: 1px solid var(--line);
-}
-
-.impressum-reihe:last-child { border-bottom: 0; }
-
 /* Fuss */
 
 .fuss {
@@ -1388,7 +1371,6 @@ h2[id] { scroll-margin-top: 96px; }
   .kontakt-mobil { display: inline-block; margin-top: 0.6rem; }
 
   .kontakt-grid,
-  .impressum-reihe,
   .teaser-raster,
   .spalten,
   .archiv { grid-template-columns: minmax(0, 1fr); }

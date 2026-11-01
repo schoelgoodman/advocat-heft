@@ -80,18 +80,13 @@ async function store(anfrage: Anfrage, file: string): Promise<void> {
   await fs.rename(tmp, file);
 }
 
-function telegramText(anfrage: Anfrage, file: string): string {
-  return [
-    "Neue Anfrage über advocat-finanz.ch",
-    "",
-    `Von: ${anfrage.vorname} ${anfrage.name}`,
-    `E-Mail: ${anfrage.email}`,
-    `Eingang: ${anfrage.eingang}`,
-    "",
-    anfrage.nachricht,
-    "",
-    `Abgelegt als ${path.basename(file)}`,
-  ].join("\n").slice(0, 4000);
+/**
+ * Nur der Hinweis, dass etwas da ist. Name, E-Mail und Nachricht bleiben auf dem Server:
+ * Telegram steht im Ausland, und eine Anfrage an einen Anwalt kann schon Vertrauliches enthalten.
+ * Patrick liest sie in der Redaktion unter «Kontaktaufnahme».
+ */
+function telegramText(): string {
+  return "Neue Anfrage über advocat-finanz.ch. Bitte in der Redaktion unter «Kontaktaufnahme» lesen.";
 }
 
 export async function sendTelegram(text: string): Promise<"gesendet" | "fehler" | "aus"> {
@@ -165,7 +160,7 @@ export async function handleAnfrage(req: http.IncomingMessage, res: http.ServerR
   }
   console.log(`Anfrage gespeichert: ${file}`);
 
-  anfrage.telegram = await sendTelegram(telegramText(anfrage, file));
+  anfrage.telegram = await sendTelegram(telegramText());
   await store(anfrage, file).catch(() => {});
   reply(res, 200, { ok: true });
 }

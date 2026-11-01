@@ -637,20 +637,6 @@ function accordion(root: HTMLElement): void {
   root.replaceChildren(...next);
 }
 
-function layoutImpressum(root: HTMLElement): string {
-  const kids = [...root.children] as HTMLElement[];
-  const images = kids.map((el, index) => (isImgOnly(el) ? index : -1)).filter((index) => index >= 0);
-  if (images.length < 3) return `<div class="inhalt prosa">${root.innerHTML}</div>`;
-  const [logo, wordpress, host] = images;
-  const row = (left: HTMLElement[], right: HTMLElement[]) =>
-    `<div class="impressum-reihe"><div class="impressum-links prosa">${left.map((el) => el.outerHTML).join("")}</div><div class="impressum-rechts prosa">${right.map((el) => el.outerHTML).join("")}</div></div>`;
-  return [
-    row(kids.slice(0, logo + 1), kids.slice(logo + 1, wordpress)),
-    row([kids[wordpress]], kids.slice(wordpress + 1, host)),
-    row([kids[host]], kids.slice(host + 1)),
-  ].join("\n");
-}
-
 function layoutKontakt(root: HTMLElement): string {
   const frame = root.querySelector(".karte-frame");
   frame?.remove();
@@ -921,10 +907,6 @@ export function renderDocument(input: RenderInput): PageView {
         title.textContent = plain(heading);
         heading.replaceWith(title);
       }
-    }
-    if (input.rel === "recht/impressum.md") {
-      view.main = `${hero}${layoutImpressum(root)}`;
-      return view;
     }
     extractCards(root, input.rel === "kapitel/willkommen.md");
     extractBand(root);
