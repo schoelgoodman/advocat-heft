@@ -237,6 +237,15 @@ async function* stream(body: ReadableStream<Uint8Array>): AsyncGenerator<string>
  * POST /api/chat. Antwortet als Server-Sent Events: `{text}` für jedes Stück,
  * am Ende `{fertig: true}` oder `{fehler}`. Frage und Antwort kommen in den Verlauf.
  */
+/** Die Seiten, auf die der Assistent verlinken darf. Patrick kann ihre Adressen umbenennen. */
+const LINKZIELE = ["angebot", "privatpersonen", "unternehmen", "stiftungen", "ueber-uns", "kontakt", "neuigkeiten"];
+
+async function anleitung(): Promise<string> {
+  await loadDocuments().catch(() => []);
+  const adressen = LINKZIELE.map((name) => publicPath(`kapitel/${name}.md`)).join(", ");
+  return ANLEITUNG.replace("{{ADRESSEN}}", adressen).replace("{{NEUIGKEITEN}}", publicPath("kapitel/neuigkeiten.md"));
+}
+
 export async function handleChat(payload: unknown, res: http.ServerResponse): Promise<void> {
   const raw = (payload ?? {}) as Record<string, unknown>;
   const frage = text(raw.nachricht, MAX_NACHRICHT).trim();
@@ -249,7 +258,7 @@ export async function handleChat(payload: unknown, res: http.ServerResponse): Pr
   const verlauf = await readVerlauf();
   const jetzt: Nachricht = { rolle: "patrick", text: frage, zeit: new Date().toISOString(), rel: lage.rel || undefined };
   const messages = [
-    { role: "system", content: ANLEITUNG },
+    { role: "system", content: await anleitung() },
     { role: "system", content: await lageText(lage, frage) },
     ...verlauf.slice(-MAX_IM_GESPRAECH).map((n) => ({ role: n.rolle === "patrick" ? "user" : "assistant", content: n.text })),
     { role: "user", content: frage },

@@ -1,7 +1,7 @@
 import { Window } from "happy-dom";
 import { publicPath, type Art } from "../content/document.ts";
 import { mediaVariants } from "../render/media.ts";
-import { ANGEBOTE, istAngebot } from "./angebote.ts";
+import { angebote, istAngebot } from "./angebote.ts";
 import { clip, DEFAULT_DESCRIPTION, DEFAULT_IMAGE } from "./seo.ts";
 
 export interface Teaser {
@@ -513,7 +513,7 @@ function sprungMenu(root: HTMLElement): string {
 /** Am Ende einer Angebotsseite, vor «Kontaktieren Sie uns»: die beiden anderen Angebote. */
 function weitereAngebote(root: HTMLElement, here: string): void {
   if (!istAngebot(here)) return;
-  const links = ANGEBOTE.filter((angebot) => angebot.href !== here)
+  const links = angebote().filter((angebot) => angebot.href !== here)
     .map(({ href, name }) => `<li><a href="${href}">Für ${esc(name)}<span class="weitere-pfeil" aria-hidden="true">→</span></a></li>`)
     .join("");
   const nav = root.ownerDocument.createElement("nav");
@@ -781,8 +781,12 @@ function briefNav(input: RenderInput): string {
   return `<nav class="brief-nav" aria-label="Weitere Newsletter">${link(input.teasers[index + 1], "brief-nav-zurueck", "← Vorheriger Newsletter")}${link(input.teasers[index - 1], "brief-nav-weiter", "Nächster Newsletter →")}</nav>`;
 }
 
+const NEUIGKEITEN = "kapitel/neuigkeiten.md";
+
+/** Die Seiten des Archivs hängen an der Adresse von Neuigkeiten, auch wenn Patrick sie umbenennt. */
 function pageHref(page: number): string {
-  return page <= 1 ? "/neuigkeiten" : `/neuigkeiten/page/${page}`;
+  const archiv = publicPath(NEUIGKEITEN);
+  return page <= 1 ? archiv : `${archiv}/page/${page}`;
 }
 
 /** intro: der Text aus neuigkeiten.md zwischen Titel und «Kontaktieren Sie uns.», als HTML. */

@@ -161,6 +161,8 @@
   var search = document.querySelector(".suche");
   var list = document.querySelector(".archiv .beitraege");
   if (indexNode && search && list) {
+    // Die Adresse des Archivs steht in der Suche. Patrick kann die Seite umbenennen.
+    var archiv = search.getAttribute("action") || "/neuigkeiten";
     var all = [];
     try {
       all = JSON.parse(indexNode.textContent || "[]");
@@ -212,7 +214,7 @@
       if (status) {
         var count = items.length === 1 ? "1 Beitrag" : items.length + " Beiträge";
         status.innerHTML =
-          "<span>" + escapeText(label) + " · " + count + '</span><a href="/neuigkeiten">Alle anzeigen</a>';
+          "<span>" + escapeText(label) + " · " + count + '</span><a href="' + archiv + '">Alle anzeigen</a>';
         status.hidden = false;
       }
     }
@@ -259,7 +261,7 @@
       link.addEventListener("click", function (event) {
         event.preventDefault();
         var year = link.getAttribute("data-jahr");
-        history.replaceState(null, "", "/neuigkeiten?jahr=" + year);
+        history.replaceState(null, "", archiv + "?jahr=" + year);
         applyYear(year);
         var top = document.querySelector(".archiv-kopf");
         if (top && top.getBoundingClientRect().top < 0) top.scrollIntoView();
@@ -274,7 +276,7 @@
       else url.searchParams.delete("s");
       history.replaceState(null, "", url.pathname + url.search);
       if (query.trim()) apply(query);
-      else location.href = "/neuigkeiten";
+      else location.href = archiv;
     });
   }
 

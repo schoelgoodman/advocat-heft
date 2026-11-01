@@ -295,6 +295,12 @@ textarea.titel:focus { outline: none; border-bottom-color: var(--olive); }
 .datum input { padding: 0.3rem 0.5rem; border-radius: var(--rund-klein); }
 .angaben { display: flex; flex-wrap: wrap; gap: 0 1.6rem; }
 #nummer { width: 5.5rem; }
+.adresse-eingabe { display: inline-flex; align-items: center; border: 1px solid var(--rand); border-radius: var(--rund-klein); background: var(--flaeche); }
+.adresse-eingabe:focus-within { border-color: var(--olive); box-shadow: 0 0 0 3px var(--olive-ring); }
+.adresse-vor { padding: 0.3rem 0 0.3rem 0.5rem; color: var(--quiet); white-space: nowrap; }
+.adresse-eingabe input { border: 0; background: transparent; padding-left: 0.1rem; width: 14rem; max-width: 50vw; }
+.adresse-eingabe input:focus { outline: none; box-shadow: none; }
+.adresse-eingabe input:disabled { color: var(--quiet); cursor: not-allowed; }
 #nummer:disabled { color: var(--quiet); background: transparent; border-color: var(--line); cursor: not-allowed; }
 .nummer-hinweis { margin: 0.4rem 0 0; font-size: 0.82rem; color: var(--quiet); }
 .nummer-hinweis.fehler { color: var(--rot); }

@@ -9,6 +9,10 @@ export interface DocumentMeta {
   nummer: number | null;
   /** Ein Entwurf liegt nur in der Redaktion. Der Setzer lässt ihn aus. */
   entwurf: boolean;
+  /** Nur übrige Seiten (nicht Newsletter): selbst gewählte Adresse wie „/firmenkunden“. Leer: die Standardadresse. */
+  adresse?: string | null;
+  /** Nur übrige Seiten: frühere Adressen. Sie leiten auf die heutige weiter. */
+  frueher?: string[];
   /** Pfad relativ zu CONTENT_DIR, mit Schrägstrichen. */
   rel: string;
 }
@@ -40,6 +44,8 @@ export function serializeDocument(doc: ContentDocument): string {
   ];
   if (doc.nummer != null) lines.push(`nummer: ${doc.nummer}`);
   if (doc.entwurf) lines.push("entwurf: true");
+  if (doc.adresse) lines.push(`adresse: ${doc.adresse}`);
+  if (doc.frueher?.length) lines.push(`frueher: ${doc.frueher.join(" ")}`);
   lines.push("---", "", doc.body.trim(), "");
   return lines.join("\n");
 }
@@ -68,74 +74,142 @@ export function parseDocument(raw: string, rel: string): ContentDocument {
     titel: unquote(fields.get("titel") ?? ""),
     nummer: nummer != null && Number.isFinite(nummer) ? nummer : null,
     entwurf: unquote(fields.get("entwurf") ?? "") === "true",
+    adresse: istAdresse(unquote(fields.get("adresse") ?? "")) ? unquote(fields.get("adresse") ?? "") : null,
+    frueher: unquote(fields.get("frueher") ?? "").split(/\s+/).filter(istAdresse),
     body: match[2].trim(),
   };
 }
 
-/** Öffentliche Adressen, wie sie advocat-finanz.ch verwendet. */
-const BRIEF_SLUGS: Record<number, string> = {
-  1: "newsletter-1",
-  2: "newsletter-2",
-  3: "newsletter-3",
-  4: "newsletter-4",
-  5: "newsletter-5",
-  6: "newsletter-6",
-  7: "newsletter-7",
-  8: "newsletter-8",
-  9: "newsletter-9",
-  10: "newsletter-10",
-  11: "newsletter-11",
-  12: "newsletter-12",
-  13: "newsletter-13",
-  14: "newsletter-14",
-  15: "newsletter-15",
-  16: "newsletter-16",
-  17: "newsletter-17",
-  18: "newsletter-18",
-  19: "newsletter-19",
-  20: "newsletter-20",
-  21: "newsletter-21",
-  22: "newsletter-22",
-  23: "newsletter-23",
-  24: "newsletter-24",
-  25: "newsletter-25",
-  26: "newsletter-26",
-  27: "newsletter-27-halbjahresbilanz-ehe-fuer-alle",
-  28: "newsletter-28-revision-des-erbrechts",
-  29: "newsletter-29-sektorrotation-zu-ueberperformance-gedeckte-calls",
-  30: "newsletter-30-erbengemeinschaften-und-willensvollstreckungen",
-  31: "newsletter-31-demografischer-wandel-und-finanzmaerkte",
-  32: "newsletter-32-nachtraegliche-einzahlungen-3a",
-  33: "newsletter-33-langzeitstudie-aktienperformance",
-  34: "newsletter-34-edelmetalle-und-rohstoffe-sicherer-hafen",
-  35: "newsletter-35-transparenzregister-neuerungen-gwg-fuer-beraterinnen-und-berater-marktgeschehen",
+function istAdresse(value: string): boolean {
+  return /^\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
+}
+
+/** Die Startseite hat immer „/“. */
+export const STARTSEITE = "kapitel/willkommen.md";
+
+/**
+ * Adressen, unter denen die Seiten früher standen (WordPress, erste Fassung).
+ * Sie leiten auf die heutige Adresse der Seite weiter, auch wenn Patrick sie umbenennt.
+ */
+const ALTE_ADRESSEN: Record<string, string[]> = {
+  "kapitel/willkommen.md": ["/willkommen"],
+  "kapitel/unternehmen.md": ["/unternehmen"],
+  "kapitel/stiftungen.md": ["/stiftungen"],
 };
+
+/** Die Adresse einer Seite, solange niemand eine eigene gewählt hat. Newsletter: /newsletter-<Nummer>. */
+export function standardPfad(rel: string): string {
+  const norm = rel.replaceAll("\\", "/");
+  if (norm === STARTSEITE) return "/";
+  if (norm === "kapitel/unternehmen.md") return "/unternehmen-2";
+  if (norm === "kapitel/stiftungen.md") return "/stiftungen-2";
+  const base = path.posix.basename(norm, ".md");
+  if (norm.startsWith("briefe/")) {
+    const nummer = Number(base.slice(0, 4));
+    if (/^\d{4}/.test(base) && nummer > 0) return `/newsletter-${nummer}`;
+  }
+  return `/${base}`;
+}
+
+/**
+ * Was die Seite über die Adressen weiss. Jedes `loadDocuments()` frischt es auf, so stimmen
+ * Seite und Redaktion mit dem Inhalt überein, ohne dass jede Stelle die Dokumente mitgeben muss.
+ */
+let eigene = new Map<string, string>();
+let umleitungen = new Map<string, string>();
+let belegt = new Set<string>();
+
+export function merkeAdressen(docs: ReadonlyArray<Pick<DocumentMeta, "rel" | "art" | "adresse" | "frueher">>): void {
+  const nextEigene = new Map<string, string>();
+  for (const doc of docs) {
+    if (doc.art !== "brief" && doc.rel !== STARTSEITE && doc.adresse) nextEigene.set(doc.rel, doc.adresse);
+  }
+  eigene = nextEigene;
+  belegt = new Set(docs.map((doc) => publicPath(doc.rel)));
+  const next = new Map<string, string>();
+  for (const doc of docs) {
+    if (doc.art === "brief") continue;
+    const heute = publicPath(doc.rel);
+    for (const alt of [standardPfad(doc.rel), ...(ALTE_ADRESSEN[doc.rel] ?? []), ...(doc.frueher ?? [])]) {
+      if (alt !== heute && !belegt.has(alt)) next.set(alt, heute);
+    }
+  }
+  umleitungen = next;
+}
+
+/** Ein Stempel der Adressen. Ändert er sich, müssen alle Seiten neu gesetzt werden (Menü, Links). */
+export function adressStempel(): string {
+  return JSON.stringify([[...eigene].sort(), [...umleitungen].sort()]);
+}
+
+/** Alle Adressen, die früher galten und heute weiterleiten. */
+export function alteAdressen(): string[] {
+  return [...umleitungen.keys()];
+}
+
+/** Belegt eine Seite (auch ein Entwurf) diese Adresse? */
+export function adresseBelegt(href: string, ausser?: string): boolean {
+  if (ausser && publicPath(ausser) === href) return false;
+  return belegt.has(href);
+}
 
 export function publicPath(rel: string): string {
   const norm = rel.replaceAll("\\", "/");
-  if (norm === "kapitel/willkommen.md") return "/";
-  if (norm === "kapitel/unternehmen.md") return "/unternehmen-2";
-  if (norm === "kapitel/stiftungen.md") return "/stiftungen-2";
-  if (norm.startsWith("briefe/")) {
-    const base = path.posix.basename(norm, ".md");
-    const nummer = Number(base.slice(0, 4));
-    if (Number.isFinite(nummer) && BRIEF_SLUGS[nummer]) return `/${BRIEF_SLUGS[nummer]}`;
-    const rest = base.replace(/^\d{4}-/, "");
-    if (rest.startsWith("newsletter-")) return `/${rest}`;
-    return rest ? `/newsletter-${nummer}-${rest}` : `/newsletter-${nummer}`;
-  }
-  return `/${path.posix.basename(norm, ".md")}`;
+  return eigene.get(norm) ?? standardPfad(norm);
 }
 
-/** Alte Adressen aus der ersten Fassung auf die öffentlichen Pfade legen. */
+/** Wohin eine alte Adresse heute führt, oder null. Seiten, die es gibt, leiten nie weiter. */
 export function redirectTarget(pathname: string): string | null {
   const pathOnly = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
-  if (pathOnly === "/willkommen") return "/";
-  if (pathOnly === "/unternehmen") return "/unternehmen-2";
-  if (pathOnly === "/stiftungen") return "/stiftungen-2";
-  const brief = pathOnly.match(/^\/briefe\/(\d{4})(?:-(.+))?$/);
-  if (!brief) return null;
-  const stem = brief[2] ? `${brief[1]}-${brief[2]}` : brief[1];
-  const target = publicPath(`briefe/${stem}.md`);
-  return target === pathOnly ? null : target;
+  if (belegt.has(pathOnly)) return null;
+  const direkt = umleitungen.get(pathOnly);
+  if (direkt) return direkt;
+  // Unterseiten wandern mit: /neuigkeiten/page/2 nach dem Umbenennen von Neuigkeiten.
+  for (const [alt, neu] of umleitungen) {
+    if (alt !== "/" && pathOnly.startsWith(`${alt}/`)) return neu + pathOnly.slice(alt.length);
+  }
+  // Newsletter heissen nur noch nach ihrer Nummer. Alte Adressen mit Thema leiten weiter.
+  const mitThema = pathOnly.match(/^\/newsletter-(\d+)-.+$/);
+  if (mitThema) return `/newsletter-${Number(mitThema[1])}`;
+  const brief = pathOnly.match(/^\/briefe\/(\d{4})(?:-.+)?$/);
+  if (brief && Number(brief[1]) > 0) return `/newsletter-${Number(brief[1])}`;
+  return null;
+}
+
+/** Ein Link der Seite (mit ?… oder #…) auf die heutige Adresse. Alles andere bleibt, wie es ist. */
+export function aktuell(href: string): string {
+  const match = href.match(/^(\/[^?#]*)(.*)$/);
+  if (!match) return href;
+  const ziel = redirectTarget(match[1]);
+  return ziel ? ziel + match[2] : href;
+}
+
+const EIGENE_DOMAIN = String.raw`https?://(?:www\.)?advocat-finanz\.ch`;
+
+/** Fertiges HTML: jeder Link und jedes Formular auf eine alte Adresse zeigt auf die heutige. */
+export function aktuelleLinks(html: string): string {
+  return html.replace(
+    new RegExp(String.raw`\b(href|action)="(${EIGENE_DOMAIN})?(/[^"]*)"`, "g"),
+    (ganz, attr: string, domain: string | undefined, href: string) => {
+      const neu = aktuell(href);
+      return neu === href ? ganz : `${attr}="${domain ?? ""}${neu}"`;
+    },
+  );
+}
+
+/** Markdown: Links auf `alt` (auch mit ?…, #… oder der vollen Domain) zeigen danach auf `neu`. */
+export function ersetzeAdresse(markdown: string, alt: string, neu: string): string {
+  const escaped = alt.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return markdown.replace(
+    new RegExp(String.raw`(\]\(<?|href=")(${EIGENE_DOMAIN})?${escaped}/?(?=[)>"#?\s])`, "g"),
+    (_ganz, vor: string, domain: string | undefined) => `${vor}${domain ?? ""}${neu}`,
+  );
+}
+
+/** Pfade, die nie eine Seite sein dürfen: die Technik der Website und die Newsletter. */
+export function adresseReserviert(href: string): boolean {
+  const erstes = href.slice(1).split("/")[0];
+  if (["redaktion", "api", "assets", "media", "fonts", "brand", "eingang", "briefe", "papierkorb", "page", "index"].includes(erstes)) return true;
+  if (erstes.startsWith("wp-")) return true;
+  return /^newsletter-\d+/.test(erstes);
 }

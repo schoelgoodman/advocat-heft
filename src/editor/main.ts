@@ -198,7 +198,9 @@ root.innerHTML = `
         <div class="angaben" id="angaben">
           <label class="datum" id="nummer-feld">Nummer <input type="number" id="nummer" min="1" max="9999" step="1" inputmode="numeric"></label>
           <label class="datum" id="datum-feld">Datum <input type="date" id="datum"></label>
+          <label class="datum adresse-feld" id="adresse-feld">Adresse <span class="adresse-eingabe"><span class="adresse-vor" id="adresse-vor"></span><input type="text" id="adresse" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done"></span></label>
         </div>
+        <p class="nummer-hinweis" id="adresse-hinweis" hidden></p>
         <p class="nummer-hinweis" id="nummer-hinweis" hidden></p>
         <aside class="google-hinweise" id="google-hinweise" hidden aria-live="polite"></aside>
         <div id="editor"></div>
@@ -275,6 +277,10 @@ const datumInput = root.querySelector<HTMLInputElement>("#datum")!;
 const nummerFeld = root.querySelector<HTMLElement>("#nummer-feld")!;
 const nummerInput = root.querySelector<HTMLInputElement>("#nummer")!;
 const nummerHinweis = root.querySelector<HTMLElement>("#nummer-hinweis")!;
+const adresseFeld = root.querySelector<HTMLElement>("#adresse-feld")!;
+const adresseVor = root.querySelector<HTMLElement>("#adresse-vor")!;
+const adresseInput = root.querySelector<HTMLInputElement>("#adresse")!;
+const adresseHinweis = root.querySelector<HTMLElement>("#adresse-hinweis")!;
 const editorHost = root.querySelector<HTMLElement>("#editor")!;
 const fassungenGruppe = root.querySelector<HTMLDetailsElement>("#fassungen-gruppe")!;
 const fassungen = root.querySelector<HTMLOListElement>("#fassungen")!;
@@ -1038,6 +1044,7 @@ async function openPage(rel: string): Promise<void> {
   datumInput.value = current.datum;
   nummerFeld.hidden = !brief;
   nummerInput.value = String(current.nummer ?? "");
+  zeigeAdresse();
   fassungenGruppe.open = false;
   setSaved("");
   googleHinweise.hidden = true;
@@ -1050,6 +1057,107 @@ async function openPage(rel: string): Promise<void> {
   void loadHistory(current.rel);
   void loadSeitenCheck();
   if (brief && current.entwurf && !titelInput.value) titelInput.focus();
+}
+
+/** Wie der Server aus der Eingabe eine Adresse macht: klein, ä zu ae, Leerzeichen zu Bindestrichen. */
+function adresseAus(text: string): string {
+  return text
+    .replace(/^\s*(https?:\/\/)?[^/]*advocat-finanz\.ch/i, "")
+    .toLowerCase()
+    .replace(/ä/g, "ae")
+    .replace(/ö/g, "oe")
+    .replace(/ü/g, "ue")
+    .replace(/ß/g, "ss")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 60);
+}
+
+/** Die Adresse der offenen Seite. Nur übrige Seiten haben eine; die Startseite bleibt «/». */
+function zeigeAdresse(): void {
+  const doc = current;
+  adresseFeld.hidden = !doc || isBrief(doc);
+  adresseHinweis.hidden = true;
+  adresseHinweis.classList.remove("fehler");
+  if (!doc || isBrief(doc)) return;
+  adresseVor.textContent = `${publicOrigin ? new URL(publicOrigin).host : location.host}/`;
+  adresseInput.value = doc.href.replace(/^\//, "");
+  const start = doc.rel === STARTSEITE;
+  adresseInput.disabled = start;
+  adresseFeld.title = start ? "Die Startseite hat immer die Adresse «/»." : "";
+}
+
+/** Was aus der Eingabe wird, noch bevor sie gilt. */
+function adresseVorschau(): void {
+  if (!current) return;
+  const neu = adresseAus(adresseInput.value);
+  const alt = current.href.replace(/^\//, "");
+  adresseHinweis.classList.remove("fehler");
+  if (neu === alt) {
+    adresseHinweis.hidden = true;
+    return;
+  }
+  adresseHinweis.hidden = false;
+  adresseHinweis.textContent = neu
+    ? `Wird zu /${neu}. Mit Enter übernehmen, Esc bricht ab.`
+    : "Bitte eine Adresse eingeben.";
+}
+
+let adresseLaeuft = false;
+
+/** Neue Adresse übernehmen: nachfragen, dann leitet der Server die alte weiter und passt die Links an. */
+async function aendereAdresse(): Promise<void> {
+  if (!current || isBrief(current) || current.rel === STARTSEITE || adresseLaeuft) return;
+  const doc = current;
+  const alt = doc.href;
+  const slug = adresseAus(adresseInput.value);
+  if (!slug || `/${slug}` === alt) {
+    zeigeAdresse();
+    return;
+  }
+  adresseLaeuft = true;
+  try {
+    const ja = await ask({
+      titel: "Adresse ändern?",
+      text: `Die Seite «${doc.titel}» steht danach unter /${slug}. Wer die alte Adresse ${alt} aufruft, landet automatisch auf der neuen, und alle Links auf den anderen Seiten zeigen auf die neue Adresse.`,
+      ja: "Adresse ändern",
+      nein: "Abbrechen",
+    });
+    if (!ja || current?.rel !== doc.rel) {
+      zeigeAdresse();
+      return;
+    }
+    if (!(await saveNow())) {
+      zeigeAdresse();
+      return;
+    }
+    setSaved("Ändert die Adresse …", "busy");
+    const response = await post("/api/adresse", { rel: doc.rel, adresse: slug }).catch(() => null);
+    if (!response?.ok) {
+      setSaved("");
+      await ask({ titel: "Adresse nicht geändert", text: response ? await errorText(response, "Das ging nicht.") : "Keine Verbindung zum Server.", ja: "OK" });
+      zeigeAdresse();
+      return;
+    }
+    const neu = (await response.json()) as Doc & { angepasst?: number };
+    if (current?.rel !== doc.rel) return;
+    const textGeaendert = neu.body.trim() !== current.body.trim();
+    current = { ...current, adresse: neu.adresse, frueher: neu.frueher, href: neu.href, body: neu.body };
+    zeigeAdresse();
+    renderStand();
+    if (textGeaendert) await mountEditor(current.body);
+    const andere = neu.angepasst ?? 0;
+    setSaved(
+      andere
+        ? `Neue Adresse ${neu.href} ✓ Links auf ${andere === 1 ? "einer Seite" : `${andere} Seiten`} angepasst.`
+        : `Neue Adresse ${neu.href} ✓`,
+    );
+    await loadList();
+  } finally {
+    adresseLaeuft = false;
+  }
 }
 
 function scheduleSave(): void {
@@ -1975,6 +2083,19 @@ titelInput.addEventListener("input", () => {
   scheduleSave();
 });
 datumInput.addEventListener("input", () => scheduleSave());
+adresseInput.addEventListener("input", adresseVorschau);
+adresseInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    adresseInput.blur();
+  } else if (event.key === "Escape") {
+    event.preventDefault();
+    zeigeAdresse();
+    adresseInput.blur();
+  }
+});
+// Erst beim Verlassen des Feldes, nicht bei jedem Buchstaben: jede Änderung legt eine Weiterleitung an.
+adresseInput.addEventListener("change", () => void aendereAdresse());
 nummerInput.addEventListener("input", () => {
   if (!current || !isBrief(current)) return;
   kennung.textContent = `Newsletter ${gewaehlteNummer() ?? ""}`;

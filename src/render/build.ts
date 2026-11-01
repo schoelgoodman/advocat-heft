@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { publicPath, type ContentDocument } from "../content/document.ts";
+import { adresseReserviert, adressStempel, alteAdressen, publicPath, type ContentDocument } from "../content/document.ts";
 import { briefsNewestFirst, loadDocuments } from "../content/load.ts";
 import { excerptFromMarkdown, minutesFromMarkdown, renderDocument, type PageView, type Teaser } from "../design/layout.ts";
 import { pageShell } from "../design/page.ts";
@@ -96,7 +96,7 @@ async function writeDocument(site: string, doc: ContentDocument, teasers: Teaser
   const html = publishHtml(await markdownToHtml(doc.body));
   if (doc.rel === "kapitel/neuigkeiten.md") {
     const pages = Math.max(1, Math.ceil(teasers.length / 10));
-    await fs.rm(path.join(site, "neuigkeiten", "page"), { recursive: true, force: true });
+    await fs.rm(path.join(site, publicPath(doc.rel).replace(/^\//, ""), "page"), { recursive: true, force: true });
     for (let page = 1; page <= pages; page += 1) {
       const view = renderDocument({ ...doc, html, teasers, page });
       await writePage(site, view.here, pageShell(view));
@@ -119,7 +119,7 @@ async function writeIndexFiles(site: string, docs: ContentDocument[]): Promise<v
     entries.push({ href, lastmod });
     if (doc.rel === "kapitel/neuigkeiten.md") {
       const pages = Math.ceil(briefs.length / 10);
-      for (let page = 2; page <= pages; page += 1) entries.push({ href: `/neuigkeiten/page/${page}`, lastmod: "" });
+      for (let page = 2; page <= pages; page += 1) entries.push({ href: `${href}/page/${page}`, lastmod: "" });
     }
   }
   entries.sort((a, b) => (a.href === "/" ? -1 : b.href === "/" ? 1 : a.href.localeCompare(b.href, "de")));
@@ -162,6 +162,7 @@ export async function buildSite(): Promise<{ pages: number; index: string }> {
   await pruneVariants(path.join(site, "media"), new Set(await fs.readdir(media).catch(() => [] as string[])));
   await copyAssets();
 
+  gesetzteAdressen = adressStempel();
   let index = "Willkommen";
   for (const doc of docs) {
     await writeDocument(site, doc, teasers);
@@ -171,13 +172,30 @@ export async function buildSite(): Promise<{ pages: number; index: string }> {
   return { pages: docs.length, index };
 }
 
-/** Baut nur die geänderten Seiten neu. Ein Brief erneuert auch Startseite und Archiv. */
+/** Die Adressen beim letzten Setzen. Ändert sich eine, stimmen Menü und Links auf allen Seiten nicht mehr. */
+let gesetzteAdressen: string | null = null;
+
+/**
+ * Baut nur die geänderten Seiten neu. Ein Brief erneuert auch Startseite und Archiv.
+ * Hat eine Seite eine neue Adresse, werden alle neu gesetzt und die Ordner unter den alten Adressen gelöscht.
+ */
 export async function rebuildDocuments(rels: string[]): Promise<void> {
   const docs = await publishedDocuments();
   const teasers = teasersFor(briefsNewestFirst(docs));
   const site = siteDir();
   await fs.mkdir(site, { recursive: true });
   await copyAssets();
+  const stempel = adressStempel();
+  if (gesetzteAdressen !== null && gesetzteAdressen !== stempel) {
+    gesetzteAdressen = stempel;
+    for (const alt of alteAdressen()) {
+      if (alt !== "/" && !adresseReserviert(alt)) await fs.rm(path.join(site, alt.replace(/^\//, "")), { recursive: true, force: true });
+    }
+    for (const doc of docs) await writeDocument(site, doc, teasers);
+    await writeIndexFiles(site, docs);
+    return;
+  }
+  gesetzteAdressen = stempel;
   const wanted = new Set(rels);
   if (rels.some((rel) => rel.startsWith("briefe/"))) {
     wanted.add("kapitel/willkommen.md");

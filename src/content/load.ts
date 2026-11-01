@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { parseDocument, publicPath, type ContentDocument } from "./document.ts";
+import { merkeAdressen, parseDocument, publicPath, type ContentDocument } from "./document.ts";
 import { contentDir } from "../paths.ts";
 
 const FOLDERS = ["briefe", "kapitel", "recht"] as const;
@@ -53,8 +53,11 @@ async function loadFrom(prefix: string): Promise<ContentDocument[]> {
   return docs;
 }
 
+/** Alle Seiten, auch Entwürfe. Frischt nebenbei die Adressen auf (siehe merkeAdressen). */
 export async function loadDocuments(): Promise<ContentDocument[]> {
-  return loadFrom("");
+  const docs = await loadFrom("");
+  merkeAdressen(docs);
+  return docs;
 }
 
 export async function loadPapierkorb(): Promise<ContentDocument[]> {

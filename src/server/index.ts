@@ -4,7 +4,18 @@ import path from "node:path";
 import zlib from "node:zlib";
 import { watch } from "chokidar";
 import { createServer as createVite, type ViteDevServer } from "vite";
-import { parseDocument, publicPath, redirectTarget, serializeDocument, type Art, type ContentDocument } from "../content/document.ts";
+import {
+  adresseBelegt,
+  adresseReserviert,
+  ersetzeAdresse,
+  parseDocument,
+  publicPath,
+  redirectTarget,
+  serializeDocument,
+  standardPfad,
+  type Art,
+  type ContentDocument,
+} from "../content/document.ts";
 import { editorOrder, loadDocuments, loadPapierkorb, PAPIERKORB } from "../content/load.ts";
 import { notFoundPage } from "../design/page.ts";
 import { commitIfChanged, ensureContentGit, logFile, restoreFile, showFile } from "../git/history.ts";
@@ -406,6 +417,51 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     return;
   }
 
+  // Neue Adresse für eine feste Seite. Die alte leitet weiter, Links in allen Seiten zeigen danach auf die neue.
+  if (req.method === "POST" && url.pathname === "/api/adresse") {
+    const payload = JSON.parse((await readBody(req)).toString("utf8")) as { rel?: string; adresse?: string };
+    const rel = safeRel(payload.rel ?? "");
+    await flushPending();
+    const docs = await loadDocuments();
+    const doc = docs.find((item) => item.rel === rel);
+    if (!doc) throw new Error("Seite nicht gefunden.");
+    if (doc.art === "brief") throw new Error("Newsletter haben immer die Adresse /newsletter-<Nummer>.");
+    if (rel === STARTSEITE) throw new Error("Die Startseite hat immer die Adresse «/».");
+    const slug = slugify(String(payload.adresse ?? "").replace(/^\s*(https?:\/\/)?[^/]*advocat-finanz\.ch/i, ""));
+    if (!slug) throw new Error("Bitte eine Adresse eingeben, zum Beispiel «firmenkunden».");
+    const neu = `/${slug}`;
+    const alt = publicPath(rel);
+    if (neu === alt) {
+      sendJson(res, 200, { ...doc, href: alt });
+      return;
+    }
+    if (adresseReserviert(neu)) throw new Error(`«${neu}» braucht die Website selbst. Bitte eine andere Adresse wählen.`);
+    if (adresseBelegt(neu, rel)) {
+      const andere = docs.find((item) => publicPath(item.rel) === neu);
+      throw new Error(`«${neu}» hat schon die Seite «${andere?.titel ?? neu}». Bitte eine andere Adresse wählen.`);
+    }
+    const frueher = [...new Set([...(doc.frueher ?? []), alt])].filter((href) => href !== neu && href !== standardPfad(rel));
+    const geaendert: ContentDocument = { ...doc, adresse: neu === standardPfad(rel) ? null : neu, frueher };
+    // Links auf die alte Adresse in allen Seiten, auch in dieser und in Entwürfen.
+    const touched: string[] = [rel];
+    for (const other of docs) {
+      const body = ersetzeAdresse(other.rel === rel ? geaendert.body : other.body, alt, neu);
+      if (other.rel === rel) {
+        geaendert.body = body;
+      } else if (body !== other.body) {
+        await writeDoc({ ...other, body });
+        touched.push(other.rel);
+      }
+    }
+    await writeDoc(geaendert);
+    await loadDocuments();
+    await updateSite(touched);
+    await commitIfChanged(`Neue Adresse: ${doc.titel} ${alt} → ${neu}`, touched);
+    console.log(`Adresse ${rel}: ${alt} → ${neu} (${touched.length - 1} Seiten mit Links angepasst)`);
+    sendJson(res, 200, { ...geaendert, href: neu, angepasst: touched.length - 1 });
+    return;
+  }
+
   if (req.method === "PUT" && url.pathname === "/api/pages") {
     const payload = JSON.parse((await readBody(req)).toString("utf8")) as ContentDocument;
     const rel = safeRel(payload.rel);
@@ -419,6 +475,9 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
       datum: String(payload.datum ?? ""),
       nummer: payload.nummer == null || payload.nummer === ("" as unknown) ? null : Number(payload.nummer),
       entwurf: before?.entwurf ?? false,
+      // Die Adresse hat einen eigenen Weg (/api/adresse): Speichern beim Tippen ändert sie nie.
+      adresse: before?.adresse ?? null,
+      frueher: before?.frueher ?? [],
       body: String(payload.body ?? ""),
     };
     if (doc.nummer != null && !Number.isFinite(doc.nummer)) doc.nummer = null;
@@ -475,6 +534,9 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
         rel: await freeRel(`${path.posix.dirname(source.rel)}/${stem}-kopie.md`),
         titel: `${source.titel.replace(/\s*\(Kopie\)$/, "")} (Kopie)`,
         entwurf: true,
+        // Die Adresse gehört dem Original. Die Kopie bekommt ihre aus dem Dateinamen.
+        adresse: null,
+        frueher: [],
       };
     }
     await writeDoc(doc);
@@ -551,6 +613,9 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     const raw = await fs.readFile(path.join(contentDir(), from), "utf8");
     // Zurück kommt sie als Entwurf. Veröffentlichen ist ein eigener Schritt.
     const doc: ContentDocument = { ...parseDocument(raw, original), rel: await freeRel(original), entwurf: true };
+    // Hat inzwischen eine andere Seite die gewählte Adresse, kommt sie mit der Standardadresse zurück.
+    await loadDocuments();
+    if (doc.adresse && adresseBelegt(doc.adresse)) doc.adresse = null;
     await writeDoc(doc);
     await fs.rm(path.join(contentDir(), from), { force: true });
     await commitIfChanged(`Zurückgeholt: ${doc.titel}`, [from, doc.rel]);
@@ -626,7 +691,8 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     const before = await readDoc(rel);
     await restoreFile(rel, rev, from);
     // Nur der Text kommt zurück. Ob die Seite online ist, bleibt, wie es war.
-    const doc: ContentDocument = { ...(await readDoc(rel)), rel, entwurf: before.entwurf };
+    // Auch die Adresse bleibt: andere Seiten verlinken schon auf die heutige.
+    const doc: ContentDocument = { ...(await readDoc(rel)), rel, entwurf: before.entwurf, adresse: before.adresse ?? null, frueher: before.frueher ?? [] };
     await writeDoc(doc);
     await updateSite([rel]);
     const message = `Wiederhergestellt: ${doc.titel}`;
@@ -714,6 +780,8 @@ function watchContent(): void {
 async function main(): Promise<void> {
   console.log(`Rolle: ${ROLLE}`);
   if (hatRedaktion) await ensureContentGit();
+  // Die Adressen der Seiten kennen, bevor die erste Anfrage kommt.
+  await loadDocuments().catch(() => []);
   if (setztSeite) {
     // Immer neu setzen: nach einem Code-Update passt altes HTML nicht zum neuen heft.css.
     console.log("Setze die Seiten …");
@@ -784,7 +852,8 @@ async function main(): Promise<void> {
       });
       return;
     }
-    if (setztSeite && req.method === "POST" && (url.pathname === "/kontakt" || url.pathname === "/kontakt/")) {
+    const kontakt = publicPath("kapitel/kontakt.md");
+    if (setztSeite && req.method === "POST" && [kontakt, `${kontakt}/`, "/kontakt", "/kontakt/"].includes(url.pathname)) {
       void handleAnfrage(req, res).catch((error: unknown) => {
         console.error("Anfrage:", error instanceof Error ? error.message : error);
         if (!res.headersSent) sendJson(res, 500, { error: "Fehler" });
