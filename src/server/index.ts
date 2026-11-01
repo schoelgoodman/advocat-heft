@@ -278,7 +278,7 @@ function send(req: http.IncomingMessage, res: http.ServerResponse, file: string,
     "cache-control": cacheControl(urlPath),
   };
   // Ein SVG kann Skript enthalten (etwa aus einer Word-Datei). Direkt geöffnet läuft es sonst mit dem Login der Redaktion.
-  if (ext === ".svg") headers["content-security-policy"] = "sandbox; default-src 'none'; img-src data:; style-src 'unsafe-inline'";
+  if (ext === ".svg") headers["content-security-policy"] = "sandbox; default-src 'none'; img-src data:; style-src 'unsafe-inline'; frame-ancestors 'self'";
   if (PACKBAR.has(ext)) {
     headers.vary = "Accept-Encoding";
     if (/\bgzip\b/.test(String(req.headers["accept-encoding"] ?? "")) && data.length > 1024) {
@@ -872,6 +872,8 @@ async function main(): Promise<void> {
     // Für alle Antworten: keine geratenen Dateitypen, nicht in fremden Rahmen (Klick-Fallen auf «Veröffentlichen»).
     res.setHeader("x-content-type-options", "nosniff");
     res.setHeader("x-frame-options", "SAMEORIGIN");
+    // Dasselbe in neu. SWAG entfernt X-Frame-Options auf dem Weg nach draussen, diesen Header nicht.
+    res.setHeader("content-security-policy", "frame-ancestors 'self'");
     res.setHeader("referrer-policy", "strict-origin-when-cross-origin");
     const aufRedaktion = ROLLE === "redaktion" || host.startsWith("redaktion.");
     const unterRedaktion = url.pathname === "/redaktion" || url.pathname === "/redaktion/";
