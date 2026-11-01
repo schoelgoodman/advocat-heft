@@ -6,6 +6,13 @@
     ...
   }: let
     cfg = config.neo.services.advocat-redaktion;
+    # Wer die Redaktion in einem Rahmen zeigen darf: sie selbst und die Neo-Oberfläche (neo.<domain>
+    # bettet Dienste ein). Neo entfernt dafür CSP und X-Frame-Options der Container (proxy.conf,
+    # iframeCookieSupport); nginx setzt diesen Header darum selbst. Sonst könnte jede fremde Seite die
+    # Redaktion unsichtbar einbetten und Klicks auf «Veröffentlichen» oder «Löschen» erschleichen.
+    domain = config.neo.services.swag.domain or null;
+    neoHost = "${config.neo.services.neo.subdomain or "neo"}.${domain}";
+    rahmen = "frame-ancestors 'self'" + lib.optionalString (domain != null) " https://${neoHost}";
   in {
     config.neo.services.advocat-redaktion.proxyConf = lib.mkDefault ''
       server {
@@ -15,6 +22,8 @@
         include /config/nginx/ssl.conf;
         include /config/nginx/geo-access.conf;
         client_max_body_size 32m;
+        # Auf Server-Ebene: so ergänzt er die add_header aus ssl.conf (etwa HSTS), statt sie zu verdrängen.
+        add_header Content-Security-Policy "${rahmen}" always;
 
         location / {
           ${lib.optionalString (!(cfg.auth.enabled && config.neo.services.tinyauth.enabled)) "return 403;"}
