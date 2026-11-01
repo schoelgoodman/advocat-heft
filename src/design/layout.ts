@@ -1,5 +1,7 @@
 import { Window } from "happy-dom";
 import { publicPath, type Art } from "../content/document.ts";
+import { mediaVariants } from "../render/media.ts";
+import { ANGEBOTE, istAngebot } from "./angebote.ts";
 import { clip, DEFAULT_DESCRIPTION, DEFAULT_IMAGE } from "./seo.ts";
 
 export interface Teaser {
@@ -7,6 +9,9 @@ export interface Teaser {
   titel: string;
   datum: string;
   excerpt: string;
+  nummer: number | null;
+  /** Lesezeit in Minuten; Liste und Newsletter zeigen dieselbe Zahl. */
+  minuten: number;
 }
 
 export interface RenderInput {
@@ -62,6 +67,8 @@ const ADDRESS_LINES: Record<string, string[]> = {
   ],
 };
 
+const MAPS_LINK = "https://maps.app.goo.gl/poLBfgcPVnj2UWaW9";
+
 const SHORT_MONTHS = ["Jan.", "Feb.", "März", "Apr.", "Mai", "Juni", "Juli", "Aug.", "Sep.", "Okt.", "Nov.", "Dez."];
 const LONG_MONTHS = [
   "Januar", "Februar", "März", "April", "Mai", "Juni",
@@ -89,29 +96,80 @@ export function shortDate(iso: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
   if (!match) return "";
   const month = SHORT_MONTHS[Number(match[2]) - 1] ?? "";
-  return `${month} ${Number(match[3])}, ${match[1]}`;
+  return `${Number(match[3])}. ${month} ${match[1]}`;
 }
 
 export function longDate(iso: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
   if (!match) return "";
   const month = LONG_MONTHS[Number(match[2]) - 1] ?? "";
-  return `${match[3]}. ${month} ${match[1]}`;
+  return `${Number(match[3])}. ${month} ${match[1]}`;
 }
 
-export function excerptFromMarkdown(markdown: string, limit = 490): string {
-  const text = markdown
+/** Markdown ohne Bilder, Links und Auszeichnung, als eine Zeile Text. */
+function plainMarkdown(markdown: string): string {
+  return markdown
     .replace(/!\[[^\]]*]\([^)]*\)/g, " ")
     .replace(/\[([^\]]*)]\([^)]*\)/g, "$1")
-    .replace(/^#{1,6}\s+/gm, "")
     .replace(/[*_`]/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/** Der Marktbericht, mit dem fast jeder Newsletter beginnt. Für die Vorschau zählt das Thema dahinter. */
+const MARKTBERICHT = /^(aktuelles\s+marktgeschehen|markt|rückblick)/i;
+
+/** Wörter ab fünf Buchstaben, klein, für den Vergleich von Titel und Zwischentitel. */
+function keyWords(text: string): Set<string> {
+  return new Set(text.toLowerCase().split(/[^\p{L}\d]+/u).filter((word) => word.length >= 5));
+}
+
+/**
+ * Vorschau für die Liste: die ersten Sätze des eigentlichen Themas. Zwischentitel fallen weg,
+ * ebenso der Marktbericht am Anfang, ausser er ist selbst das Thema (teilt ein Wort mit dem Titel)
+ * oder es kommt danach kein Text mehr.
+ */
+export function excerptFromMarkdown(markdown: string, titel = "", limit = 490): string {
+  const sections: Array<{ heading: string; lines: string[] }> = [{ heading: "", lines: [] }];
+  for (const line of markdown.split("\n")) {
+    const heading = /^#{1,6}\s+(.*)$/.exec(line);
+    if (heading) sections.push({ heading: plainMarkdown(heading[1]), lines: [] });
+    else sections[sections.length - 1].lines.push(line);
+  }
+  const withText = sections
+    .map((section) => ({ heading: section.heading, text: plainMarkdown(section.lines.join("\n")) }))
+    .filter((section) => section.text);
+  const titleWords = keyWords(titel.replace(/^newsletter\s*\d+\s*[:–-]\s*/i, ""));
+  const isReport = (heading: string) =>
+    MARKTBERICHT.test(heading) && ![...keyWords(heading)].some((word) => titleWords.has(word));
+  let start = 0;
+  while (start < withText.length && isReport(withText[start].heading)) start += 1;
+  const rest = start < withText.length ? withText.slice(start) : withText;
+  const text = rest.map((section) => section.text).join(" ");
   if (text.length <= limit) return text;
   const cut = text.slice(0, limit);
   const at = cut.lastIndexOf(" ");
   const base = (at > limit * 0.6 ? cut.slice(0, at) : cut).trimEnd();
   return `${base}...`;
+}
+
+/** Lesezeit bei rund 200 Wörtern pro Minute, mindestens eine. */
+export function minutesFromMarkdown(markdown: string): number {
+  const words = plainMarkdown(markdown.replace(/^#{1,6}\s+/gm, "")).split(" ").filter(Boolean).length;
+  return Math.max(1, Math.round(words / 200));
+}
+
+/** «Newsletter 34: Edelmetalle …» → Thema und Nummer getrennt, für die Liste. */
+export function splitBriefTitle(titel: string, nummer: number | null): { thema: string; nummer: number | null } {
+  const match = /^newsletter\s*(\d+)\s*[:–-]\s*(.+)$/i.exec(titel.trim());
+  if (!match) return { thema: titel, nummer };
+  return { thema: match[2], nummer: nummer ?? Number(match[1]) };
+}
+
+/** Zeile unter dem Titel in der Liste, ohne Datum: «Newsletter 34 · 6 Min. Lesezeit». */
+function listMeta(teaser: Teaser): string {
+  const { nummer } = splitBriefTitle(teaser.titel, teaser.nummer);
+  return [nummer ? `Newsletter ${nummer}` : "", `${teaser.minuten} Min. Lesezeit`].filter(Boolean).join(" · ");
 }
 
 export function documentTitle(rel: string, titel: string): string {
@@ -154,17 +212,33 @@ function soloAnchor(el: Element): HTMLAnchorElement | null {
   return anchor;
 }
 
-function cssUrl(src: string): string {
-  return src.replaceAll("'", "%27").replaceAll("(", "%28").replaceAll(")", "%29");
+/** Bildbreite im Textfluss: Handy fast randlos, sonst die Textspalte. */
+const SIZES_PROSA = "(max-width: 820px) calc(100vw - 2.5rem), 760px";
+const SIZES_HERO = "(max-width: 767px) 100vw, min(1120px, 100vw - 7rem)";
+const SIZES_CARD = "(max-width: 767px) calc(100vw - 2.5rem), (max-width: 1240px) 33vw, 360px";
+
+/** `srcset` aus den kleineren Fassungen, oder leer: dann lädt der Browser das Original. */
+function srcset(src: string): string {
+  return mediaVariants(src).map((variant) => `${variant.url} ${variant.width}w`).join(", ");
 }
 
+/** Ein Hintergrundbild als echtes <img>, damit der Browser die passende Grösse wählt. */
+function coverImage(className: string, src: string, sizes: string, eager: boolean): string {
+  const set = srcset(src);
+  const responsive = set ? ` srcset="${esc(set)}" sizes="${sizes}"` : "";
+  const loading = eager ? ` fetchpriority="high"` : ` loading="lazy" decoding="async"`;
+  return `<img class="${className}" src="${esc(src)}"${responsive} alt=""${loading}>`;
+}
+
+/** Ein Eintrag im Archiv. site.js baut Suchtreffer gleich auf; wer hier etwas ändert, ändert dort mit. */
 function articleHtml(teaser: Teaser): string {
+  const { thema } = splitBriefTitle(teaser.titel, teaser.nummer);
   const excerpt = teaser.excerpt ? `<div class="post-content"><p>${esc(teaser.excerpt)}</p></div>` : "";
-  return `<article class="beitrag"><h2 class="entry-title"><a href="${esc(teaser.href)}">${esc(teaser.titel)}</a></h2><p class="post-meta"><time datetime="${esc(teaser.datum)}">${esc(shortDate(teaser.datum))}</time></p>${excerpt}</article>`;
+  return `<article class="beitrag"><h2 class="entry-title"><a href="${esc(teaser.href)}">${esc(thema)}</a></h2><p class="post-meta"><time datetime="${esc(teaser.datum)}">${esc(shortDate(teaser.datum))}</time> · ${esc(listMeta(teaser))}</p>${excerpt}</article>`;
 }
 
 function cardAnchor(src: string, label: string, href: string): string {
-  return `<a class="karte" href="${esc(href)}" style="--bild:url('${cssUrl(src)}')"><span>${esc(label)}</span></a>`;
+  return `<a class="karte" href="${esc(href)}">${coverImage("karte-bild", src, SIZES_CARD, false)}<span>${esc(label)}</span></a>`;
 }
 
 function standardCards(): string {
@@ -176,8 +250,10 @@ function knopfText(label: string): string {
   return label.replace(/^kontaktieren sie uns/i, "Kontaktieren Sie uns");
 }
 
+/** Neben dem Knopf Telefon und Mail: auf dem Handy ein Tipp bis zum Anruf. */
 function bandHtml(heading: string, paragraph: string, label: string, href: string): string {
-  return `<aside class="band"><div class="band-innen"><h2>${esc(heading)}</h2><p>${esc(paragraph)}</p><p class="aktionen"><a class="btn btn-solid" href="${esc(href)}">${esc(knopfText(label))}</a></p></div></aside>`;
+  const direkt = `<p class="band-direkt"><a href="tel:+41712423030">+41 71 242 30 30</a><a href="mailto:office@advocat-finanz.ch">office@advocat-finanz.ch</a></p>`;
+  return `<aside class="band"><div class="band-innen"><h2>${esc(heading)}</h2><p>${esc(paragraph)}</p><div class="aktionen"><a class="btn btn-solid" href="${esc(href)}">${esc(knopfText(label))}</a>${direkt}</div></div></aside>`;
 }
 
 function standardBand(): string {
@@ -192,11 +268,11 @@ function standardBand(): string {
 function formHtml(): string {
   return `<form class="anfrage" action="/kontakt" method="post" novalidate>
     <div class="feld-reihe">
-      <label class="feld"><span>Vorname</span><input name="vorname" autocomplete="given-name" maxlength="100" required></label>
-      <label class="feld"><span>Name</span><input name="name" autocomplete="family-name" maxlength="100" required></label>
+      <label class="feld"><span>Vorname</span><input name="vorname" autocomplete="given-name" maxlength="100" required aria-describedby="fehler-vorname"><span class="feld-fehler" id="fehler-vorname" hidden></span></label>
+      <label class="feld"><span>Name</span><input name="name" autocomplete="family-name" maxlength="100" required aria-describedby="fehler-name"><span class="feld-fehler" id="fehler-name" hidden></span></label>
     </div>
-    <label class="feld"><span>E-Mail-Adresse</span><input name="email" type="email" autocomplete="email" maxlength="200" required></label>
-    <label class="feld"><span>Nachricht</span><textarea name="nachricht" rows="7" maxlength="10000" required></textarea></label>
+    <label class="feld"><span>E-Mail-Adresse</span><input name="email" type="email" autocomplete="email" maxlength="200" required aria-describedby="fehler-email"><span class="feld-fehler" id="fehler-email" hidden></span></label>
+    <label class="feld"><span>Nachricht</span><textarea name="nachricht" rows="7" maxlength="10000" required aria-describedby="fehler-nachricht"></textarea><span class="feld-fehler" id="fehler-nachricht" hidden></span></label>
     <label class="feld-falle" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
     <div class="anfrage-fuss">
       <button class="btn btn-solid" type="submit">Nachricht senden</button>
@@ -229,13 +305,13 @@ function repair(root: HTMLElement, doc: Document): void {
     const anchor = soloAnchor(paragraph);
     const href = anchor?.getAttribute("href") ?? "";
     if (anchor && /google\.com\/maps\/embed|\/maps\/embed/.test(href)) {
-      const frame = doc.createElement("iframe");
-      frame.className = "karte-frame";
-      frame.setAttribute("src", href);
-      frame.setAttribute("title", "Advocat Finanz AG auf der Karte");
-      frame.setAttribute("loading", "lazy");
-      frame.setAttribute("referrerpolicy", "no-referrer-when-downgrade");
-      paragraph.replaceWith(frame);
+      // Die Karte lädt erst auf Klick (site.js), damit ohne Zustimmung nichts an Google geht.
+      const holder = doc.createElement("div");
+      holder.className = "karte-frame karte-platzhalter";
+      holder.setAttribute("data-src", href);
+      holder.setAttribute("data-title", "Advocat Finanz AG auf der Karte");
+      holder.innerHTML = `<p>Die Karte stammt von Google Maps. Erst wenn Sie sie laden, werden Daten an Google übertragen.</p><p><button type="button" class="btn btn-ghost karte-laden">Karte laden</button></p><p><a href="${MAPS_LINK}">In Google Maps öffnen</a></p>`;
+      paragraph.replaceWith(holder);
     }
   }
 }
@@ -260,8 +336,8 @@ function takeHero(root: HTMLElement, input: RenderInput): string {
     let sub = "Vermögen und recht - ein leben lang";
     const signet = firstElement(root);
     if (signet && isImgOnly(signet)) {
-      const alt = signet.querySelector("img")?.getAttribute("alt") || "Advocat Finanz Webclip";
-      tree = `<img class="held-baum" src="${esc(imageSrc(signet))}" alt="${esc(alt)}" width="256" height="256">`;
+      // Schmuck: der Titel darunter sagt schon «Advocat Finanz». Screenreader überspringen den Baum.
+      tree = `<img class="held-baum" src="${esc(imageSrc(signet))}" alt="" width="256" height="256">`;
       signet.remove();
     }
     const titleNode = firstElement(root);
@@ -274,7 +350,7 @@ function takeHero(root: HTMLElement, input: RenderInput): string {
       sub = hyphenate(plain(subNode));
       subNode.remove();
     }
-    return `<section class="held held-start" style="background-image:linear-gradient(180deg, rgba(24,22,19,0.38) 0%, rgba(24,22,19,0.58) 100%), url('${cssUrl(src)}')"><div class="held-innen">${tree}<h1 class="held-titel">${esc(title)}</h1><p class="held-untertitel">${esc(sub)}</p></div></section>`;
+    return `<section class="held held-start">${coverImage("held-bild", src, SIZES_HERO, true)}<div class="held-innen">${tree}<h1 class="held-titel">${esc(title)}</h1><p class="held-untertitel">${esc(sub)}</p></div></section>`;
   }
 
   let title = input.titel;
@@ -283,7 +359,7 @@ function takeHero(root: HTMLElement, input: RenderInput): string {
     title = plain(heading);
     heading.remove();
   }
-  return `<section class="held held-seite" style="background-image:linear-gradient(180deg, rgba(24,22,19,0.38) 0%, rgba(24,22,19,0.58) 100%), url('${cssUrl(src)}')"><h1>${esc(title)}</h1></section>`;
+  return `<section class="held held-seite">${coverImage("held-bild", src, SIZES_HERO, true)}<h1>${esc(title)}</h1></section>`;
 }
 
 function extractCards(root: HTMLElement, home: boolean): void {
@@ -344,7 +420,7 @@ function extractBand(root: HTMLElement): void {
 }
 
 function isBlock(el: Element): boolean {
-  return el.classList.contains("band") || el.classList.contains("karten") || el.classList.contains("abschnitt");
+  return el.classList.contains("band") || el.classList.contains("karten") || el.classList.contains("abschnitt") || el.classList.contains("weitere");
 }
 
 function isLeistungen(el: Element): boolean {
@@ -419,6 +495,34 @@ function leistungsSpalten(root: HTMLElement): void {
     group.push(row);
   }
   close();
+}
+
+/** Inhaltsverzeichnis unter dem Titelbild: je Leistungsabschnitt (Text links, Leistungen rechts) ein nummerierter Eintrag. */
+function sprungMenu(root: HTMLElement): string {
+  const links: string[] = [];
+  for (const heading of root.querySelectorAll(".spalten-2-1 > .spalte:first-child > h2:first-child")) {
+    const id = heading.getAttribute("id");
+    if (!id) continue;
+    const nr = String(links.length + 1).padStart(2, "0");
+    links.push(`<li><a href="#${esc(id)}"><span class="sprung-nr" aria-hidden="true">${nr}</span>${esc(plain(heading))}</a></li>`);
+  }
+  if (links.length < 2) return "";
+  return `<nav class="sprung" aria-labelledby="sprung-titel"><p class="sprung-titel" id="sprung-titel">Auf dieser Seite</p><ol class="sprung-liste">${links.join("")}</ol></nav>`;
+}
+
+/** Am Ende einer Angebotsseite, vor «Kontaktieren Sie uns»: die beiden anderen Angebote. */
+function weitereAngebote(root: HTMLElement, here: string): void {
+  if (!istAngebot(here)) return;
+  const links = ANGEBOTE.filter((angebot) => angebot.href !== here)
+    .map(({ href, name }) => `<li><a href="${href}">Für ${esc(name)}<span class="weitere-pfeil" aria-hidden="true">→</span></a></li>`)
+    .join("");
+  const nav = root.ownerDocument.createElement("nav");
+  nav.className = "weitere";
+  nav.setAttribute("aria-labelledby", "weitere-titel");
+  nav.innerHTML = `<p class="sprung-titel" id="weitere-titel">Weitere Angebote</p><ul class="sprung-liste">${links}</ul>`;
+  const band = [...root.children].find((el) => el.classList.contains("band"));
+  if (band) band.before(nav);
+  else root.append(nav);
 }
 
 function headingNamed(root: HTMLElement, pattern: RegExp): HTMLElement | null {
@@ -548,7 +652,7 @@ function layoutImpressum(root: HTMLElement): string {
 }
 
 function layoutKontakt(root: HTMLElement): string {
-  const frame = root.querySelector("iframe");
+  const frame = root.querySelector(".karte-frame");
   frame?.remove();
   const kids = [...root.children] as HTMLElement[];
   const split = kids.findIndex((el) => headingLevel(el) > 0 && /^unser standort$/i.test(plain(el)));
@@ -576,13 +680,28 @@ function layoutKontakt(root: HTMLElement): string {
   return `${wrap.outerHTML}${map}`;
 }
 
+/** Ein Newsletter als Karte; der Titellink deckt die ganze Karte ab. */
+function teaserCard(teaser: Teaser): string {
+  return `<article class="teaser"><p class="post-meta"><time datetime="${esc(teaser.datum)}">${esc(shortDate(teaser.datum))}</time></p><h3 class="teaser-titel"><a href="${esc(teaser.href)}">${esc(teaser.titel)}</a></h3>${teaser.excerpt ? `<p class="teaser-text">${esc(teaser.excerpt)}</p>` : ""}<span class="teaser-mehr" aria-hidden="true">Weiterlesen →</span></article>`;
+}
+
+/** «Unsere Neuigkeiten»: die drei neuesten als Kartenreihe in voller Breite, «Mehr Neuigkeiten» darunter. */
 function insertTeasers(root: HTMLElement, teasers: Teaser[]): void {
   for (const heading of root.querySelectorAll("h1,h2,h3")) {
     if (!/^unsere neuigkeiten$/i.test(plain(heading))) continue;
-    const block = root.ownerDocument.createElement("div");
-    block.className = "beitraege";
-    block.innerHTML = teasers.slice(0, 3).map(articleHtml).join("");
-    heading.parentElement?.insertBefore(block, heading.nextSibling);
+    const doc = root.ownerDocument;
+    const next = heading.nextElementSibling;
+    const more = next?.classList.contains("aktionen") ? next : null;
+    const grid = doc.createElement("div");
+    grid.className = "teaser-raster";
+    grid.innerHTML = teasers.slice(0, 3).map(teaserCard).join("");
+    const title = doc.createElement("h2");
+    title.textContent = plain(heading);
+    const nodes: Element[] = [title, grid];
+    if (more) nodes.push(more);
+    heading.replaceWith(title);
+    section(doc, false, nodes);
+    title.closest(".abschnitt")?.classList.add("neuigkeiten-start");
     break;
   }
   for (const heading of root.querySelectorAll("h1,h2")) {
@@ -604,11 +723,19 @@ function serializeFlow(root: HTMLElement): string {
   };
   for (const node of [...root.childNodes]) {
     if (node.nodeType === 3 && !(node.textContent ?? "").trim()) continue;
+    if (!node.isConnected) continue;
     if (node.nodeType === 1) {
       const el = node as HTMLElement;
       if (isBlock(el)) {
-        flush(el.classList.contains("karten-home") ? "inhalt-intro" : "");
-        parts.push(el.classList.contains("karten-home") ? `<section class="karten-band">${el.outerHTML}</section>` : el.outerHTML);
+        const home = el.classList.contains("karten-home");
+        flush(home ? "inhalt-intro" : "");
+        if (home) {
+          // «Zu unserem Angebot» gehört zu den Karten, nicht allein in den weissen Raum darunter.
+          const next = el.nextElementSibling;
+          const more = next?.classList.contains("aktionen") ? next : null;
+          more?.remove();
+          parts.push(`<section class="karten-band">${el.outerHTML}${more ? more.outerHTML : ""}</section>`);
+        } else parts.push(el.outerHTML);
         continue;
       }
     }
@@ -636,34 +763,75 @@ function describe(root: HTMLElement): string {
   return text ? clip(text) : "";
 }
 
+/** Lesezeit bei rund 200 Wörtern pro Minute, mindestens eine. */
+function readingMinutes(root: HTMLElement): number {
+  const words = plain(root).split(" ").filter(Boolean).length;
+  return Math.max(1, Math.round(words / 200));
+}
+
+/** Am Ende eines Newsletters: der vorherige und der nächste. Die Liste ist neueste zuerst. */
+function briefNav(input: RenderInput): string {
+  const here = publicPath(input.rel);
+  const index = input.teasers.findIndex((teaser) => teaser.href === here);
+  if (index === -1) return "";
+  const link = (teaser: Teaser | undefined, className: string, label: string) =>
+    teaser
+      ? `<a class="${className}" href="${esc(teaser.href)}"><span class="brief-nav-label">${label}</span><span class="brief-nav-titel">${esc(teaser.titel)}</span></a>`
+      : "<span></span>";
+  return `<nav class="brief-nav" aria-label="Weitere Newsletter">${link(input.teasers[index + 1], "brief-nav-zurueck", "← Vorheriger Newsletter")}${link(input.teasers[index - 1], "brief-nav-weiter", "Nächster Newsletter →")}</nav>`;
+}
+
 function pageHref(page: number): string {
   return page <= 1 ? "/neuigkeiten" : `/neuigkeiten/page/${page}`;
 }
 
-function archiveHtml(input: RenderInput): string {
+/** intro: der Text aus neuigkeiten.md zwischen Titel und «Kontaktieren Sie uns.», als HTML. */
+function archiveHtml(input: RenderInput, intro: string): string {
   const page = Math.max(1, input.page ?? 1);
   const pages = Math.max(1, Math.ceil(input.teasers.length / PER_PAGE));
   const slice = input.teasers.slice((page - 1) * PER_PAGE, page * PER_PAGE);
-  const recent = input.teasers.slice(0, 5).map((teaser) =>
-    `<li><a href="${esc(teaser.href)}">${esc(teaser.titel)}</a></li>`,
+  const counts = new Map<string, number>();
+  for (const teaser of input.teasers) {
+    const year = teaser.datum.slice(0, 4);
+    counts.set(year, (counts.get(year) ?? 0) + 1);
+  }
+  const years = [...counts].sort(([a], [b]) => b.localeCompare(a));
+  const jahre = years.map(([year, count]) =>
+    `<li><a href="/neuigkeiten?jahr=${year}" data-jahr="${year}"><span>${year}</span><span class="anzahl"><span class="unsichtbar">, </span>${count}<span class="unsichtbar"> ${count === 1 ? "Beitrag" : "Beiträge"}</span></span></a></li>`,
   ).join("");
-  const older = page < pages ? `<a class="aelter" href="${pageHref(page + 1)}">« Ältere Einträge</a>` : "<span></span>";
-  const newer = page > 1 ? `<a class="neuer" href="${pageHref(page - 1)}">Neuere Einträge »</a>` : "<span></span>";
+  const numbers = Array.from({ length: pages }, (_, index) => index + 1).map((n) =>
+    n === page
+      ? `<span class="seitenzahl" aria-current="page">${n}</span>`
+      : `<a class="seitenzahl" href="${pageHref(n)}" aria-label="Seite ${n}">${n}</a>`,
+  ).join("");
+  const newer = page > 1 ? `<a class="neuer" href="${pageHref(page - 1)}">← Neuere</a>` : "";
+  const older = page < pages ? `<a class="aelter" href="${pageHref(page + 1)}">Ältere →</a>` : "";
   const index = JSON.stringify(
-    input.teasers.map((teaser) => ({ ...teaser, datumAnzeige: shortDate(teaser.datum) })),
+    input.teasers.map((teaser) => ({
+      href: teaser.href,
+      titel: teaser.titel,
+      thema: splitBriefTitle(teaser.titel, teaser.nummer).thema,
+      datum: teaser.datum,
+      datumAnzeige: shortDate(teaser.datum),
+      meta: listMeta(teaser),
+      excerpt: teaser.excerpt,
+    })),
   ).replaceAll("<", "\\u003c");
+  const seite = page > 1 ? `<span class="unsichtbar"> – Seite ${page}</span>` : "";
   return `<div class="archiv">
+    <header class="archiv-kopf"><h1>${esc(input.titel)}${seite}</h1>${intro ? `<div class="archiv-intro">${intro}</div>` : ""}</header>
+    <p class="filter-status" hidden></p>
     <div class="beitraege">${slice.map(articleHtml).join("")}</div>
-    <nav class="blaettern" aria-label="Seiten">${older}${newer}</nav>
+    ${pages > 1 ? `<nav class="blaettern" aria-label="Seiten">${newer}${numbers}${older}</nav>` : ""}
     <aside class="seite">
       <form class="suche" action="/neuigkeiten" method="get" role="search">
         <input type="search" name="s" placeholder="Beiträge durchsuchen" aria-label="Suchen">
         <button type="submit">Suchen</button>
       </form>
-      <section>
-        <h2>Neueste Beiträge</h2>
-        <ul>${recent}</ul>
-      </section>
+      <nav class="jahre-nav" aria-labelledby="jahre-titel">
+        <h2 id="jahre-titel">Nach Jahr</h2>
+        <ul class="jahre">${jahre}</ul>
+      </nav>
     </aside>
   </div>
   <script type="application/json" id="suchindex">${index}</script>`;
@@ -702,6 +870,11 @@ export function renderDocument(input: RenderInput): PageView {
       }
       if (!image.getAttribute("alt")) image.setAttribute("alt", "");
       if (image.getAttribute("title") === "") image.removeAttribute("title");
+      const set = srcset(image.getAttribute("src") ?? "");
+      if (set) {
+        image.setAttribute("srcset", set);
+        image.setAttribute("sizes", SIZES_PROSA);
+      }
     }
     const firstImage = root.querySelector("img");
     const firstSrc = firstImage?.getAttribute("src");
@@ -713,20 +886,23 @@ export function renderDocument(input: RenderInput): PageView {
     const hero = takeHero(root, input);
     if (input.art === "brief") {
       view.article = { datum: input.datum };
-      view.main = `<article class="beitrag einzel"><h1>${esc(input.titel)}</h1><p class="post-meta"><time datetime="${esc(input.datum)}">${esc(longDate(input.datum))}</time></p><div class="prosa">${root.innerHTML}</div></article>${standardCards()}${standardBand()}`;
+      const minuten = input.teasers.find((teaser) => teaser.href === view.here)?.minuten ?? readingMinutes(root);
+      view.main = `<article class="beitrag einzel"><p class="zurueck"><a href="/neuigkeiten">← Alle Neuigkeiten</a></p><h1>${esc(input.titel)}</h1><p class="post-meta"><time datetime="${esc(input.datum)}">${esc(longDate(input.datum))}</time> · ${minuten} Min. Lesezeit</p><div class="prosa">${root.innerHTML}</div>${briefNav(input)}</article>${standardCards()}${standardBand()}`;
       return view;
     }
     if (input.rel === "kapitel/neuigkeiten.md") {
       extractBand(root);
       const band = root.querySelector(".band");
+      band?.remove();
+      // Was Patrick zwischen Titel und «Kontaktieren Sie uns.» schreibt, steht unter der Überschrift.
+      const intro = root.innerHTML.trim();
       const page = Math.max(1, input.page ?? 1);
-      // Das Archiv zeigt keinen Titel, wie das Original. Für Suchmaschinen und Screenreader steht er trotzdem da.
       const titel = page > 1 ? `${input.titel} – Seite ${page}` : input.titel;
       if (page > 1) view.title = documentTitle(input.rel, titel);
       if (view.description === DEFAULT_DESCRIPTION && input.teasers.length) {
         view.description = clip(`Newsletter von Advocat Finanz: ${input.teasers.slice((page - 1) * PER_PAGE, page * PER_PAGE).map((teaser) => teaser.titel).join(" · ")}`);
       }
-      view.main = `<h1 class="unsichtbar">${esc(titel)}</h1>${archiveHtml(input)}${band ? band.outerHTML : standardBand()}`;
+      view.main = `${archiveHtml(input, intro)}${band ? band.outerHTML : standardBand()}`;
       return view;
     }
     if (input.art === "recht") {
@@ -752,7 +928,8 @@ export function renderDocument(input: RenderInput): PageView {
       view.main = `${hero}${layoutKontakt(root)}`;
       return view;
     }
-    view.main = `${hero}${serializeFlow(root)}`;
+    weitereAngebote(root, view.here);
+    view.main = `${hero}${sprungMenu(root)}${serializeFlow(root)}`;
     return view;
   } finally {
     window.happyDOM.close();

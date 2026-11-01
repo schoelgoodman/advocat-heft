@@ -42,6 +42,9 @@ const hatRedaktion = ROLLE !== "seite";
 /** Die öffentliche Adresse, für „Auf der Website ansehen“. Leer: derselbe Server. */
 const PUBLIC_URL = (process.env.PUBLIC_URL ?? "").replace(/\/+$/, "");
 
+/** Wohin /eingang springt. Auf Neo redaktion.<domain>, lokal /redaktion auf demselben Server. */
+const REDAKTION_URL = (process.env.REDAKTION_URL ?? "/redaktion").trim();
+
 /** Setzt geänderte Seiten neu, wenn dieser Prozess die Seite setzt. Sonst tut es der Container `seite`. */
 async function updateSite(rels: string[]): Promise<void> {
   if (setztSeite) await rebuildDocuments(rels);
@@ -786,6 +789,13 @@ async function main(): Promise<void> {
         console.error("Anfrage:", error instanceof Error ? error.message : error);
         if (!res.headersSent) sendJson(res, 500, { error: "Fehler" });
       });
+      return;
+    }
+    // Versteckter Weg in die Redaktion (Logo halten oder das Wort tippen, siehe site.js). Die Adresse
+    // steht nur hier, nicht in der Seite. Leer gesetzt: 404 wie jede unbekannte Seite.
+    if (setztSeite && url.pathname === "/eingang" && REDAKTION_URL) {
+      res.writeHead(302, { location: REDAKTION_URL, "cache-control": "no-store", "x-robots-tag": "noindex, nofollow" });
+      res.end();
       return;
     }
     const target = redirectTarget(url.pathname);

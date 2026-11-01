@@ -1,3 +1,4 @@
+import { ANGEBOTE, istAngebot } from "./angebote.ts";
 import type { PageView } from "./layout.ts";
 import { absoluteUrl, DEFAULT_DESCRIPTION, DEFAULT_IMAGE, jsonLd, organization, SITE_NAME, siteUrl } from "./seo.ts";
 
@@ -19,6 +20,19 @@ const NAV: Array<[string, string]> = [
 function current(href: string, here: string): boolean {
   if (href === "/") return here === "/";
   return here === href || here.startsWith(`${href}/`);
+}
+
+/**
+ * «Unser Angebot» mit den drei Angebotsseiten. Auf dem Desktop wird der Kopf beim Darüberfahren
+ * (oder mit Tab) eine Zeile höher; im Handymenü stehen die drei eingerückt darunter.
+ */
+function angebotNav(here: string): string {
+  const oben = current("/angebot", here) || istAngebot(here) ? ' aria-current="page"' : "";
+  const unter = ANGEBOTE.map(({ href, name }) => {
+    const mark = here === href ? ' aria-current="page"' : "";
+    return `<a href="${href}"${mark}>Für ${name}</a>`;
+  }).join("");
+  return `<div class="nav-gruppe"><a href="/angebot"${oben}>Unser Angebot</a><div class="nav-unter">${unter}</div></div>`;
 }
 
 /** Alles im Kopf, was Suchmaschinen und Vorschauen beim Teilen lesen. */
@@ -70,6 +84,7 @@ function headMeta(view: PageView): string {
 export function pageShell(view: PageView): string {
   const year = new Date().getFullYear();
   const links = NAV.map(([href, label]) => {
+    if (href === "/angebot") return angebotNav(view.here);
     const mark = current(href, view.here) ? ' aria-current="page"' : "";
     return `<a href="${href}"${mark}>${label}</a>`;
   }).join("");
@@ -83,13 +98,14 @@ export function pageShell(view: PageView): string {
   <link rel="icon" href="/brand/favicon.png" type="image/png" sizes="32x32">
   <link rel="apple-touch-icon" href="/brand/webclip.png">
   <link rel="preload" href="/fonts/manrope-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/marcellus-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/heft.css">
-  <script>try{if(localStorage.getItem("advocat-cookie")==="1")document.documentElement.classList.add("cookie-ok")}catch(e){}</script>
 </head>
 <body>
+  <a class="springen" href="#inhalt">Zum Inhalt springen</a>
   <header class="kopf">
     <div class="kopf-innen">
-      <a class="logo" href="/"><img src="/media/Logo_Advocat_Finanz_2c.png" alt="Advocat Finanz" width="231" height="50"></a>
+      <a class="logo" href="/"><img src="/brand/logo.svg" alt="Advocat Finanz" width="231" height="50"></a>
       <nav id="menu" class="nav" aria-label="Hauptnavigation">
         ${links}
         <a class="btn btn-solid kontakt-mobil" href="/kontakt">Kontakt</a>
@@ -98,22 +114,17 @@ export function pageShell(view: PageView): string {
       <button class="burger" type="button" aria-expanded="false" aria-controls="menu" aria-label="Menü"><span></span><span></span><span></span></button>
     </div>
   </header>
-  <main>${view.main}</main>
+  <main id="inhalt" tabindex="-1">${view.main}</main>
   <footer class="fuss">
     <div class="fuss-innen">
       <div class="fuss-text">
         <p><strong>Advocat Finanz AG</strong><br>
-        <a href="https://maps.app.goo.gl/poLBfgcPVnj2UWaW9">Rosenbergstrasse 50 | CH-9000 St. Gallen</a> | <a href="tel:+41712423030">Tel. +41 71 242 30 30</a> | <a href="mailto:office@advocat-finanz.ch">office@advocat-finanz.ch</a></p>
-        <p class="copy">©${year} Advocat Finanz AG | <a href="/impressum">Impressum</a> | <a href="/disclaimer">Disclaimer</a> | <a href="/datenschutz">Datenschutz</a></p>
+        <a href="https://maps.app.goo.gl/poLBfgcPVnj2UWaW9">Rosenbergstrasse 50 | CH-9000 St. Gallen</a><span class="trenner"> | </span><a href="tel:+41712423030">Tel. +41 71 242 30 30</a><span class="trenner"> | </span><a href="mailto:office@advocat-finanz.ch">office@advocat-finanz.ch</a></p>
+        <p class="copy"><span>©${year} Advocat Finanz AG</span><span class="trenner"> | </span><a href="/impressum">Impressum</a><span class="trenner"> | </span><a href="/disclaimer">Disclaimer</a><span class="trenner"> | </span><a href="/datenschutz">Datenschutz</a></p>
       </div>
       <a class="fuss-claim" href="/"><img src="/brand/claim-footer.png" alt="Vermögen und Recht – ein Leben lang" width="240" height="48" loading="lazy"></a>
     </div>
   </footer>
-  <div id="cookie-notice" class="cookies" role="dialog" aria-label="Cookie Compliance">
-    <p>Diese Website benutzt Cookies. Wenn Sie die Website weiter nutzen, gehen wir von Ihrem Einverständnis aus.</p>
-    <button type="button" class="cookie-ok">OK</button>
-    <button type="button" class="cookie-x" aria-label="Schliessen">×</button>
-  </div>
   <script src="/site.js" defer></script>
 </body>
 </html>
