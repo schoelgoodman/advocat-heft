@@ -275,6 +275,7 @@ function formHtml(): string {
     <label class="feld"><span>Nachricht</span><textarea name="nachricht" rows="7" maxlength="10000" required aria-describedby="fehler-nachricht"></textarea><span class="feld-fehler" id="fehler-nachricht" hidden></span></label>
     <label class="feld-falle" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
     <div class="anfrage-fuss">
+      <p class="anfrage-hinweis">Ihre Angaben verwenden wir nur, um Ihre Anfrage zu beantworten. Mehr dazu im <a href="/datenschutz">Datenschutz</a>.</p>
       <button class="btn btn-solid" type="submit">Nachricht senden</button>
     </div>
     <p class="form-fehler" role="alert" hidden>Bitte füllen Sie alle Felder aus.</p>

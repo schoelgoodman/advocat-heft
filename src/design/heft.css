@@ -1175,6 +1175,16 @@ h2[id] { scroll-margin-top: 96px; }
   margin-top: 0.4rem;
 }
 
+.anfrage-hinweis {
+  flex: 1 1 16rem;
+  margin: 0;
+  font-family: var(--ui);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.anfrage-hinweis a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+
 .form-fehler,
 .form-danke {
   margin: 1.2rem 0 0;

@@ -64,6 +64,8 @@ interface Anfrage {
   telegram?: "gesendet" | "fehler" | "aus";
   status: "neu" | "gelesen" | "erledigt";
   seit?: string;
+  /** Ab dann löscht der Server die Anfrage (Frist ab Eingang, siehe Datenschutz). */
+  loeschtAm: string;
 }
 
 type AnfragenFilter = "offen" | "erledigt" | "alle";
@@ -155,6 +157,7 @@ root.innerHTML = `
         <h1>Kontaktaufnahme</h1>
         <div class="kacheln" id="anfragen-kacheln" role="group" aria-label="Anfragen filtern"></div>
         <p class="leise" id="anfragen-text"></p>
+        <p class="leise frist" id="anfragen-frist"></p>
         <ol id="anfragen-karten"></ol>
       </section>
       <section id="briefe-seite" hidden>
@@ -179,6 +182,7 @@ root.innerHTML = `
             </select>
           </label>
           <textarea id="wunsch-text" rows="4" placeholder="Was fehlt oder soll anders sein, und wozu?"></textarea>
+          <p class="leise telegram-hinweis">Bitte keine vertraulichen Angaben wie Kundennamen, Beträge oder Vertragsdetails: Support-Nachrichten gehen über Telegram, also über Server im Ausland.</p>
           <div class="aktionen">
             <button type="submit" class="haupt" id="wunsch-senden">An Support senden</button>
             <p class="leise" id="wunsch-meldung" aria-live="polite"></p>
@@ -259,6 +263,7 @@ const wunschArt = root.querySelector<HTMLSelectElement>("#wunsch-art")!;
 const wunschText = root.querySelector<HTMLTextAreaElement>("#wunsch-text")!;
 const wunschMeldung = root.querySelector<HTMLElement>("#wunsch-meldung")!;
 const anfragenText = root.querySelector<HTMLElement>("#anfragen-text")!;
+const anfragenFrist = root.querySelector<HTMLElement>("#anfragen-frist")!;
 const anfragenKacheln = root.querySelector<HTMLElement>("#anfragen-kacheln")!;
 const startAnfragen = root.querySelector<HTMLElement>("#start-anfragen")!;
 const startBriefe = root.querySelector<HTMLElement>("#start-briefe")!;
@@ -1588,6 +1593,18 @@ async function restoreRevision(rel: string, revision: Revision): Promise<void> {
 }
 
 const eingangFormat = new Intl.DateTimeFormat("de-CH", { dateStyle: "medium", timeStyle: "short" });
+const tagFormat = new Intl.DateTimeFormat("de-CH", { dateStyle: "medium" });
+/** Monate bis zur Löschung, vom Server. 12, bis er etwas anderes sagt. */
+let aufbewahrungMonate = 12;
+const BALD_TAGE = 30;
+
+function tageBisLoeschung(anfrage: Anfrage): number {
+  return Math.ceil((new Date(anfrage.loeschtAm).getTime() - Date.now()) / 86_400_000);
+}
+
+function baldGeloescht(): Anfrage[] {
+  return alleAnfragen.filter((anfrage) => tageBisLoeschung(anfrage) <= BALD_TAGE);
+}
 
 const TELEGRAM: Record<NonNullable<Anfrage["telegram"]>, string> = {
   gesendet: "an Telegram gesendet",
@@ -1656,6 +1673,12 @@ function anfrageKarte(anfrage: Anfrage): HTMLElement {
   kopf.append(when);
   if (anfrage.status === "erledigt" && anfrage.seit) kopf.append(` · erledigt am ${eingangFormat.format(new Date(anfrage.seit))}`);
   if (anfrage.telegram) kopf.append(` · ${TELEGRAM[anfrage.telegram]}`);
+  const tage = tageBisLoeschung(anfrage);
+  const loeschung = document.createElement(tage <= BALD_TAGE ? "strong" : "span");
+  loeschung.textContent = tage <= BALD_TAGE
+    ? `wird ${tage <= 1 ? "morgen" : `in ${tage} Tagen`} gelöscht`
+    : `wird am ${tagFormat.format(new Date(anfrage.loeschtAm))} gelöscht`;
+  kopf.append(" · ", loeschung);
   const name = document.createElement("h2");
   name.textContent = wer(anfrage);
   const mail = document.createElement("a");
@@ -1692,8 +1715,9 @@ function anfrageKarte(anfrage: Anfrage): HTMLElement {
 async function loadAnfragen(force = false): Promise<void> {
   const json = (await fetch("/api/anfragen", { cache: "no-store" })
     .then((res) => res.json())
-    .catch(() => null)) as { anfragen: Anfrage[] } | null;
+    .catch(() => null)) as { anfragen: Anfrage[]; aufbewahrungMonate?: number } | null;
   if (!json) return;
+  if (json.aufbewahrungMonate) aufbewahrungMonate = json.aufbewahrungMonate;
   const stand = JSON.stringify(json.anfragen);
   if (!force && stand === anfragenStand) return;
   anfragenStand = stand;
@@ -1730,8 +1754,8 @@ function renderStartAnfragen(zahl: ReturnType<typeof zaehle>): void {
       ? zahl.neu === 1 ? "Eine neue Anfrage" : `${zahl.neu} neue Anfragen`
       : "Keine neuen Anfragen",
     leise: zahl.alle
-      ? `${zahl.offen} offen · ${zahl.erledigt} erledigt`
-      : "Anfragen aus dem Kontaktformular erscheinen hier.",
+      ? `${zahl.offen} offen · ${zahl.erledigt} erledigt · ${baldText() ?? `gelöscht ${aufbewahrungMonate} Monate nach Eingang`}`
+      : `Anfragen aus dem Kontaktformular erscheinen hier. Sie werden ${aufbewahrungMonate} Monate nach Eingang automatisch gelöscht.`,
     liste: zeigen.map((anfrage) => ({
       label: wer(anfrage),
       info: `${anfrage.status === "neu" ? "Neu" : "Gelesen"} · ${eingangFormat.format(new Date(anfrage.eingang))}`,
@@ -1773,7 +1797,18 @@ function renderUebersicht(): void {
   } else if (anfragenFilter === "erledigt") {
     anfragenText.textContent = sichtbare.length ? "Erledigte Anfragen, die neueste zuerst." : "Noch nichts erledigt.";
   } else anfragenText.textContent = "Alle Anfragen, die neueste zuerst.";
+  anfragenFrist.textContent =
+    `Jede Anfrage wird ${aufbewahrungMonate} Monate nach Eingang automatisch gelöscht, auch wenn sie noch offen ist. ` +
+    "So steht es in der Datenschutzerklärung. Was Sie länger brauchen, legen Sie in Ihrer Kundenakte ab." +
+    (baldText() ? ` ${baldText()}.` : "");
   anfragenKarten.replaceChildren(...sichtbare.map(anfrageKarte));
+}
+
+/** «2 werden in den nächsten 30 Tagen gelöscht», oder null. */
+function baldText(): string | null {
+  const bald = baldGeloescht().length;
+  if (!bald) return null;
+  return `${bald === 1 ? "Eine wird" : `${bald} werden`} in den nächsten ${BALD_TAGE} Tagen gelöscht`;
 }
 
 async function setStatus(id: string, status: Anfrage["status"]): Promise<void> {

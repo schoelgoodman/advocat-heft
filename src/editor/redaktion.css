@@ -428,6 +428,9 @@ nav .ungelesen .thema { font-weight: 600; }
 }
 #anfragen-karten li.gewaehlt, #wuensche-karten li.gewaehlt { border-color: var(--olive); box-shadow: 0 0 0 3px var(--olive-ring), var(--schatten); }
 #anfragen-karten .kopfzeile { margin: 0; font-size: 0.82rem; color: var(--quiet); }
+#anfragen-karten .kopfzeile strong { color: var(--ink); font-weight: 600; }
+#anfragen .frist { margin-top: -0.4rem; font-size: 0.85rem; }
+.telegram-hinweis { margin: 0; font-size: 0.8rem; line-height: 1.4; color: var(--quiet); }
 #anfragen-karten h2 { font-family: var(--serif); font-weight: 400; font-size: 1.4rem; margin: 0.3rem 0 0.1rem; }
 #anfragen-karten a:not(.knopf) { color: var(--olive); }
 #anfragen-karten .nachricht { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; margin: 0.9rem 0 1.1rem; }

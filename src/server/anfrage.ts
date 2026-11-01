@@ -11,7 +11,8 @@ export interface Anfrage {
   name: string;
   email: string;
   nachricht: string;
-  ip: string;
+  /** Nur in alten Anfragen. Neue speichern keine IP mehr; die Sperre gegen Skripte braucht sie nur im Speicher. */
+  ip?: string;
   telegram?: "gesendet" | "fehler" | "aus";
 }
 
@@ -139,7 +140,6 @@ export async function handleAnfrage(req: http.IncomingMessage, res: http.ServerR
     name: clean(data.name, LIMITS.name),
     email: clean(data.email, LIMITS.email),
     nachricht: clean(data.nachricht, LIMITS.nachricht),
-    ip,
   };
   if (!anfrage.vorname || !anfrage.name || !anfrage.nachricht || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(anfrage.email)) {
     reply(res, 400, { error: "Bitte füllen Sie alle Felder aus." });
@@ -187,8 +187,41 @@ async function readStatus(): Promise<StatusMap> {
 
 const ID = /^[0-9TZ-]+-[0-9a-f]{6}$/;
 
+/**
+ * So lange bleibt eine Anfrage liegen, gezählt ab Eingang. Danach löscht die Seite sie, egal ob erledigt.
+ * Steht so in der Datenschutzerklärung; wer das ändert, ändert auch dort.
+ */
+export const AUFBEWAHRUNG_MONATE = 12;
+
+/** Ab wann eine Anfrage gelöscht wird. */
+export function loeschtAm(eingang: string): Date {
+  const date = new Date(eingang);
+  date.setUTCMonth(date.getUTCMonth() + AUFBEWAHRUNG_MONATE);
+  return date;
+}
+
+/**
+ * Löscht Anfragen, deren Frist abgelaufen ist. Nur die Seite ruft das auf: Sie schreibt die Anfragen.
+ * Den Eingang liest sie aus dem Dateinamen, damit auch eine kaputte Datei nicht ewig liegen bleibt.
+ */
+export async function loescheAlteAnfragen(jetzt = new Date()): Promise<number> {
+  const names = await fs.readdir(anfragenDir()).catch(() => [] as string[]);
+  let geloescht = 0;
+  for (const name of names) {
+    const id = name.slice(0, -".json".length);
+    if (!name.endsWith(".json") || !ID.test(id)) continue;
+    // 2026-11-01T20-49-12Z-abc123 → 2026-11-01T20:49:12Z
+    const eingang = id.slice(0, -7).replace(/T(\d\d)-(\d\d)-(\d\d)Z$/, "T$1:$2:$3Z");
+    if (Number.isNaN(Date.parse(eingang)) || loeschtAm(eingang) > jetzt) continue;
+    await fs.rm(path.join(anfragenDir(), name), { force: true });
+    geloescht += 1;
+  }
+  if (geloescht) console.log(`Anfragen: ${geloescht} nach ${AUFBEWAHRUNG_MONATE} Monaten gelöscht.`);
+  return geloescht;
+}
+
 /** Alle gespeicherten Anfragen, die neueste zuerst. Für die Redaktion. */
-export async function listAnfragen(): Promise<(Anfrage & { id: string; status: AnfrageStatus; seit?: string })[]> {
+export async function listAnfragen(): Promise<(Omit<Anfrage, "ip"> & { id: string; status: AnfrageStatus; seit?: string; loeschtAm: string })[]> {
   const names = await fs.readdir(anfragenDir()).catch(() => [] as string[]);
   const stand = await readStatus();
   const list = await Promise.all(
@@ -197,8 +230,8 @@ export async function listAnfragen(): Promise<(Anfrage & { id: string; status: A
       .map(async (name) => {
         const id = name.slice(0, -".json".length);
         try {
-          const data = JSON.parse(await fs.readFile(path.join(anfragenDir(), name), "utf8")) as Anfrage;
-          return { ...data, id, status: stand[id]?.status ?? "neu", seit: stand[id]?.seit };
+          const { ip: _ip, ...data } = JSON.parse(await fs.readFile(path.join(anfragenDir(), name), "utf8")) as Anfrage;
+          return { ...data, id, status: stand[id]?.status ?? "neu", seit: stand[id]?.seit, loeschtAm: loeschtAm(data.eingang).toISOString() };
         } catch {
           // Halb geschrieben oder kaputt. Taucht beim nächsten Laden wieder auf.
           return null;
@@ -221,6 +254,9 @@ export function setAnfrageStatus(id: string, status: string): Promise<void> {
       throw new Error("Unbekannte Anfrage");
     });
     const stand = await readStatus();
+    // Einträge zu gelöschten Anfragen mit aufräumen.
+    const da = new Set(await fs.readdir(anfragenDir()).catch(() => [] as string[]));
+    for (const alt of Object.keys(stand)) if (!da.has(`${alt}.json`)) delete stand[alt];
     if (status === "neu") delete stand[id];
     else stand[id] = { status: status as AnfrageStatus, seit: new Date().toISOString() };
     const file = path.join(anfragenDir(), STATUS_FILE);

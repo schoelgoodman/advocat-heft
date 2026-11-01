@@ -27,7 +27,7 @@
         - The image holds only the renderer and the editor. No Markdown is baked in
         - `${appdata}/content` is mounted at `/content`: Markdown (`briefe/`, `kapitel/`, `recht/`), `media/` and its own `.git`
         - `${appdata}/site` is mounted at `/site`: generated HTML. Fully re-rendered on every start, rebuilt per page on change
-        - `${appdata}/anfragen` is mounted at `/anfragen`: one JSON file per contact-form request (`POST /kontakt`), named by UTC time. Personal data, not in any git. The field `telegram` says whether the bot message went out
+        - `${appdata}/anfragen` is mounted at `/anfragen`: one JSON file per contact-form request (`POST /kontakt`), named by UTC time. Personal data, not in any git. The field `telegram` says whether the bot message went out. The Telegram message only says that a new request arrived: name, e-mail and text never leave the server. New requests store no IP address. The site deletes each request 12 months after it arrived (at start and daily, log line `Anfragen: … gelöscht`), as promised in the privacy policy. Do not keep copies elsewhere
         - Telegram: options `telegram.botToken` and `telegram.chatId` (currently ${if cfg.telegram.botToken != "" && cfg.telegram.chatId != "" then "set" else "not set"}). Without both, requests are only stored
         - The container runs as `neo.core.uid:gid`. Files under appdata must stay owned by that user
         - Public site: `${cfg.subdomain}.<domain>`. `/redaktion` and `/api/` return 404 there

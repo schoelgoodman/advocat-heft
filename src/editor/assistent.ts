@@ -537,7 +537,10 @@ export async function mountAssistent(anschluss: Anschluss, bereit: boolean): Pro
     };
     feld.addEventListener("input", passe);
     requestAnimationFrame(passe);
-    inhalt.append(art, feld);
+    const hinweis = document.createElement("p");
+    hinweis.className = "leise telegram-hinweis";
+    hinweis.textContent = "Bitte keine vertraulichen Angaben wie Kundennamen, Beträge oder Vertragsdetails: Support-Nachrichten gehen über Telegram, also über Server im Ausland.";
+    inhalt.append(art, feld, hinweis);
 
     const ansehen = knopf("Unter «Support» ansehen", "leise", () => anschluss.zeigeWuensche());
     const senden = knopf("An Support senden", "haupt", async () => {

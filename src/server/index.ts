@@ -22,7 +22,7 @@ import { commitIfChanged, ensureContentGit, logFile, restoreFile, showFile } fro
 import { anfragenDir, contentDir, repoRoot, siteDir } from "../paths.ts";
 import { buildSite, previewPage, rebuildDocuments } from "../render/build.ts";
 import { publishMedia } from "../render/media.ts";
-import { handleAnfrage, listAnfragen, setAnfrageStatus } from "./anfrage.ts";
+import { AUFBEWAHRUNG_MONATE, handleAnfrage, listAnfragen, loescheAlteAnfragen, setAnfrageStatus } from "./anfrage.ts";
 import { importWord } from "./word.ts";
 import { seitenCheck, websiteCheck } from "./pruefung.ts";
 import { assistentBereit, clearVerlauf, handleChat, readVerlauf } from "./chat.ts";
@@ -389,7 +389,7 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
   if (req.method === "GET" && url.pathname === "/api/anfragen") {
     // Personendaten: nie zwischenspeichern.
     res.setHeader("cache-control", "no-store");
-    sendJson(res, 200, { anfragen: await listAnfragen() });
+    sendJson(res, 200, { anfragen: await listAnfragen(), aufbewahrungMonate: AUFBEWAHRUNG_MONATE });
     return;
   }
 
@@ -846,6 +846,10 @@ async function main(): Promise<void> {
     console.log("Setze die Seiten …");
     const built = await buildSite();
     console.log(`${built.pages} Seiten gesetzt.`);
+    // Anfragen nach Ablauf der Frist löschen: beim Start und danach einmal am Tag.
+    const aufraeumen = () => void loescheAlteAnfragen().catch((error) => console.error("Anfragen löschen:", error instanceof Error ? error.message : error));
+    aufraeumen();
+    setInterval(aufraeumen, 24 * 60 * 60 * 1000).unref();
   }
 
   const vite: ViteDevServer | null = productionEditor
