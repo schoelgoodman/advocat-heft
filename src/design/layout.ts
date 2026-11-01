@@ -1,6 +1,7 @@
 import { Window } from "happy-dom";
 import { publicPath, type Art } from "../content/document.ts";
 import { mediaVariants } from "../render/media.ts";
+import { ANGEBOTE, istAngebot } from "./angebote.ts";
 import { clip, DEFAULT_DESCRIPTION, DEFAULT_IMAGE } from "./seo.ts";
 
 export interface Teaser {
@@ -8,6 +9,9 @@ export interface Teaser {
   titel: string;
   datum: string;
   excerpt: string;
+  nummer: number | null;
+  /** Lesezeit in Minuten; Liste und Newsletter zeigen dieselbe Zahl. */
+  minuten: number;
 }
 
 export interface RenderInput {
@@ -102,19 +106,70 @@ export function longDate(iso: string): string {
   return `${Number(match[3])}. ${month} ${match[1]}`;
 }
 
-export function excerptFromMarkdown(markdown: string, limit = 490): string {
-  const text = markdown
+/** Markdown ohne Bilder, Links und Auszeichnung, als eine Zeile Text. */
+function plainMarkdown(markdown: string): string {
+  return markdown
     .replace(/!\[[^\]]*]\([^)]*\)/g, " ")
     .replace(/\[([^\]]*)]\([^)]*\)/g, "$1")
-    .replace(/^#{1,6}\s+/gm, "")
     .replace(/[*_`]/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/** Der Marktbericht, mit dem fast jeder Newsletter beginnt. Für die Vorschau zählt das Thema dahinter. */
+const MARKTBERICHT = /^(aktuelles\s+marktgeschehen|markt|rückblick)/i;
+
+/** Wörter ab fünf Buchstaben, klein, für den Vergleich von Titel und Zwischentitel. */
+function keyWords(text: string): Set<string> {
+  return new Set(text.toLowerCase().split(/[^\p{L}\d]+/u).filter((word) => word.length >= 5));
+}
+
+/**
+ * Vorschau für die Liste: die ersten Sätze des eigentlichen Themas. Zwischentitel fallen weg,
+ * ebenso der Marktbericht am Anfang, ausser er ist selbst das Thema (teilt ein Wort mit dem Titel)
+ * oder es kommt danach kein Text mehr.
+ */
+export function excerptFromMarkdown(markdown: string, titel = "", limit = 490): string {
+  const sections: Array<{ heading: string; lines: string[] }> = [{ heading: "", lines: [] }];
+  for (const line of markdown.split("\n")) {
+    const heading = /^#{1,6}\s+(.*)$/.exec(line);
+    if (heading) sections.push({ heading: plainMarkdown(heading[1]), lines: [] });
+    else sections[sections.length - 1].lines.push(line);
+  }
+  const withText = sections
+    .map((section) => ({ heading: section.heading, text: plainMarkdown(section.lines.join("\n")) }))
+    .filter((section) => section.text);
+  const titleWords = keyWords(titel.replace(/^newsletter\s*\d+\s*[:–-]\s*/i, ""));
+  const isReport = (heading: string) =>
+    MARKTBERICHT.test(heading) && ![...keyWords(heading)].some((word) => titleWords.has(word));
+  let start = 0;
+  while (start < withText.length && isReport(withText[start].heading)) start += 1;
+  const rest = start < withText.length ? withText.slice(start) : withText;
+  const text = rest.map((section) => section.text).join(" ");
   if (text.length <= limit) return text;
   const cut = text.slice(0, limit);
   const at = cut.lastIndexOf(" ");
   const base = (at > limit * 0.6 ? cut.slice(0, at) : cut).trimEnd();
   return `${base}...`;
+}
+
+/** Lesezeit bei rund 200 Wörtern pro Minute, mindestens eine. */
+export function minutesFromMarkdown(markdown: string): number {
+  const words = plainMarkdown(markdown.replace(/^#{1,6}\s+/gm, "")).split(" ").filter(Boolean).length;
+  return Math.max(1, Math.round(words / 200));
+}
+
+/** «Newsletter 34: Edelmetalle …» → Thema und Nummer getrennt, für die Liste. */
+export function splitBriefTitle(titel: string, nummer: number | null): { thema: string; nummer: number | null } {
+  const match = /^newsletter\s*(\d+)\s*[:–-]\s*(.+)$/i.exec(titel.trim());
+  if (!match) return { thema: titel, nummer };
+  return { thema: match[2], nummer: nummer ?? Number(match[1]) };
+}
+
+/** Zeile unter dem Titel in der Liste, ohne Datum: «Newsletter 34 · 6 Min. Lesezeit». */
+function listMeta(teaser: Teaser): string {
+  const { nummer } = splitBriefTitle(teaser.titel, teaser.nummer);
+  return [nummer ? `Newsletter ${nummer}` : "", `${teaser.minuten} Min. Lesezeit`].filter(Boolean).join(" · ");
 }
 
 export function documentTitle(rel: string, titel: string): string {
@@ -175,9 +230,11 @@ function coverImage(className: string, src: string, sizes: string, eager: boolea
   return `<img class="${className}" src="${esc(src)}"${responsive} alt=""${loading}>`;
 }
 
+/** Ein Eintrag im Archiv. site.js baut Suchtreffer gleich auf; wer hier etwas ändert, ändert dort mit. */
 function articleHtml(teaser: Teaser): string {
+  const { thema } = splitBriefTitle(teaser.titel, teaser.nummer);
   const excerpt = teaser.excerpt ? `<div class="post-content"><p>${esc(teaser.excerpt)}</p></div>` : "";
-  return `<article class="beitrag"><h2 class="entry-title"><a href="${esc(teaser.href)}">${esc(teaser.titel)}</a></h2><p class="post-meta"><time datetime="${esc(teaser.datum)}">${esc(shortDate(teaser.datum))}</time></p>${excerpt}</article>`;
+  return `<article class="beitrag"><h2 class="entry-title"><a href="${esc(teaser.href)}">${esc(thema)}</a></h2><p class="post-meta"><time datetime="${esc(teaser.datum)}">${esc(shortDate(teaser.datum))}</time> · ${esc(listMeta(teaser))}</p>${excerpt}</article>`;
 }
 
 function cardAnchor(src: string, label: string, href: string): string {
@@ -363,7 +420,7 @@ function extractBand(root: HTMLElement): void {
 }
 
 function isBlock(el: Element): boolean {
-  return el.classList.contains("band") || el.classList.contains("karten") || el.classList.contains("abschnitt");
+  return el.classList.contains("band") || el.classList.contains("karten") || el.classList.contains("abschnitt") || el.classList.contains("weitere");
 }
 
 function isLeistungen(el: Element): boolean {
@@ -440,15 +497,32 @@ function leistungsSpalten(root: HTMLElement): void {
   close();
 }
 
-/** Sprungmenü unter dem Titelbild: je Leistungsabschnitt (Text links, Leistungen rechts) ein Link. */
+/** Inhaltsverzeichnis unter dem Titelbild: je Leistungsabschnitt (Text links, Leistungen rechts) ein nummerierter Eintrag. */
 function sprungMenu(root: HTMLElement): string {
   const links: string[] = [];
   for (const heading of root.querySelectorAll(".spalten-2-1 > .spalte:first-child > h2:first-child")) {
     const id = heading.getAttribute("id");
-    if (id) links.push(`<a href="#${esc(id)}">${esc(plain(heading))}</a>`);
+    if (!id) continue;
+    const nr = String(links.length + 1).padStart(2, "0");
+    links.push(`<li><a href="#${esc(id)}"><span class="sprung-nr" aria-hidden="true">${nr}</span>${esc(plain(heading))}</a></li>`);
   }
   if (links.length < 2) return "";
-  return `<nav class="sprung" aria-label="Auf dieser Seite"><div class="sprung-innen">${links.join("")}</div></nav>`;
+  return `<nav class="sprung" aria-labelledby="sprung-titel"><p class="sprung-titel" id="sprung-titel">Auf dieser Seite</p><ol class="sprung-liste">${links.join("")}</ol></nav>`;
+}
+
+/** Am Ende einer Angebotsseite, vor «Kontaktieren Sie uns»: die beiden anderen Angebote. */
+function weitereAngebote(root: HTMLElement, here: string): void {
+  if (!istAngebot(here)) return;
+  const links = ANGEBOTE.filter((angebot) => angebot.href !== here)
+    .map(({ href, name }) => `<li><a href="${href}">Für ${esc(name)}<span class="weitere-pfeil" aria-hidden="true">→</span></a></li>`)
+    .join("");
+  const nav = root.ownerDocument.createElement("nav");
+  nav.className = "weitere";
+  nav.setAttribute("aria-labelledby", "weitere-titel");
+  nav.innerHTML = `<p class="sprung-titel" id="weitere-titel">Weitere Angebote</p><ul class="sprung-liste">${links}</ul>`;
+  const band = [...root.children].find((el) => el.classList.contains("band"));
+  if (band) band.before(nav);
+  else root.append(nav);
 }
 
 function headingNamed(root: HTMLElement, pattern: RegExp): HTMLElement | null {
@@ -711,12 +785,19 @@ function pageHref(page: number): string {
   return page <= 1 ? "/neuigkeiten" : `/neuigkeiten/page/${page}`;
 }
 
-function archiveHtml(input: RenderInput): string {
+/** intro: der Text aus neuigkeiten.md zwischen Titel und «Kontaktieren Sie uns.», als HTML. */
+function archiveHtml(input: RenderInput, intro: string): string {
   const page = Math.max(1, input.page ?? 1);
   const pages = Math.max(1, Math.ceil(input.teasers.length / PER_PAGE));
   const slice = input.teasers.slice((page - 1) * PER_PAGE, page * PER_PAGE);
-  const recent = input.teasers.slice(0, 5).map((teaser) =>
-    `<li><a href="${esc(teaser.href)}">${esc(teaser.titel)}</a></li>`,
+  const counts = new Map<string, number>();
+  for (const teaser of input.teasers) {
+    const year = teaser.datum.slice(0, 4);
+    counts.set(year, (counts.get(year) ?? 0) + 1);
+  }
+  const years = [...counts].sort(([a], [b]) => b.localeCompare(a));
+  const jahre = years.map(([year, count]) =>
+    `<li><a href="/neuigkeiten?jahr=${year}" data-jahr="${year}"><span>${year}</span><span class="anzahl"><span class="unsichtbar">, </span>${count}<span class="unsichtbar"> ${count === 1 ? "Beitrag" : "Beiträge"}</span></span></a></li>`,
   ).join("");
   const numbers = Array.from({ length: pages }, (_, index) => index + 1).map((n) =>
     n === page
@@ -726,9 +807,20 @@ function archiveHtml(input: RenderInput): string {
   const newer = page > 1 ? `<a class="neuer" href="${pageHref(page - 1)}">← Neuere</a>` : "";
   const older = page < pages ? `<a class="aelter" href="${pageHref(page + 1)}">Ältere →</a>` : "";
   const index = JSON.stringify(
-    input.teasers.map((teaser) => ({ ...teaser, datumAnzeige: shortDate(teaser.datum) })),
+    input.teasers.map((teaser) => ({
+      href: teaser.href,
+      titel: teaser.titel,
+      thema: splitBriefTitle(teaser.titel, teaser.nummer).thema,
+      datum: teaser.datum,
+      datumAnzeige: shortDate(teaser.datum),
+      meta: listMeta(teaser),
+      excerpt: teaser.excerpt,
+    })),
   ).replaceAll("<", "\\u003c");
+  const seite = page > 1 ? `<span class="unsichtbar"> – Seite ${page}</span>` : "";
   return `<div class="archiv">
+    <header class="archiv-kopf"><h1>${esc(input.titel)}${seite}</h1>${intro ? `<div class="archiv-intro">${intro}</div>` : ""}</header>
+    <p class="filter-status" hidden></p>
     <div class="beitraege">${slice.map(articleHtml).join("")}</div>
     ${pages > 1 ? `<nav class="blaettern" aria-label="Seiten">${newer}${numbers}${older}</nav>` : ""}
     <aside class="seite">
@@ -736,10 +828,10 @@ function archiveHtml(input: RenderInput): string {
         <input type="search" name="s" placeholder="Beiträge durchsuchen" aria-label="Suchen">
         <button type="submit">Suchen</button>
       </form>
-      <section>
-        <h2>Neueste Beiträge</h2>
-        <ul>${recent}</ul>
-      </section>
+      <nav class="jahre-nav" aria-labelledby="jahre-titel">
+        <h2 id="jahre-titel">Nach Jahr</h2>
+        <ul class="jahre">${jahre}</ul>
+      </nav>
     </aside>
   </div>
   <script type="application/json" id="suchindex">${index}</script>`;
@@ -794,20 +886,23 @@ export function renderDocument(input: RenderInput): PageView {
     const hero = takeHero(root, input);
     if (input.art === "brief") {
       view.article = { datum: input.datum };
-      view.main = `<article class="beitrag einzel"><p class="zurueck"><a href="/neuigkeiten">← Alle Neuigkeiten</a></p><h1>${esc(input.titel)}</h1><p class="post-meta"><time datetime="${esc(input.datum)}">${esc(longDate(input.datum))}</time> · ${readingMinutes(root)} Min. Lesezeit</p><div class="prosa">${root.innerHTML}</div>${briefNav(input)}</article>${standardCards()}${standardBand()}`;
+      const minuten = input.teasers.find((teaser) => teaser.href === view.here)?.minuten ?? readingMinutes(root);
+      view.main = `<article class="beitrag einzel"><p class="zurueck"><a href="/neuigkeiten">← Alle Neuigkeiten</a></p><h1>${esc(input.titel)}</h1><p class="post-meta"><time datetime="${esc(input.datum)}">${esc(longDate(input.datum))}</time> · ${minuten} Min. Lesezeit</p><div class="prosa">${root.innerHTML}</div>${briefNav(input)}</article>${standardCards()}${standardBand()}`;
       return view;
     }
     if (input.rel === "kapitel/neuigkeiten.md") {
       extractBand(root);
       const band = root.querySelector(".band");
+      band?.remove();
+      // Was Patrick zwischen Titel und «Kontaktieren Sie uns.» schreibt, steht unter der Überschrift.
+      const intro = root.innerHTML.trim();
       const page = Math.max(1, input.page ?? 1);
-      // Das Archiv zeigt keinen Titel, wie das Original. Für Suchmaschinen und Screenreader steht er trotzdem da.
       const titel = page > 1 ? `${input.titel} – Seite ${page}` : input.titel;
       if (page > 1) view.title = documentTitle(input.rel, titel);
       if (view.description === DEFAULT_DESCRIPTION && input.teasers.length) {
         view.description = clip(`Newsletter von Advocat Finanz: ${input.teasers.slice((page - 1) * PER_PAGE, page * PER_PAGE).map((teaser) => teaser.titel).join(" · ")}`);
       }
-      view.main = `<h1 class="unsichtbar">${esc(titel)}</h1>${archiveHtml(input)}${band ? band.outerHTML : standardBand()}`;
+      view.main = `${archiveHtml(input, intro)}${band ? band.outerHTML : standardBand()}`;
       return view;
     }
     if (input.art === "recht") {
@@ -833,6 +928,7 @@ export function renderDocument(input: RenderInput): PageView {
       view.main = `${hero}${layoutKontakt(root)}`;
       return view;
     }
+    weitereAngebote(root, view.here);
     view.main = `${hero}${sprungMenu(root)}${serializeFlow(root)}`;
     return view;
   } finally {

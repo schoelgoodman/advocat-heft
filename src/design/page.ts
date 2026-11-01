@@ -1,3 +1,4 @@
+import { ANGEBOTE, istAngebot } from "./angebote.ts";
 import type { PageView } from "./layout.ts";
 import { absoluteUrl, DEFAULT_DESCRIPTION, DEFAULT_IMAGE, jsonLd, organization, SITE_NAME, siteUrl } from "./seo.ts";
 
@@ -19,6 +20,19 @@ const NAV: Array<[string, string]> = [
 function current(href: string, here: string): boolean {
   if (href === "/") return here === "/";
   return here === href || here.startsWith(`${href}/`);
+}
+
+/**
+ * «Unser Angebot» mit den drei Angebotsseiten. Auf dem Desktop wird der Kopf beim Darüberfahren
+ * (oder mit Tab) eine Zeile höher; im Handymenü stehen die drei eingerückt darunter.
+ */
+function angebotNav(here: string): string {
+  const oben = current("/angebot", here) || istAngebot(here) ? ' aria-current="page"' : "";
+  const unter = ANGEBOTE.map(({ href, name }) => {
+    const mark = here === href ? ' aria-current="page"' : "";
+    return `<a href="${href}"${mark}>Für ${name}</a>`;
+  }).join("");
+  return `<div class="nav-gruppe"><a href="/angebot"${oben}>Unser Angebot</a><div class="nav-unter">${unter}</div></div>`;
 }
 
 /** Alles im Kopf, was Suchmaschinen und Vorschauen beim Teilen lesen. */
@@ -70,6 +84,7 @@ function headMeta(view: PageView): string {
 export function pageShell(view: PageView): string {
   const year = new Date().getFullYear();
   const links = NAV.map(([href, label]) => {
+    if (href === "/angebot") return angebotNav(view.here);
     const mark = current(href, view.here) ? ' aria-current="page"' : "";
     return `<a href="${href}"${mark}>${label}</a>`;
   }).join("");

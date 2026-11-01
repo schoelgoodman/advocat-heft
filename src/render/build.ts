@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { publicPath, type ContentDocument } from "../content/document.ts";
 import { briefsNewestFirst, loadDocuments } from "../content/load.ts";
-import { excerptFromMarkdown, renderDocument, type PageView, type Teaser } from "../design/layout.ts";
+import { excerptFromMarkdown, minutesFromMarkdown, renderDocument, type PageView, type Teaser } from "../design/layout.ts";
 import { pageShell } from "../design/page.ts";
 import { robotsTxt, sitemapXml, type SitemapEntry } from "../design/seo.ts";
 import { repoRoot, siteDir, contentDir } from "../paths.ts";
@@ -86,7 +86,9 @@ function teasersFor(briefs: ContentDocument[]): Teaser[] {
     href: publicPath(brief.rel),
     titel: brief.titel,
     datum: brief.datum,
-    excerpt: excerptFromMarkdown(brief.body),
+    excerpt: excerptFromMarkdown(brief.body, brief.titel),
+    nummer: brief.nummer,
+    minuten: minutesFromMarkdown(brief.body),
   }));
 }
 
