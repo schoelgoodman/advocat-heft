@@ -40,11 +40,15 @@ function allowed(ip: string): boolean {
   }
   hits.push(now);
   recent.set(ip, hits);
-  if (recent.size > 5000) {
-    for (const [key, list] of recent) if (!list.some((at) => now - at < WINDOW_MS)) recent.delete(key);
-  }
   return true;
 }
+
+// IP-Adressen nur so lange im Speicher, wie die Sperre sie braucht: höchstens zwei Fenster, also 20 Minuten.
+// So steht es in der Datenschutzerklärung.
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, list] of recent) if (!list.some((at) => now - at < WINDOW_MS)) recent.delete(key);
+}, WINDOW_MS).unref();
 
 async function readLimited(req: http.IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
