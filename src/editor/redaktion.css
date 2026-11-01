@@ -257,6 +257,10 @@ nav .thema {
 /* Löschen und Zurückziehen links für sich, weg von «Veröffentlichen». */
 .leiste .aktionen { flex: 1 1 100%; justify-content: flex-end; }
 .leiste .aktionen .weg { margin-right: auto; }
+/* Etwas kleiner als sonst: mit offenem Assistenten passen so alle Knöpfe in eine Zeile. */
+.leiste .aktionen { gap: 0.25rem; }
+.leiste .aktionen :is(button, .knopf) { font-size: 0.92rem; padding: 0.4rem 0.75rem; white-space: nowrap; }
+.leiste .aktionen button.leise { padding-inline: 0.55rem; }
 .leiste .aktionen .weg:hover { color: var(--rot); background: var(--rot-hauch); }
 
 /* Online: die Leiste olivgrün, ein pulsierender Punkt, der Rahmen ums Textfeld auch. */

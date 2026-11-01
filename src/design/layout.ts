@@ -1,6 +1,6 @@
 import { Window } from "happy-dom";
 import { publicPath, type Art } from "../content/document.ts";
-import { mediaVariants } from "../render/media.ts";
+import { mediaSize, mediaVariants } from "../render/media.ts";
 import { angebote, istAngebot } from "./angebote.ts";
 import { clip, DEFAULT_DESCRIPTION, DEFAULT_IMAGE } from "./seo.ts";
 
@@ -874,6 +874,11 @@ export function renderDocument(input: RenderInput): PageView {
       }
       if (!image.getAttribute("alt")) image.setAttribute("alt", "");
       if (image.getAttribute("title") === "") image.removeAttribute("title");
+      const masse = image.hasAttribute("width") ? null : mediaSize(image.getAttribute("src") ?? "");
+      if (masse) {
+        image.setAttribute("width", String(masse.width));
+        image.setAttribute("height", String(masse.height));
+      }
       const set = srcset(image.getAttribute("src") ?? "");
       if (set) {
         image.setAttribute("srcset", set);

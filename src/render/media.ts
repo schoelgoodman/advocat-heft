@@ -1,7 +1,7 @@
-import { readdirSync, statSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { siteDir } from "../paths.ts";
+import { contentDir, siteDir } from "../paths.ts";
 
 /**
  * Bilder aus dem Inhalt kommen oft in Kameragrösse (1–2 MB). Die Seite liefert sie kleiner aus,
@@ -14,7 +14,7 @@ const MAX_WIDTH = 2000;
 const MIN_BYTES = 150 * 1024;
 const SHRINKABLE = new Set([".jpg", ".jpeg", ".png", ".webp"]);
 
-type Sharp = typeof import("sharp");
+type Sharp = typeof import("sharp").default;
 let sharpLoad: Promise<Sharp | null> | null = null;
 
 /** Fehlt sharp (z.B. kein passendes Binary), gehen die Originale raus. Die Seite läuft trotzdem. */
@@ -156,4 +156,78 @@ export async function publishMedia(from: string, to: string): Promise<void> {
   } catch (error) {
     console.error(`Bild ${path.basename(from)} ohne kleinere Fassungen:`, error instanceof Error ? error.message : error);
   }
+}
+
+/** Breite und Höhe aus dem Kopf einer PNG-, JPEG-, WebP- oder GIF-Datei. */
+function readSize(data: Buffer): { width: number; height: number } | null {
+  if (data.length > 24 && data.readUInt32BE(0) === 0x89504e47) {
+    return { width: data.readUInt32BE(16), height: data.readUInt32BE(20) };
+  }
+  if (data.length > 10 && data.toString("latin1", 0, 3) === "GIF") {
+    return { width: data.readUInt16LE(6), height: data.readUInt16LE(8) };
+  }
+  if (data.length > 30 && data.toString("latin1", 0, 4) === "RIFF" && data.toString("latin1", 8, 12) === "WEBP") {
+    const art = data.toString("latin1", 12, 16);
+    if (art === "VP8 ") return { width: data.readUInt16LE(26) & 0x3fff, height: data.readUInt16LE(28) & 0x3fff };
+    if (art === "VP8L") {
+      const bits = data.readUInt32LE(21);
+      return { width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 };
+    }
+    if (art === "VP8X") return { width: data.readUIntLE(24, 3) + 1, height: data.readUIntLE(27, 3) + 1 };
+    return null;
+  }
+  if (data.length > 4 && data[0] === 0xff && data[1] === 0xd8) {
+    let at = 2;
+    while (at + 9 < data.length) {
+      if (data[at] !== 0xff) return null;
+      const marker = data[at + 1];
+      // SOF0–SOF15 ohne DHT (C4), JPG (C8) und DAC (CC): dort stehen die Masse.
+      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+        return { width: data.readUInt16BE(at + 7), height: data.readUInt16BE(at + 5) };
+      }
+      at += 2 + data.readUInt16BE(at + 2);
+    }
+  }
+  return null;
+}
+
+const sizes = new Map<string, { mtime: number; size: { width: number; height: number } | null }>();
+
+/**
+ * Die Masse eines Bildes unter /media/, damit der Browser den Platz freihält, bevor es geladen ist
+ * (sonst springt der Text). Die verkleinerte Fassung hat dasselbe Seitenverhältnis wie das Original.
+ * Stimmt das Verhältnis ausnahmsweise nicht (ein kleines JPEG mit EXIF-Drehung), gilt nach dem
+ * Laden das echte: `height: auto` nimmt dann das Verhältnis des Bildes.
+ */
+export function mediaSize(src: string): { width: number; height: number } | null {
+  const match = /^\/media\/([^?#]+)$/.exec(src);
+  if (!match) return null;
+  let name: string;
+  try {
+    name = decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
+  if (name.split("/").includes("..")) return null;
+  for (const dir of [path.join(siteDir(), "media"), path.join(contentDir(), "media")]) {
+    const file = path.join(dir, name);
+    let mtime: number;
+    try {
+      mtime = statSync(file).mtimeMs;
+    } catch {
+      continue;
+    }
+    const cached = sizes.get(file);
+    if (cached?.mtime === mtime) return cached.size;
+    let size: { width: number; height: number } | null = null;
+    try {
+      size = readSize(readFileSync(file));
+    } catch {
+      size = null;
+    }
+    if (size && (!size.width || !size.height)) size = null;
+    sizes.set(file, { mtime, size });
+    return size;
+  }
+  return null;
 }

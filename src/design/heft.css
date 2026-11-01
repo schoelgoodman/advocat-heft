@@ -90,7 +90,18 @@ h1, h2, h3, h4 {
   font-weight: 400;
   font-variant-numeric: lining-nums;
   color: var(--ink);
+  /* Lange Komposita («Finanzmarktinfrastrukturgesetz») sonst breiter als ein Handy. */
+  hyphens: auto;
+  overflow-wrap: break-word;
 }
+
+.prosa { overflow-wrap: break-word; }
+
+/* Lange Adressen im Text (Datenschutz) dürfen überall umbrechen. */
+.prosa a { overflow-wrap: anywhere; }
+
+/* `.feld span { display: block }` schlägt sonst das hidden-Attribut der Fehlerzeilen. */
+[hidden] { display: none !important; }
 
 .nav a,
 .btn,
@@ -1380,7 +1391,7 @@ h2[id] { scroll-margin-top: 96px; }
   .impressum-reihe,
   .teaser-raster,
   .spalten,
-  .archiv { grid-template-columns: 1fr; }
+  .archiv { grid-template-columns: minmax(0, 1fr); }
 
   .spalten { gap: 2rem; }
 
@@ -1491,7 +1502,7 @@ h2[id] { scroll-margin-top: 96px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  * { transition: none !important; }
+  *, *::before, *::after { transition: none !important; animation: none !important; }
 }
 
 /* Für Suchmaschinen und Screenreader, nicht fürs Auge. */

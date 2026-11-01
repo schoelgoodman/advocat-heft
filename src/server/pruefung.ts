@@ -54,6 +54,8 @@ function namensKern(value: string): string {
 export function bilderOhneBeschreibung(main: string): Bild[] {
   const ohne: Bild[] = [];
   for (const tag of main.match(/<img\b[^>]*>/g) ?? []) {
+    // Titel- und Kartenbilder setzt das Layout, nicht der Text. Sie sind Schmuck und haben absichtlich alt="".
+    if (/\bclass="(?:karte-bild|held-bild|held-baum)\b/.test(tag)) continue;
     const src = /\bsrc="([^"]*)"/.exec(tag)?.[1] ?? "";
     const alt = (/\balt="([^"]*)"/.exec(tag)?.[1] ?? "").trim();
     const datei = decodeURIComponent(src.split("/").pop() ?? src);

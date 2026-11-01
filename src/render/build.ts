@@ -163,6 +163,7 @@ export async function buildSite(): Promise<{ pages: number; index: string }> {
   await copyAssets();
 
   gesetzteAdressen = adressStempel();
+  gesetzteReihe = briefReihe(teasers);
   let index = "Willkommen";
   for (const doc of docs) {
     await writeDocument(site, doc, teasers);
@@ -170,6 +171,13 @@ export async function buildSite(): Promise<{ pages: number; index: string }> {
   }
   await writeIndexFiles(site, docs);
   return { pages: docs.length, index };
+}
+
+/** Reihenfolge, Adressen und Titel der Newsletter beim letzten Setzen (für «Vorheriger/Nächster»). */
+let gesetzteReihe: string | null = null;
+
+function briefReihe(teasers: Teaser[]): string {
+  return JSON.stringify(teasers.map((teaser) => [teaser.href, teaser.titel]));
 }
 
 /** Die Adressen beim letzten Setzen. Ändert sich eine, stimmen Menü und Links auf allen Seiten nicht mehr. */
@@ -200,6 +208,13 @@ export async function rebuildDocuments(rels: string[]): Promise<void> {
   if (rels.some((rel) => rel.startsWith("briefe/"))) {
     wanted.add("kapitel/willkommen.md");
     wanted.add("kapitel/neuigkeiten.md");
+    // Jeder Newsletter verlinkt den vorherigen und den nächsten. Kommt einer dazu, fällt einer weg
+    // oder ändert sich ein Titel, stimmen diese Links bei den Nachbarn nicht mehr: dann alle neu.
+    const reihe = briefReihe(teasers);
+    if (gesetzteReihe !== null && gesetzteReihe !== reihe) {
+      for (const doc of docs) if (doc.rel.startsWith("briefe/")) wanted.add(doc.rel);
+    }
+    gesetzteReihe = reihe;
   }
 
   for (const rel of wanted) {

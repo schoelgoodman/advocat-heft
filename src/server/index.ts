@@ -83,7 +83,13 @@ async function flushPending(): Promise<string | null> {
   commitTimer = null;
   const files = [...pendingFiles];
   pendingFiles.clear();
-  return commitIfChanged(pendingMessage, files);
+  try {
+    return await commitIfChanged(pendingMessage, files);
+  } catch (error) {
+    // Nicht verlieren: die Dateien kommen in die nächste Fassung.
+    for (const file of files) pendingFiles.add(file);
+    throw error;
+  }
 }
 
 function commitMessage(doc: Pick<ContentDocument, "art" | "titel" | "nummer">): string {
@@ -154,6 +160,18 @@ async function exists(rel: string): Promise<boolean> {
   return fs.stat(path.join(contentDir(), rel)).then(() => true, () => false);
 }
 
+/**
+ * Neue Dateien und Nummern der Reihe nach vergeben. Sonst bekommen zwei schnelle Klicks auf
+ * «Neuen Newsletter schreiben» dieselbe Nummer, oder zwei Kopien denselben Dateinamen.
+ */
+let vergabe: Promise<unknown> = Promise.resolve();
+
+function einzeln<T>(arbeit: () => Promise<T>): Promise<T> {
+  const lauf = vergabe.then(arbeit, arbeit);
+  vergabe = lauf.catch(() => undefined);
+  return lauf;
+}
+
 /** Der Pfad selbst, wenn er frei ist, sonst mit -2, -3 … */
 async function freeRel(rel: string): Promise<string> {
   if (!(await exists(rel))) return rel;
@@ -200,9 +218,20 @@ function safeRel(value: string): string {
   return rel;
 }
 
+/** Wie nginx davor (client_max_body_size 32m): Grösseres wird nicht erst ganz in den Speicher gelesen. */
+const MAX_BODY = 32 * 1024 * 1024;
+
 async function readBody(req: http.IncomingMessage): Promise<Buffer> {
   const chunks: Buffer[] = [];
-  for await (const chunk of req) chunks.push(Buffer.from(chunk));
+  let size = 0;
+  for await (const chunk of req) {
+    size += (chunk as Buffer).length;
+    if (size > MAX_BODY) {
+      req.destroy();
+      throw new Error("Die Datei ist zu gross (höchstens 32 MB).");
+    }
+    chunks.push(Buffer.from(chunk));
+  }
   return Buffer.concat(chunks);
 }
 
@@ -248,6 +277,8 @@ function send(req: http.IncomingMessage, res: http.ServerResponse, file: string,
     "content-type": MIME[ext] ?? "application/octet-stream",
     "cache-control": cacheControl(urlPath),
   };
+  // Ein SVG kann Skript enthalten (etwa aus einer Word-Datei). Direkt geöffnet läuft es sonst mit dem Login der Redaktion.
+  if (ext === ".svg") headers["content-security-policy"] = "sandbox; default-src 'none'; img-src data:; style-src 'unsafe-inline'";
   if (PACKBAR.has(ext)) {
     headers.vary = "Accept-Encoding";
     if (/\bgzip\b/.test(String(req.headers["accept-encoding"] ?? "")) && data.length > 1024) {
@@ -278,7 +309,13 @@ async function wordpressMedia(pathname: string): Promise<string | null> {
 }
 
 async function serveStatic(req: http.IncomingMessage, urlPath: string, res: http.ServerResponse): Promise<boolean> {
-  const decoded = decodeURIComponent(urlPath.split("?")[0] ?? "/");
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(urlPath.split("?")[0] ?? "/");
+  } catch {
+    // Kaputtes %-Zeichen in der Adresse: 404, nicht Absturz.
+    return false;
+  }
   if (decoded.includes("\0") || decoded.split("/").includes("..")) return false;
   let file = path.join(siteDir(), decoded);
   const stat = await fs.stat(file).catch(() => null);
@@ -306,6 +343,7 @@ function editorHtml(): string {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Redaktion · Advocat Finanz</title>
+  <link rel="icon" href="/brand/favicon.png" type="image/png" sizes="32x32">
 </head>
 <body>
   <div id="redaktion"></div>
@@ -468,21 +506,27 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     if (!ARTS.includes(payload.art)) throw new Error("Unbekannte Art");
     // Veröffentlichen und Zurückziehen haben eigene Wege. Ein spätes Speichern ändert den Stand nie.
     const before = await readDoc(rel).catch(() => null);
+    // Neue Seiten entstehen nur über ihre eigenen Wege. Ein spätes Speichern auf eine Datei, die
+    // inzwischen veröffentlicht (umbenannt) oder im Papierkorb ist, würde sie sonst als Seite zurückholen.
+    if (!before) {
+      sendJson(res, 409, { error: "Diese Seite gibt es unter diesem Namen nicht mehr." });
+      return;
+    }
     const doc: ContentDocument = {
       rel,
       art: payload.art,
       titel: String(payload.titel ?? "").trim() || "Ohne Titel",
       datum: String(payload.datum ?? ""),
       nummer: payload.nummer == null || payload.nummer === ("" as unknown) ? null : Number(payload.nummer),
-      entwurf: before?.entwurf ?? false,
+      entwurf: before.entwurf ?? false,
       // Die Adresse hat einen eigenen Weg (/api/adresse): Speichern beim Tippen ändert sie nie.
-      adresse: before?.adresse ?? null,
-      frueher: before?.frueher ?? [],
+      adresse: before.adresse ?? null,
+      frueher: before.frueher ?? [],
       body: String(payload.body ?? ""),
     };
     if (doc.nummer != null && !Number.isFinite(doc.nummer)) doc.nummer = null;
     // Online hängt die Adresse an der Nummer. Ändern geht nur im Entwurf.
-    if (before && !before.entwurf) doc.nummer = before.nummer;
+    if (!before.entwurf) doc.nummer = before.nummer;
     await writeDoc(doc);
     await updateSite([rel]);
     scheduleCommit(commitMessage(doc), rel);
@@ -492,57 +536,61 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
   }
 
   if (req.method === "POST" && url.pathname === "/api/briefs") {
-    const nummer = await nextNummer();
-    // Der Dateiname bekommt das Thema erst beim Veröffentlichen.
-    const doc: ContentDocument = {
-      rel: await freeRel(briefRel(nummer)),
-      art: "brief",
-      titel: `Newsletter ${nummer}`,
-      datum: new Date().toISOString().slice(0, 10),
-      nummer,
-      entwurf: true,
-      body: "",
-    };
-    await writeDoc(doc);
-    scheduleCommit(`Entwurf: Newsletter ${nummer}`, doc.rel);
-    console.log(`neuer Entwurf ${doc.rel}`);
-    sendJson(res, 200, { ...doc, href: publicPath(doc.rel) });
+    await einzeln(async () => {
+      const nummer = await nextNummer();
+      // Der Dateiname bekommt das Thema erst beim Veröffentlichen.
+      const doc: ContentDocument = {
+        rel: await freeRel(briefRel(nummer)),
+        art: "brief",
+        titel: `Newsletter ${nummer}`,
+        datum: new Date().toISOString().slice(0, 10),
+        nummer,
+        entwurf: true,
+        body: "",
+      };
+      await writeDoc(doc);
+      scheduleCommit(`Entwurf: Newsletter ${nummer}`, doc.rel);
+      console.log(`neuer Entwurf ${doc.rel}`);
+      sendJson(res, 200, { ...doc, href: publicPath(doc.rel) });
+    });
     return;
   }
 
   if (req.method === "POST" && url.pathname === "/api/copy") {
     const payload = JSON.parse((await readBody(req)).toString("utf8")) as { rel?: string };
     await flushPending();
-    const source = await readDoc(safeRel(payload.rel ?? ""));
-    let doc: ContentDocument;
-    if (source.art === "brief") {
-      const nummer = await nextNummer();
-      const text = thema(source.titel);
-      doc = {
-        ...source,
-        rel: await freeRel(briefRel(nummer)),
-        nummer,
-        titel: text ? `Newsletter ${nummer}: ${text}` : `Newsletter ${nummer}`,
-        datum: new Date().toISOString().slice(0, 10),
-        entwurf: true,
-      };
-    } else {
-      // Die Kopie einer Kopie heisst nicht „-kopie-kopie“, sondern „-kopie-2“.
-      const stem = path.posix.basename(source.rel, ".md").replace(/-kopie(-\d+)?$/, "");
-      doc = {
-        ...source,
-        rel: await freeRel(`${path.posix.dirname(source.rel)}/${stem}-kopie.md`),
-        titel: `${source.titel.replace(/\s*\(Kopie\)$/, "")} (Kopie)`,
-        entwurf: true,
-        // Die Adresse gehört dem Original. Die Kopie bekommt ihre aus dem Dateinamen.
-        adresse: null,
-        frueher: [],
-      };
-    }
-    await writeDoc(doc);
-    await commitIfChanged(`Kopie: ${doc.titel}`, [doc.rel]);
-    console.log(`kopiert ${source.rel} nach ${doc.rel}`);
-    sendJson(res, 200, { ...doc, href: publicPath(doc.rel) });
+    await einzeln(async () => {
+      const source = await readDoc(safeRel(payload.rel ?? ""));
+      let doc: ContentDocument;
+      if (source.art === "brief") {
+        const nummer = await nextNummer();
+        const text = thema(source.titel);
+        doc = {
+          ...source,
+          rel: await freeRel(briefRel(nummer)),
+          nummer,
+          titel: text ? `Newsletter ${nummer}: ${text}` : `Newsletter ${nummer}`,
+          datum: new Date().toISOString().slice(0, 10),
+          entwurf: true,
+        };
+      } else {
+        // Die Kopie einer Kopie heisst nicht „-kopie-kopie“, sondern „-kopie-2“.
+        const stem = path.posix.basename(source.rel, ".md").replace(/-kopie(-\d+)?$/, "");
+        doc = {
+          ...source,
+          rel: await freeRel(`${path.posix.dirname(source.rel)}/${stem}-kopie.md`),
+          titel: `${source.titel.replace(/\s*\(Kopie\)$/, "")} (Kopie)`,
+          entwurf: true,
+          // Die Adresse gehört dem Original. Die Kopie bekommt ihre aus dem Dateinamen.
+          adresse: null,
+          frueher: [],
+        };
+      }
+      await writeDoc(doc);
+      await commitIfChanged(`Kopie: ${doc.titel}`, [doc.rel]);
+      console.log(`kopiert ${source.rel} nach ${doc.rel}`);
+      sendJson(res, 200, { ...doc, href: publicPath(doc.rel) });
+    });
     return;
   }
 
@@ -562,11 +610,17 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     const stem = `${String(doc.nummer ?? 0).padStart(4, "0")}-newsletter-${doc.nummer}`;
     const slug = slugify(thema(doc.titel));
     // Ein Entwurf heisst noch „0039-newsletter-39“. Wurde die Nummer geändert, stimmt die alte Zahl im Namen nicht mehr.
-    if (doc.art === "brief" && /^\d{4}-newsletter-\d+$/.test(path.posix.basename(oldRel, ".md")) && slug) {
+    // Ebenso ein früher veröffentlichter, der eine neue Nummer bekam: die Adresse kommt aus dem Dateinamen.
+    const base = path.posix.basename(oldRel, ".md");
+    if (doc.art === "brief" && slug && (/^\d{4}-newsletter-\d+$/.test(base) || Number(base.slice(0, 4)) !== doc.nummer)) {
       const next = `briefe/${stem}-${slug}.md`;
       const taken = await fs.stat(path.join(contentDir(), next)).then(() => true, () => false);
       if (!taken) rel = next;
     }
+    const besetzt = (await loadDocuments()).find(
+      (other) => !other.entwurf && other.rel !== oldRel && publicPath(other.rel) === publicPath(rel),
+    );
+    if (besetzt) throw new Error(`Die Adresse ${publicPath(rel)} hat schon «${besetzt.titel}». Bitte eine andere Nummer wählen.`);
     const published: ContentDocument = { ...doc, rel, entwurf: false };
     await writeDoc(published);
     if (rel !== oldRel) await fs.rm(path.join(contentDir(), oldRel), { force: true });
@@ -597,9 +651,12 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     if (!doc.entwurf) throw new Error("Nur Entwürfe lassen sich löschen. Bitte zuerst zurückziehen.");
     // Nicht endgültig: die Datei wandert in den Papierkorb und lässt sich zurückholen.
     await flushPending();
-    const ziel = await freeRel(`${PAPIERKORB}/${rel}`);
-    await fs.mkdir(path.dirname(path.join(contentDir(), ziel)), { recursive: true });
-    await fs.rename(path.join(contentDir(), rel), path.join(contentDir(), ziel));
+    const ziel = await einzeln(async () => {
+      const frei = await freeRel(`${PAPIERKORB}/${rel}`);
+      await fs.mkdir(path.dirname(path.join(contentDir(), frei)), { recursive: true });
+      await fs.rename(path.join(contentDir(), rel), path.join(contentDir(), frei));
+      return frei;
+    });
     await commitIfChanged(`In den Papierkorb: ${doc.titel}`, [rel, ziel]);
     console.log(`Papierkorb ${rel}`);
     sendJson(res, 200, { ok: true });
@@ -610,17 +667,19 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     const payload = JSON.parse((await readBody(req)).toString("utf8")) as { rel?: string };
     const from = trashRel(payload.rel ?? "");
     const original = from.slice(PAPIERKORB.length + 1);
-    const raw = await fs.readFile(path.join(contentDir(), from), "utf8");
-    // Zurück kommt sie als Entwurf. Veröffentlichen ist ein eigener Schritt.
-    const doc: ContentDocument = { ...parseDocument(raw, original), rel: await freeRel(original), entwurf: true };
-    // Hat inzwischen eine andere Seite die gewählte Adresse, kommt sie mit der Standardadresse zurück.
-    await loadDocuments();
-    if (doc.adresse && adresseBelegt(doc.adresse)) doc.adresse = null;
-    await writeDoc(doc);
-    await fs.rm(path.join(contentDir(), from), { force: true });
-    await commitIfChanged(`Zurückgeholt: ${doc.titel}`, [from, doc.rel]);
-    console.log(`zurückgeholt ${doc.rel}`);
-    sendJson(res, 200, { ...doc, href: publicPath(doc.rel) });
+    await einzeln(async () => {
+      const raw = await fs.readFile(path.join(contentDir(), from), "utf8");
+      // Zurück kommt sie als Entwurf. Veröffentlichen ist ein eigener Schritt.
+      const doc: ContentDocument = { ...parseDocument(raw, original), rel: await freeRel(original), entwurf: true };
+      // Hat inzwischen eine andere Seite die gewählte Adresse, kommt sie mit der Standardadresse zurück.
+      await loadDocuments();
+      if (doc.adresse && adresseBelegt(doc.adresse)) doc.adresse = null;
+      await writeDoc(doc);
+      await fs.rm(path.join(contentDir(), from), { force: true });
+      await commitIfChanged(`Zurückgeholt: ${doc.titel}`, [from, doc.rel]);
+      console.log(`zurückgeholt ${doc.rel}`);
+      sendJson(res, 200, { ...doc, href: publicPath(doc.rel) });
+    });
     return;
   }
 
@@ -801,8 +860,19 @@ async function main(): Promise<void> {
       });
   const server = http.createServer((req, res) => {
     const host = req.headers.host ?? "";
-    const url = new URL(req.url ?? "/", `http://${host || "localhost"}`);
+    let url: URL;
+    try {
+      url = new URL(req.url ?? "/", `http://${host || "localhost"}`);
+    } catch {
+      res.writeHead(400);
+      res.end();
+      return;
+    }
     // Der Container `redaktion` hat nur den einen Namen, dort ist die Redaktion immer die Wurzel.
+    // Für alle Antworten: keine geratenen Dateitypen, nicht in fremden Rahmen (Klick-Fallen auf «Veröffentlichen»).
+    res.setHeader("x-content-type-options", "nosniff");
+    res.setHeader("x-frame-options", "SAMEORIGIN");
+    res.setHeader("referrer-policy", "strict-origin-when-cross-origin");
     const aufRedaktion = ROLLE === "redaktion" || host.startsWith("redaktion.");
     const unterRedaktion = url.pathname === "/redaktion" || url.pathname === "/redaktion/";
     // Die Redaktion, ihre Vorschau und die API gehören nicht in den Suchindex.
@@ -835,7 +905,7 @@ async function main(): Promise<void> {
             res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
             res.end("Redaktion ist nicht gebaut.");
           }
-        });
+        }).catch((error: unknown) => fehlerAntwort(res, error));
         return;
       }
       if (einstieg) {
@@ -845,6 +915,10 @@ async function main(): Promise<void> {
       }
     }
     if (url.pathname.startsWith("/api/")) {
+      if (fremdeHerkunft(req)) {
+        sendJson(res, 403, { error: "Fremde Herkunft" });
+        return;
+      }
       void handleApi(req, res, url).catch((error: unknown) => {
         const message = error instanceof Error ? error.message : "Fehler";
         console.error(`${req.method} ${url.pathname}: ${message}`);
@@ -887,7 +961,7 @@ async function main(): Promise<void> {
           res.writeHead(404, { "content-type": "text/html; charset=utf-8" });
         }
         res.end(media ? undefined : notFoundPage());
-      });
+      }).catch((error: unknown) => fehlerAntwort(res, error));
       return;
     }
     void serveStatic(req, url.pathname, res).then((ok) => {
@@ -895,7 +969,7 @@ async function main(): Promise<void> {
         res.writeHead(404, { "content-type": "text/html; charset=utf-8" });
         res.end(notFoundPage());
       }
-    });
+    }).catch((error: unknown) => fehlerAntwort(res, error));
   });
 
   if (setztSeite) watchContent();
@@ -917,5 +991,35 @@ async function main(): Promise<void> {
     }
   });
 }
+
+/**
+ * Schutz gegen Anfragen, die eine fremde Seite im Browser von Patrick auslöst (CSRF). Der Browser
+ * schickt das tinyauth-Cookie auch von anderen Diensten unter derselben Domain mit; das Origin
+ * verrät, woher die Anfrage kommt. Lesen bleibt erlaubt, Ändern nur von der Redaktion selbst.
+ */
+function fremdeHerkunft(req: http.IncomingMessage): boolean {
+  if (req.method === "GET" || req.method === "HEAD") return false;
+  const origin = req.headers.origin;
+  if (!origin) return req.headers["sec-fetch-site"] === "cross-site";
+  let host: string;
+  try {
+    host = new URL(origin).host;
+  } catch {
+    return true;
+  }
+  const eigene = [req.headers.host, req.headers["x-forwarded-host"]].flatMap((value) => String(value ?? "").split(","));
+  return !eigene.map((value) => value.trim()).includes(host);
+}
+
+/** Letzte Stufe: ein Fehler in einer Anfrage beantwortet diese mit 500, der Prozess bleibt stehen. */
+function fehlerAntwort(res: http.ServerResponse, error: unknown): void {
+  console.error("Anfrage:", error instanceof Error ? error.message : error);
+  if (!res.headersSent) res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+  if (!res.writableEnded) res.end();
+}
+
+process.on("unhandledRejection", (error) => {
+  console.error("Unbehandelt:", error instanceof Error ? error.stack ?? error.message : error);
+});
 
 await main();

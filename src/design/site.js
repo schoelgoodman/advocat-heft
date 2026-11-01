@@ -106,7 +106,7 @@
   }
   if (window.crypto && crypto.subtle) {
     document.addEventListener("keydown", function (event) {
-      if (event.ctrlKey || event.metaKey || event.altKey || event.key.length !== 1) return;
+      if (event.ctrlKey || event.metaKey || event.altKey || !event.key || event.key.length !== 1) return;
       if (event.target.closest("input, textarea, select, [contenteditable]")) return;
       typed = (typed + event.key.toLowerCase()).slice(-32);
       var tail = typed;
@@ -355,7 +355,11 @@
           return response.json().catch(function () {
             return {};
           }).then(function (body) {
-            if (!response.ok) throw new Error(body.error || "");
+            if (!response.ok) {
+              var serverError = new Error(body.error || "");
+              serverError.vomServer = true;
+              throw serverError;
+            }
           });
         })
         .then(function () {
@@ -364,7 +368,12 @@
         })
         .catch(function (err) {
           fail(
-            (err && err.message ? err.message + " " : "") +
+            // Nur die Meldung des Servers zeigen. Ein Netzfehler hätte englischen Browsertext («Failed to fetch»).
+            (err && err.vomServer && err.message
+              ? err.message + " "
+              : err && err.vomServer
+                ? ""
+                : "Die Nachricht konnte nicht gesendet werden. Bitte prüfen Sie die Verbindung. ") +
               "Sie erreichen uns auch unter office@advocat-finanz.ch.",
           );
         })

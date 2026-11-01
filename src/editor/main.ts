@@ -1191,6 +1191,12 @@ async function save(): Promise<boolean> {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(doc),
   }).catch(() => null);
+  if (response?.status === 409) {
+    // Die Datei ist weg (veröffentlicht unter neuem Namen, Papierkorb, anderes Fenster). Nicht endlos neu versuchen.
+    setSaved("Nicht gespeichert: Diese Seite wurde inzwischen verschoben oder gelöscht. Bitte im Verzeichnis neu öffnen.", "fehler");
+    void loadList();
+    return false;
+  }
   if (!response?.ok) {
     setSaved("Nicht gespeichert. Die Verbindung fehlt, die Redaktion versucht es gleich wieder.", "fehler");
     // Der wartende Versuch hält auch die Warnung beim Schliessen des Fensters wach.

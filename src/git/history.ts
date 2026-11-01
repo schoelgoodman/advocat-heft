@@ -3,24 +3,29 @@ import path from "node:path";
 import { simpleGit, type SimpleGit } from "simple-git";
 import { contentDir } from "../paths.ts";
 
-const identity = {
-  GIT_AUTHOR_NAME: "Advocat Redaktion",
-  GIT_AUTHOR_EMAIL: "redaktion@advocat.local",
-  GIT_COMMITTER_NAME: "Advocat Redaktion",
-  GIT_COMMITTER_EMAIL: "redaktion@advocat.local",
-};
-
 function git(): SimpleGit {
-  // Nur PATH und die Redaktions-Identität. Die Umgebung des Prozesses
-  // enthält Editor-Variablen, die simple-git als unsicher ablehnt.
+  // Nur PATH und HOME aus der Umgebung: die des Prozesses enthält Editor-Variablen, die simple-git
+  // als unsicher ablehnt. Die Identität kommt als Konfiguration; GIT_AUTHOR_* blockiert simple-git 4.
   return simpleGit({
     baseDir: contentDir(),
-    config: ["safe.directory=*"],
+    config: ["safe.directory=*", "user.name=Advocat Redaktion", "user.email=redaktion@advocat.local"],
   }).env({
     PATH: process.env.PATH ?? "",
     HOME: process.env.HOME ?? "",
-    ...identity,
   });
+}
+
+/**
+ * Git verträgt keine zwei Schreiber gleichzeitig (index.lock). Alles, was den Index anfasst,
+ * läuft darum der Reihe nach: das Speichern nach 20 Sekunden und Veröffentlichen zur selben Zeit
+ * ergeben zwei Fassungen statt eines Fehlers.
+ */
+let reihe: Promise<unknown> = Promise.resolve();
+
+function nacheinander<T>(arbeit: () => Promise<T>): Promise<T> {
+  const lauf = reihe.then(arbeit, arbeit);
+  reihe = lauf.catch(() => undefined);
+  return lauf;
 }
 
 export async function ensureContentGit(): Promise<void> {
@@ -37,8 +42,12 @@ export interface Revision {
 }
 
 /** Commitet nur die genannten Pfade. Eine handgeänderte andere Datei bleibt aussen vor. */
-export async function commitIfChanged(message: string, files: string[]): Promise<string | null> {
-  if (files.length === 0) return null;
+export function commitIfChanged(message: string, files: string[]): Promise<string | null> {
+  if (files.length === 0) return Promise.resolve(null);
+  return nacheinander(() => commitNow(message, files));
+}
+
+async function commitNow(message: string, files: string[]): Promise<string | null> {
   await ensureContentGit();
   const repo = git();
   // Ein gelöschter Entwurf, der nie eine Fassung hatte, ist für git kein Pfad.
@@ -49,9 +58,10 @@ export async function commitIfChanged(message: string, files: string[]): Promise
   const known = files.filter((file, i) => present[i] || tracked.has(file));
   if (known.length === 0) return null;
   await repo.add(known);
-  const staged = (await repo.diff(["--cached", "--name-only"])).trim();
+  const staged = (await repo.diff(["--cached", "--name-only", "--", ...known])).trim();
   if (!staged) return null;
-  const result = await repo.commit(message);
+  // Nur diese Pfade: liegt sonst noch etwas im Index, gehört es nicht unter diese Nachricht.
+  const result = await repo.commit(message, known);
   return result.commit || null;
 }
 

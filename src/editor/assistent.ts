@@ -754,7 +754,9 @@ export async function mountAssistent(anschluss: Anschluss, bereit: boolean): Pro
   function zeichne(): void {
     neuerChat.disabled = !verlauf.length;
     verlaufListe.replaceChildren(...(verlauf.length ? verlauf.map(nachrichtItem) : [leer()]));
-    scrollAnsEnde();
+    // Die Begrüssung liest man von oben, ein Gespräch vom Ende.
+    if (verlauf.length) scrollAnsEnde();
+    else verlaufListe.scrollTop = 0;
   }
 
   function sperre(an: boolean): void {
