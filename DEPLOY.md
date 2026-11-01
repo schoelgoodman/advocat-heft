@@ -2,7 +2,7 @@
 
 Anleitung für Hermes auf dem Homeserver. Zwei Teile: das Plugin, der Inhalt. Die Reihenfolge einhalten.
 
-Ein Code-Update ist nur Teil 1. Teil 2 (Inhalt einspielen) nur, wenn der Betreiber es ausdrücklich verlangt. Der Inhalt gehört Patrick: Er pflegt ihn in der Redaktion, jedes Einspielen ersetzt seine Arbeit.
+Ein Code-Update ist nur Teil 1. Teil 2 (Inhalt einspielen) nur, wenn der Betreiber es ausdrücklich verlangt. Der Inhalt gehört Patrick: Er pflegt ihn in der Redaktion. Eingespielt wird nur zusammengeführt (Git-Bundle), nie ersetzt.
 
 Repo: `github.com/schoelgoodman/advocat-heft` (öffentlich, kein Token nötig).
 
@@ -27,44 +27,54 @@ Beim ersten Start legt der Dienst zwei leere Ordner an:
 
 ## 2. Inhalt einspielen
 
-Nur auf ausdrückliche Anweisung des Betreibers, nicht bei einem Code-Update. Einmalig zum Umzug auf einen Server; danach pflegt Patrick den Inhalt in der Redaktion.
+Nur auf ausdrückliche Anweisung des Betreibers, nicht bei einem Code-Update. Der Inhalt gehört Patrick: Er pflegt ihn in der Redaktion.
 
-Der Inhalt hängt als `advocat-content.zip` am Release `content-2026-10-29` (Stand 29.10.2026, ersetzt `content-2026-10-25`). Das Zip enthält den Inhalt von `dev-content/` direkt (kein Oberordner), samt `.git`. Das `.git` muss mit: die Redaktion schreibt dort ihre Fassungen.
+### Änderungen übernehmen (der normale Weg)
+
+Der Betreiber ändert Inhalt lokal auf dem Stand des Servers und schickt nur seine neuen Fassungen als Git-Bundle (`advocat-content.bundle` an einem Release `content-<Datum>`). Das Bundle wird **zusammengeführt**, nicht ersetzt: Was Patrick seither in der Redaktion gespeichert hat, bleibt erhalten.
+
+Tag und Prüfsumme stehen in der Anweisung des Betreibers.
 
 ```sh
-curl -fL -o /tmp/advocat-content.zip https://github.com/schoelgoodman/advocat-heft/releases/download/content-2026-10-29/advocat-content.zip
-echo "7c108e29e221c2e8a71e1097aa83bf87d26d369d4c579fef811d84f7ef2964eb  /tmp/advocat-content.zip" | sha256sum -c
+TAG=content-<Datum>
+curl -fL -o /tmp/advocat-content.bundle https://github.com/schoelgoodman/advocat-heft/releases/download/$TAG/advocat-content.bundle
+echo "<sha256>  /tmp/advocat-content.bundle" | sha256sum -c
 
 # Beide Container schreiben in content/, darum beide anhalten.
 systemctl stop docker-advocat docker-advocat-redaktion
 
-# Der Zip ersetzt den Inhalt. Was schon dasteht, wird nicht gelöscht, sondern beiseitegelegt.
 cd <appdata>/advocat
-if [ -n "$(ls -A content 2>/dev/null)" ]; then mv content "content.alt-$(date +%F-%H%M)"; fi
-mkdir -p content
-unzip -q /tmp/advocat-content.zip -d content
-# Besitzer und Rechte wie site/ daneben, die Neo im preStart anlegt.
+# Sicherung, bevor etwas geändert wird.
+cp -a content "content.alt-$(date +%F-%H%M)"
+
+cd content
+g() { git -c safe.directory='*' -c user.name="Advocat Redaktion" -c user.email="redaktion@advocat.local" "$@"; }
+# Ungespeicherte Fassungen (die Redaktion committet nach 20 s Ruhe) zuerst sichern.
+[ -z "$(g status --porcelain)" ] || { g add -A && g commit -q -m "Stand vor Übernahme"; }
+g bundle verify /tmp/advocat-content.bundle
+g fetch /tmp/advocat-content.bundle main:refs/heads/uebernahme
+# Hat Patrick seither nichts geändert, geht es geradeaus. Sonst ein Merge-Commit.
+g merge --ff-only uebernahme || g merge --no-edit uebernahme
+g branch -d uebernahme
+g status --short   # muss leer sein
+cd ..
+
+# Besitzer und Rechte wie site/ daneben.
 chown -R --reference=site content
 chmod -R u+rwX content
 
 systemctl start docker-advocat docker-advocat-redaktion
 ```
 
-Danach muss es so aussehen:
+Meldet `git merge` einen **Konflikt** (Patrick und der Betreiber haben dieselbe Stelle geändert): `g merge --abort`, `g branch -D uebernahme`, Container starten und dem Betreiber die Ausgabe schicken. Nichts von Hand auflösen.
 
-```
-<appdata>/advocat/content/
-├── .git/
-├── README.md
-├── briefe/     35 Newsletter und ein Entwurf (Nr. 40)
-├── kapitel/    9 feste Seiten
-├── media/      Bilder
-└── recht/      Impressum, Datenschutz, Disclaimer
-```
+Zurück zum Stand davor: beide Container anhalten, `content` beiseitelegen, `content.alt-<Datum>` zurück nach `content` schieben, starten. Die Sicherung erst löschen, wenn die Seite mit dem neuen Inhalt läuft.
 
-Liegt dort ein Ordner `dev-content/` oder `advocat-content/` statt `briefe/` usw., ist eine Ebene zu viel entpackt. Den Inhalt eine Ebene hochschieben.
+Den aktuellen Stand für den Betreiber holen (nur lesend, nichts anhalten): `git -C <appdata>/advocat/content bundle create /tmp/advocat-live.bundle --all`.
 
-Der Zip ersetzt den ganzen Inhalt, auch alles, was Patrick seither in der Redaktion geändert hat. Darum nur auf Anweisung. Der alte Inhalt liegt danach unter `<appdata>/advocat/content.alt-<Datum>` und lässt sich zurückholen: beide Container anhalten, `content` beiseitelegen, den alten Ordner zurück nach `content` schieben, starten. Erst löschen, wenn die Seite mit dem neuen Inhalt läuft und niemand ihn mehr braucht.
+### Erstinstallation (nur bei leerem `content/`)
+
+Einmal zum Umzug auf den Server ist das geschehen (Release `content-2026-10-29`, `advocat-content.zip` mit `.git`). Nicht wiederholen: Ein Zip ersetzt den ganzen Inhalt samt Patricks Arbeit. Für einen neuen Server den Betreiber fragen.
 
 `site/` nicht anfassen. Der Dienst setzt das HTML bei jedem Start neu.
 
@@ -79,4 +89,4 @@ Für den Assistenten in der Redaktion bei **Services → Advocat Redaktion** unt
 - `https://advocat.<domain>` zeigt die Startseite mit Bildern.
 - `https://advocat.<domain>/redaktion` antwortet 404. Das ist richtig.
 - `https://redaktion.<domain>/` verlangt tinyauth und zeigt danach die Redaktion direkt an der Wurzel (`/redaktion` springt auf `/`). `redaktion.<domain>` nicht in die Custom Domains eintragen.
-- `git -C <appdata>/advocat/content log --oneline` zeigt oben `Kapitel: Unser Angebot`, weiter unten `Übernahme aus WordPress`.
+- Nach einer Inhaltsübernahme: `git -C <appdata>/advocat/content log --oneline -5` zeigt oben die Fassungen aus dem Release (oder einen Merge-Commit darüber).
