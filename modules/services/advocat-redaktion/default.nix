@@ -19,7 +19,17 @@
             assertion = seite.enabled;
             message = "neo.services.advocat-redaktion braucht neo.services.advocat. Den Dienst Advocat Finanz einschalten.";
           }
+          {
+            # Er steht in einer nginx-Zeile in Anführungszeichen. «Generate» liefert Hex.
+            assertion = lib.neo.secrets.isPlaceholder cfg.schluessel || builtins.match "[A-Za-z0-9_-]*" cfg.schluessel != null;
+            message = "neo.services.advocat-redaktion.schluessel: nur Buchstaben, Ziffern, - und _. Am einfachsten «Generate».";
+          }
         ];
+
+        # Der Schlüssel kommt über eine Datei in den Container, nicht in die Unit (Nix-Store).
+        neo.core.secrets.containerEnv.advocat-redaktion = mkIf (cfg.schluessel != "") {
+          REDAKTION_SCHLUESSEL = cfg.schluessel;
+        };
 
         # Wants statt Requires: ein Neustart von advocat-image startet die Redaktion
         # nicht mit. Ein neues Image ändert diese Unit ohnehin.

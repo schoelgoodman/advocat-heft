@@ -16,6 +16,17 @@
           options =
             {
               enabled = mkEnableOption "Advocat Redaktion" {rank = 0;};
+              # Nginx schickt ihn nach tinyauth mit, die Redaktion nimmt nur Anfragen mit ihm an.
+              # So erreicht kein anderer Container im Netz `internal` die API an der Anmeldung vorbei.
+              schluessel = lib.neo.mkSecretOption {
+                default = "";
+                rank = 5;
+                helper = lib.neo.helpers.randomToken;
+                description = ''
+                  Geheimer Schlüssel zwischen SWAG und der Redaktion. Einmal «Generate» drücken, Apply.
+                  Leer: Die Redaktion bleibt gesperrt (503), die öffentliche Seite läuft normal.
+                '';
+              };
               assistent = {
                 xaiApiKey = mkOption {
                   type = types.str;

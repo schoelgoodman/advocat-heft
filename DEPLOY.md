@@ -78,6 +78,10 @@ Einmal zum Umzug auf den Server ist das geschehen (Release `content-2026-10-29`,
 
 `site/` nicht anfassen. Der Dienst setzt das HTML bei jedem Start neu.
 
+## Schlüssel der Redaktion
+
+Die Redaktion nimmt nur Anfragen an, die über SWAG und tinyauth kommen. SWAG schickt dafür einen geheimen Schlüssel mit; andere Container im Netz `internal` kennen ihn nicht. Bei **Services → Advocat Redaktion** unter `schluessel` einmal **Generate** drücken, Apply. Ohne Schlüssel antwortet die Redaktion 503 (die öffentliche Seite läuft weiter). Braucht ein Neo mit `neo.core.secrets` (ab 28.10.2026).
+
 ## Assistent
 
 Für den Assistenten in der Redaktion bei **Services → Advocat Redaktion** unter `assistent.xaiApiKey` den xAI-Schlüssel eintragen (bekommt man vom Betreiber, nicht raten). Apply. Ohne Schlüssel bleibt der Assistent aus. Designwünsche nutzen den Telegram-Bot von Advocat Finanz; dort muss nichts zusätzlich eingetragen werden.
@@ -88,5 +92,7 @@ Für den Assistenten in der Redaktion bei **Services → Advocat Redaktion** unt
 - `systemctl status docker-advocat` läuft, `docker logs advocat` ohne Fehler.
 - `https://advocat.<domain>` zeigt die Startseite mit Bildern.
 - `https://advocat.<domain>/redaktion` antwortet 404. Das ist richtig.
+- `curl -s -o /dev/null -w '%{http_code}' http://advocat-redaktion:4321/api/pages` aus einem anderen Container im Netz `internal` (etwa `docker exec swag …`): `403`. Über `https://redaktion.<domain>/` geht es nach der Anmeldung.
+- `curl -sI https://advocat.<domain>/ | grep -i content-security` zeigt `default-src 'self'`; bei einer Datei `.svg` steht `sandbox`.
 - `https://redaktion.<domain>/` verlangt tinyauth und zeigt danach die Redaktion direkt an der Wurzel (`/redaktion` springt auf `/`). `redaktion.<domain>` nicht in die Custom Domains eintragen.
 - Nach einer Inhaltsübernahme: `git -C <appdata>/advocat/content log --oneline -5` zeigt oben die Fassungen aus dem Release (oder einen Merge-Commit darüber).

@@ -7,6 +7,7 @@ Lokal liegt der Inhalt in `dev-content/` (gitignoriert, eigenes Git). Der Server
 ```sh
 npm install
 npm run dev
+npm test   # Zugang zur Redaktion, Herkunft, erlaubte Bilder
 ```
 
 Die Seite ist dann auf `http://127.0.0.1:4321`, die Redaktion auf `http://127.0.0.1:4321/redaktion`. Eine geänderte Datei in `dev-content/` baut die betroffene Seite neu. Nach etwa 20 Sekunden Ruhe schreibt das Git in `dev-content/` eine Fassung.

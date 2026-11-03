@@ -16,7 +16,7 @@ export interface WordImport {
   thema: string;
   /** Neu gespeicherte Bilder, relativ zum Inhalt (media/…). */
   bilder: string[];
-  /** Bilder in Formaten, die ein Browser nicht zeigt (EMF, WMF, TIFF). */
+  /** Bilder in Formaten, die die Website nicht nimmt (EMF, WMF, TIFF, SVG). */
   ausgelassen: number;
 }
 
@@ -25,7 +25,7 @@ const BILD_ENDUNG: Record<string, string> = {
   "image/jpeg": ".jpg",
   "image/gif": ".gif",
   "image/webp": ".webp",
-  "image/svg+xml": ".svg",
+  // Kein SVG: Es kann Skript enthalten. Es zählt zu `ausgelassen`, die Redaktion sagt es.
 };
 
 function inline(node: Node): string {

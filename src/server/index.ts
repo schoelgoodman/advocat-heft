@@ -27,6 +27,7 @@ import { importWord } from "./word.ts";
 import { seitenCheck, websiteCheck } from "./pruefung.ts";
 import { assistentBereit, clearVerlauf, handleChat, readVerlauf } from "./chat.ts";
 import { aendereWunsch, listWuensche, neuerWunsch } from "./wuensche.ts";
+import { bildEndung, fremdeHerkunft, schluesselPasst } from "./zugang.ts";
 
 // Lokal stehen Schlüssel wie XAI_API_KEY in .env (gitignoriert). Auf Neo setzt sie der Container.
 if (process.env.NODE_ENV !== "production") {
@@ -49,6 +50,12 @@ const ROLLE = process.env.ROLLE ?? "beide";
 if (!["seite", "redaktion", "beide"].includes(ROLLE)) throw new Error(`Unbekannte ROLLE "${ROLLE}"`);
 const setztSeite = ROLLE !== "redaktion";
 const hatRedaktion = ROLLE !== "seite";
+
+/**
+ * Nur im Container `redaktion`: Jede Anfrage muss diesen Schlüssel tragen, den nginx nach tinyauth
+ * mitschickt. Fehlt er hier, bleibt die Redaktion zu (503), statt ohne Anmeldung offen zu sein.
+ */
+const SCHLUESSEL = process.env.REDAKTION_SCHLUESSEL ?? "";
 
 /** Die öffentliche Adresse, für „Auf der Website ansehen“. Leer: derselbe Server. */
 const PUBLIC_URL = (process.env.PUBLIC_URL ?? "").replace(/\/+$/, "");
@@ -686,9 +693,9 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
   if (req.method === "POST" && url.pathname === "/api/media") {
     const nameHeader = req.headers["x-filename"];
     const original = (Array.isArray(nameHeader) ? nameHeader[0] : nameHeader) ?? "bild.bin";
-    const ext = path.extname(original).toLowerCase().replace(/[^.a-z0-9]/g, "");
-    if (![".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"].includes(ext)) {
-      throw new Error("Nur Bilder");
+    const ext = bildEndung(original);
+    if (!ext) {
+      throw new Error(path.extname(original).toLowerCase() === ".svg" ? "SVG geht nicht. Bitte als PNG speichern." : "Nur Bilder (PNG, JPG, GIF, WebP)");
     }
     const stem = path
       .basename(original, path.extname(original))
@@ -879,6 +886,11 @@ async function main(): Promise<void> {
     // Dasselbe in neu. SWAG entfernt X-Frame-Options auf dem Weg nach draussen, diesen Header nicht.
     res.setHeader("content-security-policy", "frame-ancestors 'self'");
     res.setHeader("referrer-policy", "strict-origin-when-cross-origin");
+    if (ROLLE === "redaktion" && !schluesselPasst(req, SCHLUESSEL)) {
+      res.writeHead(SCHLUESSEL ? 403 : 503, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" });
+      res.end(SCHLUESSEL ? "Nur über redaktion.<domain> mit Anmeldung." : "Redaktion gesperrt: REDAKTION_SCHLUESSEL fehlt.");
+      return;
+    }
     const aufRedaktion = ROLLE === "redaktion" || host.startsWith("redaktion.");
     const unterRedaktion = url.pathname === "/redaktion" || url.pathname === "/redaktion/";
     // Die Redaktion, ihre Vorschau und die API gehören nicht in den Suchindex.
@@ -990,31 +1002,13 @@ async function main(): Promise<void> {
     if (setztSeite) console.log(`Heft auf http://127.0.0.1:${PORT}`);
     if (hatRedaktion) console.log(`Redaktion auf http://127.0.0.1:${PORT}${ROLLE === "redaktion" ? "/" : "/redaktion"}`);
     if (hatRedaktion && !assistentBereit()) console.log("Assistent aus: XAI_API_KEY fehlt.");
+    if (ROLLE === "redaktion" && !SCHLUESSEL) console.error("Redaktion gesperrt: REDAKTION_SCHLUESSEL fehlt (Neo: Advocat Redaktion → schluessel).");
     if (!setztSeite) return;
     console.log(`Anfragen nach ${anfragenDir()}`);
     if (!process.env.TELEGRAM_BOT_TOKEN || !process.env.TELEGRAM_CHAT_ID) {
       console.log("Telegram aus: TELEGRAM_BOT_TOKEN und TELEGRAM_CHAT_ID fehlen.");
     }
   });
-}
-
-/**
- * Schutz gegen Anfragen, die eine fremde Seite im Browser von Patrick auslöst (CSRF). Der Browser
- * schickt das tinyauth-Cookie auch von anderen Diensten unter derselben Domain mit; das Origin
- * verrät, woher die Anfrage kommt. Lesen bleibt erlaubt, Ändern nur von der Redaktion selbst.
- */
-function fremdeHerkunft(req: http.IncomingMessage): boolean {
-  if (req.method === "GET" || req.method === "HEAD") return false;
-  const origin = req.headers.origin;
-  if (!origin) return req.headers["sec-fetch-site"] === "cross-site";
-  let host: string;
-  try {
-    host = new URL(origin).host;
-  } catch {
-    return true;
-  }
-  const eigene = [req.headers.host, req.headers["x-forwarded-host"]].flatMap((value) => String(value ?? "").split(","));
-  return !eigene.map((value) => value.trim()).includes(host);
 }
 
 /** Letzte Stufe: ein Fehler in einer Anfrage beantwortet diese mit 500, der Prozess bleibt stehen. */

@@ -404,7 +404,13 @@ async function uploadImage(file: File): Promise<string> {
     headers: { "x-filename": file.name },
     body: file,
   });
-  if (!response.ok) throw new Error("Bild wurde nicht gespeichert");
+  if (!response.ok) {
+    const fehler = (await response.json().catch(() => null)) as { error?: string } | null;
+    const meldung = fehler?.error ?? "Bild wurde nicht gespeichert";
+    setSaved(meldung, "fehler");
+    haltMeldungBis = Date.now() + 8000;
+    throw new Error(meldung);
+  }
   const json = (await response.json()) as { url: string };
   return json.url.replace("../media/", "/media/");
 }
