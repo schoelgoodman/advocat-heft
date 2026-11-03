@@ -98,14 +98,15 @@ Support an die Betreuung, in drei Arten: Feature (etwas Neues in der Redaktion),
 
 ## Word-Import
 
-In einem Entwurf liest «Word importieren» (oder eine .docx, auf den Text gezogen) eine Word-Datei ein (`src/server/word.ts`, mit mammoth). Es bleibt, was die Website kennt: Zwischentitel, Absätze, Listen, Zitate, fett, kursiv, Links, Bilder. Ganz fette kurze Absätze und von Hand gesetzte Punkte (•, –) gelten als Zwischentitel bzw. Liste, Tabellen werden zu Zeilen mit « · ». Die erste Überschrift wird das Thema. Bilder landen als `media/word-…` im Inhalt; EMF und WMF zeigt kein Browser, die meldet die Redaktion. Alte .doc-Dateien gehen nicht.
+In einem Entwurf liest «Word importieren» (oder eine .docx, auf den Text gezogen) eine Word-Datei ein (`src/server/word.ts`, mit mammoth). Es bleibt, was die Website kennt: Zwischentitel, Absätze, Listen, Zitate, fett, kursiv, Links, Bilder. Ganz fette kurze Absätze und von Hand gesetzte Punkte (•, –) gelten als Zwischentitel bzw. Liste, Tabellen werden zu Zeilen mit « · ». Die erste Überschrift wird das Thema. Bilder landen als `media/word-…` im Inhalt; EMF, WMF und SVG lässt der Import aus (SVG kann Skript enthalten), die meldet die Redaktion. Alte .doc-Dateien gehen nicht.
 
 ## Neo
 
 Das Plugin ist die Flake in diesem Repo. Sie baut das Image selbst (`modules/packages/advocat-heft.nix`, nix2container); `advocat-image.service` lädt es vor dem Container in Docker. Nach einer Änderung an `package-lock.json` muss `npmDepsHash` dort neu: `prefetch-npm-deps package-lock.json`. Die ausführliche Anleitung für den Server steht in `DEPLOY.md`. Kurz:
 
 1. Das Plugin eintragen und die Dienste `advocat` und `advocat-redaktion` einschalten.
-2. `dev-content/` inklusive `.git` nach `<appdata>/advocat/content` kopieren. `<appdata>/advocat/site` ist das erzeugte HTML; der Server setzt es bei jedem Start neu.
+2. Bei Advocat Redaktion einmal `schluessel` erzeugen («Generate»), siehe Sicherheit.
+3. Inhalt nur nach `DEPLOY.md` Teil 2 einspielen (Git-Bundle, zusammenführen). `<appdata>/advocat/site` ist das erzeugte HTML; der Server setzt es bei jedem Start neu.
 
 Die öffentliche Seite heisst `advocat.<domain>`. Die Redaktion ist ein eigener Neo-Dienst, `advocat-redaktion`, unter `redaktion.<domain>` (an der Wurzel, `/redaktion` springt auf `/`) und verlangt tinyauth. Beide laufen aus demselben Image, je als eigener Container: `advocat` mit `ROLLE=seite` setzt und liefert die Seite und schreibt als einziger nach `site/`; `advocat-redaktion` mit `ROLLE=redaktion` schreibt nur Inhalt und Fassungen und sieht `site/` nur lesend. Die Seite bemerkt jede Änderung am Inhalt und setzt die betroffenen Seiten neu. Stoppen der Redaktion lässt die Seite online. Auf dem öffentlichen Namen antworten `/redaktion` und `/api` mit 404. Lokal, ohne `ROLLE`, macht ein Prozess beides.
 
@@ -113,4 +114,16 @@ Der eigene Dienst ist nötig, weil SWAG Zertifikate nur für die Subdomains der 
 
 Ein gespeicherter Satz erscheint ohne `neo activate`. Ein neuer Newsletter beginnt als Entwurf (`entwurf: true` im Frontmatter); der Setzer lässt ihn aus, bis er in der Redaktion veröffentlicht wird. Beim Veröffentlichen bekommt die Datei das Thema in den Namen, damit die Adresse wie bei den bisherigen Newslettern lautet. Zurücksetzen schreibt die alte Datei zurück und macht einen neuen Commit `Wiederhergestellt: …`.
 
-Die Flake ist gegen `github:madebydamo/neo` ausgewertet: ein Neo-System mit beiden Diensten ergibt ein Systemabbild ohne fehlgeschlagene Assertions. Gebaut und gestartet ist es nicht.
+Die Flake läuft auf Neo (zuletzt `b5552f1`, 4.11.2026).
+
+## Sicherheit
+
+Was hier steht, hat einen Grund. Nicht zurückbauen, ohne den Grund zu kennen.
+
+- **Neo entfernt CSP und X-Frame-Options der Container** (für die Einbettung in der Neo-Oberfläche). Die Content-Security-Policy setzt darum nginx in `modules/services/*/swag.nix`, nicht die App. Was die App selbst setzt, gilt nur lokal. Lädt die Seite etwas Neues von aussen (Skript, Rahmen, Schrift), muss es dort in die CSP, sonst blockiert der Browser es.
+- **Schlüssel zwischen SWAG und Redaktion.** Der Container `advocat-redaktion` hängt im Netz `internal`, das auch andere Dienste erreichen. nginx schickt nach tinyauth den Header `X-Redaktion-Schluessel` mit (Neo-Secret `schluessel`, gerendert nach `swag/nginx/neo-secrets/`, nie im Nix-Store). Mit `ROLLE=redaktion` lehnt der Server jede Anfrage ohne ihn ab: 403, oder 503, wenn kein Schlüssel eingestellt ist. Lokal (ohne `ROLLE`) gibt es keine Prüfung.
+- **Herkunft.** Ändernde Anfragen an `/api` müssen von der Redaktion selbst kommen (Origin), weil das tinyauth-Cookie für alle Subdomains gilt.
+- **Kein SVG** in Upload und Word-Import: Ein SVG kann Skript enthalten und liefe direkt geöffnet mit der Anmeldung der Redaktion. Vorhandene SVG bekommen von nginx `Content-Security-Policy: sandbox`.
+- **Text aus dem Editor** geht durch das Schema von Milkdown: rohes HTML kommt escaped heraus, `javascript:`-Links leer. Antworten des Assistenten werden vor dem Einsetzen escaped.
+
+Die Prüfungen stehen in `src/server/zugang.ts`, die Tests daneben (`npm test`).
