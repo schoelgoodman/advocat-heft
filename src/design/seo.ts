@@ -10,7 +10,7 @@ export const DEFAULT_DESCRIPTION =
   "Advocat Finanz AG in St. Gallen: Vermögen und Recht – ein Leben lang. Beratung für Privatpersonen, Unternehmen und Stiftungen.";
 
 /** Ersatz, wenn eine Seite kein eigenes Bild hat. */
-export const DEFAULT_IMAGE = "/media/Logo_Advocat_Finanz_2c.png";
+export const DEFAULT_IMAGE = "/brand/vorschau.png";
 
 /**
  * Die Adresse, unter der die Seite gefunden werden soll: für canonical, Sitemap und Vorschaubilder.
@@ -44,8 +44,8 @@ export function organization(): Record<string, unknown> {
     "@id": `${siteUrl()}/#organisation`,
     name: "Advocat Finanz AG",
     url: `${siteUrl()}/`,
-    logo: absoluteUrl("/media/Logo_Advocat_Finanz_2c.png"),
-    image: absoluteUrl("/media/Logo_Advocat_Finanz_2c.png"),
+    logo: absoluteUrl("/brand/logo-quadrat.png"),
+    image: absoluteUrl(DEFAULT_IMAGE),
     slogan: "Vermögen und Recht – ein Leben lang",
     telephone: "+41 71 242 30 30",
     email: "office@advocat-finanz.ch",
