@@ -54,7 +54,9 @@ export function verlaufAnsicht(host: HTMLElement, anschluss: VerlaufAnschluss): 
     const einzig = seiten.length === 1 ? seiten[0].pfad : null;
     const aktuell = einzig != null && !gesehen.has(einzig);
     for (const seite of seiten) gesehen.add(seite.pfad);
-    const geloescht = eintrag.dateien.find((d) => d.status === "D" && d.pfad.startsWith("media/"));
+    // Ein gelöschtes Bild, das später wiederkam, gibt es schon: Dann nichts anbieten.
+    const geloescht = eintrag.dateien.find((d) => d.status === "D" && d.pfad.startsWith("media/") && !gesehen.has(d.pfad));
+    for (const datei of eintrag.dateien) if (datei.pfad.startsWith("media/")) gesehen.add(datei.pfad);
     return h(
       "li",
       {},
