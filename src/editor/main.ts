@@ -3,8 +3,10 @@ import * as milkdownUtils from "@milkdown/kit/utils";
 import "@milkdown/crepe/theme/common/style.css";
 import "@milkdown/crepe/theme/frame.css";
 import "./redaktion.css";
+import { ANGEBOTSSEITEN, klartextBloecke, liesAngebot, type Angebot } from "../content/angebot.ts";
 import type { Art, ContentDocument } from "../content/document.ts";
 import { mountAssistent, type AktionArt, type Lage, type SeiteKurz } from "./assistent.ts";
+import { mountAngebot, type FelderEditor } from "./felder/angebot.ts";
 
 interface CrepeApi {
   markdownUpdated(fn: (ctx: unknown, markdown: string, prev: string) => void): void;
@@ -74,6 +76,12 @@ const root = document.querySelector<HTMLElement>("#redaktion");
 if (!root) throw new Error("Redaktion fehlt");
 
 let crepe: CrepeEditor | null = null;
+/** Statt Crepe, wenn die offene Seite Felder hat. Es ist immer nur eines von beiden da. */
+let felder: FelderEditor | null = null;
+/** Eine Online-Seite hat Änderungen, die noch nicht auf der Website sind. */
+let liveUngespeichert = false;
+let speichernKnopf: HTMLButtonElement | null = null;
+let verwerfenKnopf: HTMLButtonElement | null = null;
 let current: Doc | null = null;
 let saveTimer: number | null = null;
 let armed = false;
@@ -208,7 +216,8 @@ root.innerHTML = `
         <p class="nummer-hinweis" id="nummer-hinweis" hidden></p>
         <aside class="google-hinweise" id="google-hinweise" hidden aria-live="polite"></aside>
         <div id="editor"></div>
-        <p class="tipp">Tipp: Am Anfang einer leeren Zeile <kbd>/</kbd> tippen für Zwischentitel, Liste oder Bild. Text markieren für fett, kursiv oder Link.</p>
+        <div id="felder" hidden></div>
+        <p class="tipp" id="tipp">Tipp: Am Anfang einer leeren Zeile <kbd>/</kbd> tippen für Zwischentitel, Liste oder Bild. Text markieren für fett, kursiv oder Link.</p>
         <details id="fassungen-gruppe">
           <summary>Frühere Fassungen</summary>
           <p class="leise">Jede Fassung lässt sich ansehen und zurückholen. Nichts geht verloren.</p>
@@ -287,6 +296,8 @@ const adresseVor = root.querySelector<HTMLElement>("#adresse-vor")!;
 const adresseInput = root.querySelector<HTMLInputElement>("#adresse")!;
 const adresseHinweis = root.querySelector<HTMLElement>("#adresse-hinweis")!;
 const editorHost = root.querySelector<HTMLElement>("#editor")!;
+const felderHost = root.querySelector<HTMLElement>("#felder")!;
+const tipp = root.querySelector<HTMLElement>("#tipp")!;
 const fassungenGruppe = root.querySelector<HTMLDetailsElement>("#fassungen-gruppe")!;
 const fassungen = root.querySelector<HTMLOListElement>("#fassungen")!;
 const vorschau = root.querySelector<HTMLElement>("#vorschau")!;
@@ -415,13 +426,44 @@ async function uploadImage(file: File): Promise<string> {
   return json.url.replace("../media/", "/media/");
 }
 
+/** Die Felder der Seite, oder null: Sie hat keine, oder ihr Text passt nicht verlustfrei hinein. */
+function felderFuer(doc: Pick<ContentDocument, "rel" | "titel">, markdown: string): Angebot | null {
+  return ANGEBOTSSEITEN.includes(doc.rel) ? liesAngebot(doc.titel, markdown) : null;
+}
+
+/** Der Text der offenen Seite, wie er in die Datei kommt. */
+function aktuellerText(): string {
+  if (felder) return felder.markdown();
+  return crepe ? forFile(crepe.getMarkdown()).trim() : "";
+}
+
+function editorBereit(): boolean {
+  return felder != null || crepe != null;
+}
+
 async function mountEditor(markdown: string): Promise<void> {
   armed = false;
   if (crepe) {
     await crepe.destroy();
     crepe = null;
   }
+  felder = null;
   editorHost.replaceChildren();
+  felderHost.replaceChildren();
+  const angebot = current ? felderFuer(current, markdown) : null;
+  editorHost.hidden = angebot != null;
+  felderHost.hidden = angebot == null;
+  tipp.hidden = angebot != null;
+  if (angebot) {
+    felder = mountAngebot(felderHost, angebot, {
+      seitenTitel: () => titelInput.value.trim() || current?.titel || "",
+      geaendert: () => scheduleSave(),
+      ladeBild: uploadImage,
+      frage: ask,
+    });
+    armed = true;
+    return;
+  }
   const next = new Crepe({
     root: editorHost,
     defaultValue: forEditor(markdown),
@@ -951,7 +993,7 @@ function pruefeNummer(): void {
 }
 
 function collect(): ContentDocument {
-  if (!current || !crepe) throw new Error("Keine Seite");
+  if (!current || !editorBereit()) throw new Error("Keine Seite");
   const brief = isBrief(current);
   const nummer = gewaehlteNummer();
   return {
@@ -961,7 +1003,7 @@ function collect(): ContentDocument {
     entwurf: current.entwurf,
     titel: brief ? briefTitel(nummer, titelInput.value) : titelInput.value.trim() || current.titel,
     datum: brief ? datumInput.value || current.datum : current.datum,
-    body: forFile(crepe.getMarkdown()).trim(),
+    body: aktuellerText(),
   };
 }
 
@@ -982,21 +1024,21 @@ function renderStand(): void {
   nummerInput.value = String(doc.nummer ?? "");
   pruefeNummer();
   aktionen.replaceChildren();
-  // Online sieht das Blatt anders aus: jede Änderung ist sofort auf der Website.
+  // Online sieht das Blatt anders aus: Was gespeichert wird, ist auf der Website.
   form.dataset.stand = doc.entwurf ? "entwurf" : "online";
   // Was die Seite wegnimmt (Löschen, Zurückziehen) steht links für sich, die übrigen Knöpfe rechts.
   if (doc.entwurf) {
     stand.innerHTML = `<span class="marke">Entwurf</span> Nur hier in der Redaktion sichtbar.`;
     aktionen.append(
       button("Löschen", "leise weg", () => void deleteDraft()),
-      button("Word importieren", "leise", () => wordInput.click()),
+      ...(felderFuer(doc, doc.body) ? [] : [button("Word importieren", "leise", () => wordInput.click())]),
       button("Kopie anlegen", "leise", () => void copyPage(doc.rel)),
       button("Vorschau", "", () => void openPreview()),
       button("Veröffentlichen", "haupt", () => void publish()),
     );
     return;
   }
-  stand.innerHTML = `<span class="marke online">Online</span> Jede Änderung erscheint sofort auf der Website.`;
+  stand.innerHTML = `<span class="marke online">Online</span> Änderungen erscheinen erst nach dem Speichern auf der Website.`;
   if (doc.rel !== STARTSEITE) aktionen.append(button("Zurückziehen", "leise weg", () => void unpublish()));
   aktionen.append(button("Kopie anlegen", "leise", () => void copyPage(doc.rel)));
   const link = document.createElement("a");
@@ -1005,7 +1047,50 @@ function renderStand(): void {
   link.target = "_blank";
   link.rel = "noopener";
   link.textContent = "Auf der Website ansehen ↗";
-  aktionen.append(link);
+  verwerfenKnopf = button("Verwerfen", "leise", () => void verwerfen());
+  verwerfenKnopf.hidden = !liveUngespeichert;
+  speichernKnopf = button("Speichern & veröffentlichen", "haupt", () => void saveNow());
+  speichernKnopf.disabled = !liveUngespeichert;
+  aktionen.append(link, verwerfenKnopf, speichernKnopf);
+}
+
+/** Zeigt, ob die Online-Seite vom gespeicherten Stand abweicht. Tippen und Zurücktippen ergibt keine Änderung. */
+function pruefeLive(): void {
+  if (!current || !editorBereit()) return;
+  liveUngespeichert = !same(collect(), current);
+  if (speichernKnopf) speichernKnopf.disabled = !liveUngespeichert;
+  if (verwerfenKnopf) verwerfenKnopf.hidden = !liveUngespeichert;
+  setSaved(liveUngespeichert ? "Noch nicht veröffentlicht" : "", liveUngespeichert ? "busy" : "ok");
+}
+
+async function verwerfen(): Promise<void> {
+  if (!current) return;
+  const ja = await ask({
+    titel: "Änderungen verwerfen?",
+    text: "Die Seite springt zurück auf den Stand, der auf der Website ist.",
+    ja: "Verwerfen",
+    nein: "Abbrechen",
+    gefahr: true,
+  });
+  if (!ja || !current) return;
+  // Patrick hat entschieden: Beim Neuladen nichts mehr fragen, auch nicht nach unvollständigen Feldern.
+  liveUngespeichert = false;
+  felder = null;
+  await openPage(current.rel);
+}
+
+/**
+ * Vor einer Aktion, die vom gespeicherten Stand ausgeht. Entwürfe speichern sich von selbst. Bei einer
+ * Online-Seite hiesse das, Halbfertiges zu veröffentlichen: Dort entscheidet Patrick zuerst.
+ */
+async function erstSichern(): Promise<boolean> {
+  if (!liveUngespeichert) return saveNow();
+  await ask({
+    titel: "Noch nicht gespeichert",
+    text: "Diese Seite hat Änderungen, die noch nicht auf der Website sind. Bitte zuerst speichern oder verwerfen.",
+    ja: "OK",
+  });
+  return false;
 }
 
 /** «Guten Morgen» bis elf, dann «Guten Tag», ab fünf «Guten Abend». Auch spät in der Nacht noch Abend. */
@@ -1041,6 +1126,7 @@ async function openPage(rel: string): Promise<void> {
   }
   current = (await response.json()) as Doc;
   gewaehlt = null;
+  liveUngespeichert = false;
   const brief = isBrief(current);
   start.hidden = true;
   anfragenSeite.hidden = true;
@@ -1156,6 +1242,7 @@ async function aendereAdresse(): Promise<void> {
  */
 async function adresseSetzen(rel: string, slug: string): Promise<string | null> {
   const offen = current?.rel === rel;
+  if (offen && liveUngespeichert) return "Die Seite hat noch nicht gespeicherte Änderungen. Bitte zuerst speichern oder verwerfen.";
   if (offen && !(await saveNow())) return "Die Seite liess sich vorher nicht speichern.";
   if (offen) setSaved("Ändert die Adresse …", "busy");
   const response = await post("/api/adresse", { rel, adresse: slug }).catch(() => null);
@@ -1183,6 +1270,11 @@ async function adresseSetzen(rel: string, slug: string): Promise<string | null> 
 
 function scheduleSave(): void {
   if (!armed) return;
+  // Online entscheidet der Knopf, was auf die Website kommt. Nur Entwürfe speichern sich von selbst.
+  if (current && !current.entwurf) {
+    pruefeLive();
+    return;
+  }
   setSaved("Ungespeichert …", "busy");
   if (saveTimer != null) window.clearTimeout(saveTimer);
   saveTimer = window.setTimeout(() => void save(), 600);
@@ -1190,10 +1282,16 @@ function scheduleSave(): void {
 
 async function save(): Promise<boolean> {
   saveTimer = null;
-  if (!current || !crepe) return true;
+  if (!current || !editorBereit()) return true;
+  const fehlt = felder?.fehler();
+  if (fehlt) {
+    setSaved(fehlt, "fehler");
+    return false;
+  }
   const doc = collect();
+  const online = !current.entwurf;
   if (same(doc, current)) {
-    setSaved("Gespeichert ✓");
+    setSaved(online ? "" : "Gespeichert ✓");
     return true;
   }
   setSaved("Speichert …", "busy");
@@ -1209,6 +1307,10 @@ async function save(): Promise<boolean> {
     return false;
   }
   if (!response?.ok) {
+    if (online) {
+      setSaved("Nicht gespeichert: Die Verbindung fehlt. Bitte nochmals versuchen.", "fehler");
+      return false;
+    }
     setSaved("Nicht gespeichert. Die Verbindung fehlt, die Redaktion versucht es gleich wieder.", "fehler");
     // Der wartende Versuch hält auch die Warnung beim Schliessen des Fensters wach.
     saveTimer = window.setTimeout(() => void save(), 5000);
@@ -1216,7 +1318,12 @@ async function save(): Promise<boolean> {
   }
   const neueNummer = current.rel === doc.rel && current.nummer !== doc.nummer;
   if (current.rel === doc.rel) current = { ...current, ...doc };
-  setSaved("Gespeichert ✓");
+  if (online) {
+    liveUngespeichert = false;
+    if (speichernKnopf) speichernKnopf.disabled = true;
+    if (verwerfenKnopf) verwerfenKnopf.hidden = true;
+  }
+  setSaved(online ? "Veröffentlicht ✓" : "Gespeichert ✓");
   spaeterSeitenCheck();
   // Das Verzeichnis zeigt die Nummer und sortiert danach.
   if (neueNummer) void loadList().then(pruefeNummer);
@@ -1234,6 +1341,25 @@ async function saveNow(): Promise<boolean> {
  * Geht das Speichern nicht, entscheidet Patrick, ob die Änderungen verloren gehen dürfen.
  */
 async function flushCommit(): Promise<boolean> {
+  // Online-Änderungen und unvollständige Felder lassen sich nicht einfach mitspeichern.
+  if (current && (liveUngespeichert || felder?.fehler())) {
+    const weg = await ask({
+      titel: "Nicht gespeichert",
+      text: liveUngespeichert
+        ? "Diese Seite hat Änderungen, die noch nicht auf der Website sind. Wer jetzt wechselt, verliert sie."
+        : "Einige Felder sind noch nicht ausgefüllt, darum ist die letzte Änderung nicht gespeichert. Wer jetzt wechselt, verliert sie.",
+      ja: "Trotzdem wechseln",
+      nein: "Hierbleiben",
+      gefahr: true,
+    });
+    if (!weg) {
+      merke(current.rel);
+      return false;
+    }
+    liveUngespeichert = false;
+    if (saveTimer != null) window.clearTimeout(saveTimer);
+    saveTimer = null;
+  }
   if (saveTimer != null && !(await saveNow())) {
     const weg = await ask({
       titel: "Nicht gespeichert",
@@ -1349,7 +1475,7 @@ async function publish(rel = current?.rel, ohneFrage = false): Promise<boolean> 
 async function unpublish(rel = current?.rel, ohneFrage = false): Promise<boolean> {
   if (!rel) return false;
   const offen = current?.rel === rel;
-  if (offen && !(await saveNow())) return false;
+  if (offen && !(await erstSichern())) return false;
   const page = offen ? current : alleSeiten.find((item) => item.rel === rel);
   if (!page) return false;
   const ja = ohneFrage || await ask({
@@ -1377,7 +1503,7 @@ async function unpublish(rel = current?.rel, ohneFrage = false): Promise<boolean
 
 /** Legt eine Kopie als Entwurf an und öffnet sie. Ein Newsletter bekommt die nächste Nummer. */
 async function copyPage(rel: string): Promise<boolean> {
-  if (current?.rel === rel && !(await saveNow())) return false;
+  if (current?.rel === rel && !(await erstSichern())) return false;
   const response = await post("/api/copy", { rel });
   if (!response.ok) {
     await melde(current?.rel === rel, await errorText(response, "Die Kopie liess sich nicht anlegen."));
@@ -1518,7 +1644,9 @@ function aehnlichster(text: string, jetzt: string[]): string | null {
  */
 function markiereUnterschiede(alt: HTMLElement): { anders: number; neu: number } {
   // Nur der Text selbst, nicht die Menüs von Crepe daneben.
-  const jetzt = bloecke(editorHost.querySelector(".ProseMirror") ?? editorHost).map((block) => norm(block.textContent ?? ""));
+  const jetzt = felder
+    ? klartextBloecke(felder.markdown())
+    : bloecke(editorHost.querySelector(".ProseMirror") ?? editorHost).map((block) => norm(block.textContent ?? ""));
   const jetztMenge = new Set(jetzt);
   const altTexte = new Set<string>();
   // Absätze von heute, die nur geändert sind, zählen nicht als neu dazugekommen.
@@ -1587,7 +1715,7 @@ async function restoreRevision(rel: string, revision: Revision): Promise<void> {
     nein: "Abbrechen",
   });
   if (!ja) return;
-  await saveNow();
+  if (!(await erstSichern())) return;
   const response = await post("/api/restore", { rel, rev: revision.rev, path: revision.path });
   if (!response.ok) {
     setSaved(await errorText(response, "Zurückholen fehlgeschlagen."), "fehler");
@@ -2175,7 +2303,7 @@ window.addEventListener("pagehide", () => {
   void fetch("/api/commit", { method: "POST", keepalive: true }).catch(() => null);
 });
 window.addEventListener("beforeunload", (event) => {
-  if (saveTimer != null) event.preventDefault();
+  if (saveTimer != null || liveUngespeichert) event.preventDefault();
 });
 // Ist die Verbindung zurück, gleich speichern statt auf den nächsten Versuch zu warten.
 window.addEventListener("online", () => {
@@ -2417,7 +2545,7 @@ function setzeThema(text: string): void {
 
 /** Was der Assistent sieht und wie er Text einsetzt. */
 function lage(): Lage {
-  if (!current || !crepe || form.hidden) {
+  if (!current || !editorBereit() || form.hidden) {
     return { ansicht: !anfragenSeite.hidden ? "anfragen" : !briefeSeite.hidden ? "briefe" : !wuenscheSeite.hidden ? "wuensche" : "start" };
   }
   const doc = collect();
@@ -2433,10 +2561,15 @@ root.querySelector<HTMLAnchorElement>("#zur-website")!.href = `${publicOrigin}/`
 void mountAssistent(
   {
     lage,
-    offen: () => (current && crepe && !form.hidden ? { rel: current.rel, titel: collect().titel } : null),
-    markdown: () => (crepe && current ? forFile(crepe.getMarkdown()).trim() : null),
+    offen: () => (current && editorBereit() && !form.hidden ? { rel: current.rel, titel: collect().titel } : null),
+    markdown: () => (editorBereit() && current ? aktuellerText() : null),
     // Als normale Änderung im Editor: Ctrl+Z macht sie rückgängig, gespeichert wird wie beim Tippen.
-    setzeText: (markdown) => crepe?.editor.action(replaceAll(forEditor(markdown))),
+    // Felder nehmen nur, was in ihren Aufbau passt.
+    setzeText: (markdown) => {
+      if (felder) return felder.setze(markdown);
+      crepe?.editor.action(replaceAll(forEditor(markdown)));
+      return true;
+    },
     setzeThema,
     neuerNewsletter: async (text) => {
       // Ein leerer Entwurf, der schon offen ist, wird genommen statt einen zweiten anzulegen.
@@ -2449,7 +2582,10 @@ void mountAssistent(
       return current!.rel;
     },
     // Während des Schreibens den Zustand ersetzen, nicht ändern: keine hundert Rückgängig-Schritte.
-    schreibeLive: (markdown) => crepe?.editor.action(replaceAll(forEditor(markdown), true)),
+    schreibeLive: (markdown) => {
+      if (felder) felder.setze(markdown);
+      else crepe?.editor.action(replaceAll(forEditor(markdown), true));
+    },
     speichereEntwurf: async (rel, markdown) => {
       if (current?.rel === rel && crepe && !form.hidden) {
         crepe.editor.action(replaceAll(forEditor(markdown), true));
