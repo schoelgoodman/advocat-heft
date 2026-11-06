@@ -100,39 +100,50 @@ aside {
   overflow-y: auto;
   padding: 0.2rem 0.3rem 0.2rem 0.2rem;
 }
+.verzeichnis-kopf { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin: 0 0 0.4rem; }
 aside .wort {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin: 0 0 1rem;
+  margin: 0;
   padding: 0.3rem 0.5rem 0.3rem 0.3rem;
   border: 0;
   letter-spacing: 0.04em;
 }
 aside .wort svg { color: var(--olive); }
-/* «Zur Website»: ein Knopf wie die übrigen, unter «Redaktion», vor den Gruppen. */
 aside .zur-website {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  margin: 0 0 1.2rem 0.3rem;
+  gap: 0.35rem;
+  flex: none;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.82rem;
   background: var(--flaeche);
 }
-aside .zur-website svg { color: var(--olive); }
+aside .zur-website svg { color: var(--olive); width: 0.95rem; height: 0.95rem; }
 aside .zur-website:hover { border-color: var(--olive); color: var(--olive); }
 aside .wort:hover { color: var(--olive); background: var(--hover); }
+/* Die drei Bereiche: nur Beschriftung, immer sichtbar. */
+aside .kategorie {
+  margin: 1.5rem 0 0.35rem;
+  padding: 0 0.4rem 0.3rem;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--quiet);
+}
 /* Gruppen: die ganze Zeile klappt auf und zu. Bei Kontaktaufnahme und Newsletter zeigt sie dazu die Übersicht. */
 aside summary, aside .gruppe-zeile {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  margin: 1.1rem 0 0.3rem;
-  padding: 0.3rem 0.4rem;
+  margin: 0.1rem 0;
+  padding: 0.4rem 0.4rem;
   border-radius: var(--rund-klein);
-  font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--quiet);
+  font-size: 0.95rem;
+  color: var(--ink);
 }
 aside summary { cursor: pointer; list-style: none; }
 aside summary::-webkit-details-marker { display: none; }
@@ -406,6 +417,10 @@ dialog .aktionen { justify-content: flex-end; }
 .leise.gefahr:hover { color: var(--ink); }
 .haupt.gefahr:hover { background: var(--ink); border-color: var(--ink); }
 aside .mehr { display: block; margin: 0.3rem 0 0; font-size: 0.85rem; }
+/* Unterseiten und aufgeklappte Listen rücken ein. */
+aside details > nav, aside details > .leise, aside details > .mehr { margin-left: 1.05rem; }
+aside .unterseiten { margin: 0 0 0.1rem 1.05rem; padding-left: 0.1rem; border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 0.15rem; }
+aside .papierkorb-leer { margin: 0.2rem 0 0.4rem 1.05rem; }
 
 /* Kontaktaufnahme */
 aside summary .zahl:not(:empty) {
@@ -416,7 +431,6 @@ aside summary .zahl:not(:empty) {
   color: var(--paper);
   letter-spacing: 0.04em;
 }
-#anfragen-gruppe summary { margin-top: 0; }
 nav .ungelesen .thema { font-weight: 600; }
 .marke.neu { background: var(--rot); color: var(--paper); }
 #anfragen { padding-top: 1.5rem; }
@@ -990,7 +1004,7 @@ input.suche {
 .assistent .pruefen:hover:not(:disabled) { border-color: var(--olive); }
 .assistent .pruefen:disabled { opacity: 0.45; cursor: default; }
 
-/* Felder statt freier Text (Angebotsseiten). */
+/* Felder statt freier Text. Alles unter #felder: Der Assistent hat ein eigenes .feld. */
 #felder { margin-top: 1.2rem; display: grid; gap: 1.1rem; }
 #felder[hidden] { display: none; }
 .feld-gruppe {
@@ -1006,15 +1020,15 @@ input.suche {
 .feld-gruppe h2 { font-family: var(--serif); font-weight: 400; font-size: 1.3rem; margin: 0; }
 .feld-gruppe p.leise { margin: -0.4rem 0 0; }
 .feld-gruppe > button { justify-self: start; }
-.feld { display: grid; gap: 0.3rem; }
+#felder .feld { display: grid; gap: 0.3rem; }
 .feld-name { font-size: 0.82rem; font-weight: 600; }
 .feld-kopf { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
 .feld-werkzeuge { display: flex; gap: 0.1rem; }
 .feld-werkzeuge button { font-size: 0.8rem; padding: 0.1rem 0.45rem; }
 .feld-hinweis { font-size: 0.78rem; color: var(--quiet); }
 .feld-fehler { font-size: 0.82rem; color: var(--rot); font-weight: 600; }
-.feld > button.leise { justify-self: start; padding-inline: 0.4rem; font-size: 0.88rem; }
-.feld input[type="text"], .feld textarea {
+#felder .feld > button.leise { justify-self: start; padding-inline: 0.4rem; font-size: 0.88rem; }
+#felder .feld input[type="text"], #felder .feld textarea {
   width: 100%;
   font: inherit;
   color: var(--ink);
@@ -1023,8 +1037,8 @@ input.suche {
   padding: 0.5rem 0.7rem;
   line-height: 1.5;
 }
-.feld textarea { resize: none; overflow: hidden; display: block; }
-.feld textarea:focus { outline: none; border-color: var(--olive); box-shadow: 0 0 0 3px var(--olive-ring); }
+#felder .feld textarea { resize: none; overflow: hidden; display: block; }
+#felder .feld textarea:focus { outline: none; border-color: var(--olive); box-shadow: 0 0 0 3px var(--olive-ring); }
 .hat-fehler > :is(input, textarea) { border-color: var(--rot); }
 .feld-haken { display: flex; gap: 0.5rem; align-items: center; font-size: 0.92rem; }
 .feld-bild { width: 100%; max-height: 14rem; object-fit: cover; border-radius: var(--rund-mittel); display: block; background: var(--flaeche-tief); }
@@ -1053,8 +1067,6 @@ input.suche {
 @media (max-width: 800px) {
   .karte-zusatz { display: none; }
   .karte-titel { margin-right: auto; }
-  /* Auf dem Telefon sortiert der Griff. Die Pfeile nähmen dem Titel den Platz. */
-  .abschnitt-karte > summary > .werkzeug-klein:not(.gefahr) { display: none; }
 }
 
 /* Felder für alle Vorlagen */
@@ -1100,23 +1112,38 @@ dialog.medien-wahl[open] { display: flex; flex-direction: column; }
 .medien-raster { overflow: auto; flex: 1; padding: 1rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: 0.7rem; align-content: start; }
 .medium-wahl { display: grid; gap: 0.3rem; padding: 0.4rem; text-align: left; font-size: 0.76rem; overflow-wrap: anywhere; background: var(--flaeche); }
 
-/* Verlauf */
-.verlauf { list-style: none; margin: 1rem 0 0; padding: 0; display: grid; gap: 0.5rem; }
-.verlauf > li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; background: var(--flaeche); border: 1px solid var(--line); border-radius: var(--rund-mittel); padding: 0.65rem 0.9rem; }
-.verlauf strong { display: block; font-weight: 600; font-size: 0.95rem; overflow-wrap: anywhere; }
-.verlauf small { font-size: 0.78rem; }
-.verlauf .aktionen button, .verlauf .aktionen span { font-size: 0.85rem; padding-block: 0.2rem; }
-.verlauf-mehr { margin-top: 0.8rem; }
+/* Verlauf (nicht .verlauf: So heisst das Gespräch im Assistenten.) */
+.aenderungen { list-style: none; margin: 1rem 0 0; padding: 0; display: grid; gap: 0.5rem; }
+.aenderungen > li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; background: var(--flaeche); border: 1px solid var(--line); border-radius: var(--rund-mittel); padding: 0.65rem 0.9rem; }
+.aenderungen strong { display: block; font-weight: 600; font-size: 0.95rem; overflow-wrap: anywhere; }
+.aenderungen small { font-size: 0.78rem; }
+.aenderungen .aktionen button, .aenderungen .aktionen span { font-size: 0.85rem; padding-block: 0.2rem; }
+.aenderungen-mehr { margin-top: 0.8rem; }
 .geloescht-am { display: block; font-size: 0.72rem; color: var(--quiet); font-weight: 400; }
 #menue-feld input { padding: 0; }
 .tipp #bild-aus-medien { font-size: 0.85rem; padding: 0 0.3rem; text-decoration: underline; }
 
-/* Milkdown: die Werkzeugleiste nur auf dem Telefon */
-#editor .milkdown .milkdown-top-bar { display: none; }
+/* Milkdown: die Werkzeugleiste klebt unter der Leiste mit den Knöpfen (--leiste-hoehe setzt main.ts). */
+#editor .milkdown .milkdown-top-bar {
+  display: flex;
+  flex-wrap: wrap;
+  position: sticky;
+  top: calc(var(--leiste-hoehe, 0px) + 0.5rem - 1px);
+  z-index: 3;
+  padding: 0 0.4rem;
+  background: var(--flaeche);
+  border-bottom: 1px solid var(--line);
+  border-radius: var(--rund) var(--rund) 0 0;
+}
 @media (max-width: 800px) {
-  #editor .milkdown .milkdown-top-bar { display: flex; flex-wrap: wrap; position: sticky; top: 3.5rem; z-index: 3; padding: 0 0.25rem; background: var(--flaeche); border-bottom: 1px solid var(--line); }
+  /* Unter dem runden Knopf fürs Verzeichnis. Griff und Blase weichen: kein Überfahren, und das System hat ein eigenes Menü. */
+  #editor .milkdown .milkdown-top-bar { top: 4.2rem; padding: 0 0.25rem; }
   #editor .milkdown .milkdown-top-bar .top-bar-divider { display: none; }
   #editor .milkdown .milkdown-block-handle, #editor .milkdown .milkdown-toolbar { display: none !important; }
   .feld-paar { grid-template-columns: 1fr; }
+  /* Auf dem Telefon sortiert der Griff. Die Pfeile nähmen dem Titel den Platz. */
   .abschnitt-karte > summary > .werkzeug-klein:not(.gefahr) { display: none; }
 }
+
+/* Einträge ohne Pfeil beginnen dort, wo bei den anderen der Text beginnt. */
+aside > #seiten, aside > #seite-neu { margin-left: 1.05rem; }

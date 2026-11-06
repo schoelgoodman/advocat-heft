@@ -221,6 +221,7 @@ function summary(doc: ContentDocument) {
   return {
     auszug: doc.art === "brief" ? auszug(doc.body) : "",
     vorlage: doc.vorlage ?? null,
+    menue: doc.menue ?? false,
     rel: doc.rel,
     titel: doc.titel,
     art: doc.art,

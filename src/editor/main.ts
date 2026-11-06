@@ -1,4 +1,6 @@
 import * as crepeModule from "@milkdown/crepe";
+import * as milkdownCore from "@milkdown/kit/core";
+import { TextSelection, type EditorState } from "@milkdown/kit/prose/state";
 import * as milkdownUtils from "@milkdown/kit/utils";
 import "@milkdown/crepe/theme/common/style.css";
 import "@milkdown/crepe/theme/frame.css";
@@ -10,6 +12,7 @@ import { medienAnsicht, waehleMedium } from "./ansichten/medien.ts";
 import { bloecke, markiereUnterschiede, norm } from "./ansichten/vergleich.ts";
 import { verlaufAnsicht } from "./ansichten/verlauf.ts";
 import { h, toast } from "./dom.ts";
+import { seitenBaum, seitenName } from "./verzeichnis.ts";
 import { mountSeite, type FelderEditor } from "./felder/seite.ts";
 
 interface CrepeApi {
@@ -45,6 +48,7 @@ interface CrepeCtor {
 
 const Crepe = (crepeModule as unknown as { Crepe: CrepeCtor }).Crepe;
 // Die Typen von @milkdown/utils lösen unter NodeNext nicht auf. Daher von Hand, wie bei Crepe.
+const { editorViewCtx } = milkdownCore as unknown as { editorViewCtx: unknown };
 const { insert, replaceAll } = milkdownUtils as unknown as { insert(markdown: string): unknown; replaceAll(markdown: string, flush?: boolean): unknown };
 
 interface PageSummary {
@@ -57,6 +61,7 @@ interface PageSummary {
   href: string;
   auszug: string;
   vorlage: ContentDocument["vorlage"];
+  menue?: boolean;
   geloeschtAm?: string;
 }
 
@@ -121,7 +126,8 @@ root.innerHTML = `
   <div class="schleier" aria-hidden="true"></div>
   <div class="redaktion">
     <aside id="verzeichnis">
-      <button type="button" class="wort" id="heim" title="Zur Startseite">
+      <div class="verzeichnis-kopf">
+        <button type="button" class="wort" id="heim" title="Zur Startseite">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 11 12 4l9 7M6 9.5V20h4.5v-5.5h3V20H18V9.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
         Redaktion
       </button>
@@ -129,22 +135,35 @@ root.innerHTML = `
         <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3.5 12h17M12 3.5c2.4 2.3 3.6 5.1 3.6 8.5s-1.2 6.2-3.6 8.5c-2.4-2.3-3.6-5.1-3.6-8.5s1.2-6.2 3.6-8.5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
         Zur Website
       </a>
-      <!-- Jede Gruppe gleich: die Zeile klappt die Liste auf und öffnet die Übersicht, wo es eine gibt. -->
-      <details id="anfragen-gruppe">
-        <summary><button type="button" class="gruppe-titel" id="anfragen-titel">Kontaktaufnahme</button><span class="zahl" id="anfragen-zahl"></span></summary>
-        <nav id="anfragen-liste"></nav>
-        <button type="button" class="leise mehr" id="anfragen-alle">Übersicht aller Anfragen</button>
-      </details>
+      </div>
+      <p class="kategorie">Täglich</p>
       <details id="briefe-gruppe">
         <summary><button type="button" class="gruppe-titel" id="briefe-titel">Newsletter</button></summary>
         <nav id="briefe"></nav>
         <button type="button" class="leise mehr" id="mehr" hidden></button>
         <button type="button" class="leise mehr" id="briefe-alle">Übersicht aller Newsletter</button>
       </details>
-      <details id="seiten-gruppe">
-        <summary><span class="gruppe-titel">Übrige Seiten</span></summary>
-        <nav id="seiten"></nav>
-        <button type="button" class="leise mehr" id="seite-neu">Neue Seite anlegen</button>
+      <details id="anfragen-gruppe">
+        <summary><button type="button" class="gruppe-titel" id="anfragen-titel">Kontaktaufnahme</button><span class="zahl" id="anfragen-zahl"></span></summary>
+        <nav id="anfragen-liste"></nav>
+        <button type="button" class="leise mehr" id="anfragen-alle">Übersicht aller Anfragen</button>
+      </details>
+      <p class="kategorie">Seiten</p>
+      <nav id="seiten"></nav>
+      <details id="rechtliches-gruppe">
+        <summary><span class="gruppe-titel">Rechtliches</span></summary>
+        <nav id="rechtliches"></nav>
+      </details>
+      <details id="weitere-gruppe" hidden>
+        <summary><span class="gruppe-titel">Weitere Seiten</span></summary>
+        <nav id="weitere"></nav>
+      </details>
+      <button type="button" class="leise mehr" id="seite-neu">Neue Seite anlegen</button>
+      <p class="kategorie">Verwaltung</p>
+      <details id="wuensche-gruppe">
+        <summary><button type="button" class="gruppe-titel" id="wuensche-link">Support</button><span class="zahl" id="wuensche-zahl"></span><span class="marke neu" id="wuensche-neu" hidden>Neu</span></summary>
+        <nav id="wuensche-liste"></nav>
+        <button type="button" class="leise mehr" id="wuensche-alle">Übersicht Support</button>
       </details>
       <details id="medien-gruppe">
         <summary><button type="button" class="gruppe-titel" id="medien-link">Medien</button></summary>
@@ -152,14 +171,9 @@ root.innerHTML = `
       <details id="verlauf-gruppe">
         <summary><button type="button" class="gruppe-titel" id="verlauf-link">Verlauf</button></summary>
       </details>
-      <details id="wuensche-gruppe">
-        <summary><button type="button" class="gruppe-titel" id="wuensche-link">Support</button><span class="zahl" id="wuensche-zahl"></span><span class="marke neu" id="wuensche-neu" hidden>Neu</span></summary>
-        <nav id="wuensche-liste"></nav>
-        <button type="button" class="leise mehr" id="wuensche-alle">Übersicht Support</button>
-      </details>
-      <details id="papierkorb-gruppe" hidden>
-        <summary><span class="gruppe-titel">Papierkorb</span></summary>
-        <p class="leise">Gelöschte Entwürfe. Zurückgeholt sind sie wieder Entwürfe.</p>
+      <details id="papierkorb-gruppe">
+        <summary><span class="gruppe-titel">Papierkorb</span><span class="zahl" id="papierkorb-zahl"></span></summary>
+        <p class="leise" id="papierkorb-hinweis"></p>
         <nav id="papierkorb"></nav>
         <button type="button" class="leise mehr gefahr" id="papierkorb-leeren">Papierkorb leeren</button>
       </details>
@@ -262,9 +276,14 @@ const briefe = root.querySelector<HTMLElement>("#briefe")!;
 const seiten = root.querySelector<HTMLElement>("#seiten")!;
 const mehr = root.querySelector<HTMLButtonElement>("#mehr")!;
 const briefeGruppe = root.querySelector<HTMLDetailsElement>("#briefe-gruppe")!;
-const seitenGruppe = root.querySelector<HTMLDetailsElement>("#seiten-gruppe")!;
+const rechtlichesGruppe = root.querySelector<HTMLDetailsElement>("#rechtliches-gruppe")!;
+const rechtliches = root.querySelector<HTMLElement>("#rechtliches")!;
+const weitereGruppe = root.querySelector<HTMLDetailsElement>("#weitere-gruppe")!;
+const weitere = root.querySelector<HTMLElement>("#weitere")!;
 const papierkorb = root.querySelector<HTMLElement>("#papierkorb")!;
-const papierkorbGruppe = root.querySelector<HTMLDetailsElement>("#papierkorb-gruppe")!;
+const papierkorbZahl = root.querySelector<HTMLElement>("#papierkorb-zahl")!;
+const papierkorbLeeren = root.querySelector<HTMLButtonElement>("#papierkorb-leeren")!;
+const papierkorbHinweis = root.querySelector<HTMLElement>("#papierkorb-hinweis")!;
 let papierkorbAnzahl = 0;
 root.querySelector("#papierkorb-leeren")!.addEventListener("click", () => {
   void deleteFromTrash(null, papierkorbAnzahl === 1 ? "Ein Eintrag" : `Alle ${papierkorbAnzahl} Einträge`);
@@ -323,6 +342,12 @@ const adresseVor = root.querySelector<HTMLElement>("#adresse-vor")!;
 const adresseInput = root.querySelector<HTMLInputElement>("#adresse")!;
 const adresseHinweis = root.querySelector<HTMLElement>("#adresse-hinweis")!;
 const editorHost = root.querySelector<HTMLElement>("#editor")!;
+// Die Werkzeugleiste des Texts klebt direkt unter der Leiste mit den Knöpfen, wie hoch die auch ist.
+const leiste = root.querySelector<HTMLElement>(".leiste")!;
+new ResizeObserver(() => {
+  const klebt = getComputedStyle(leiste).position === "sticky";
+  document.documentElement.style.setProperty("--leiste-hoehe", klebt ? `${leiste.offsetHeight}px` : "0px");
+}).observe(leiste);
 const felderHost = root.querySelector<HTMLElement>("#felder")!;
 const tipp = root.querySelector<HTMLElement>("#tipp")!;
 const fassungenGruppe = root.querySelector<HTMLDetailsElement>("#fassungen-gruppe")!;
@@ -499,8 +524,7 @@ async function mountEditor(markdown: string): Promise<void> {
       [Crepe.Feature.TopBar]: true,
     },
     featureConfigs: {
-      // Nur auf dem Telefon sichtbar (redaktion.css): Dort gibt es kein Überfahren für den Griff, und
-      // die Blase bei markiertem Text stösst mit dem Menü des Systems zusammen.
+      // Auf allen Bildschirmen. Griff und Blase bei markiertem Text gibt es auf dem Telefon nicht (redaktion.css).
       [Crepe.Feature.TopBar]: {
         headingOptions: [
           { label: "Absatz", level: null },
@@ -661,7 +685,7 @@ function listItem(page: PageSummary): HTMLElement {
     item.append(head, text);
   } else {
     head.innerHTML = `<span class="marke">Entwurf</span>`;
-    text.textContent = page.titel;
+    text.textContent = seitenName(page);
     item.append(...(page.entwurf ? [head, text] : [text]));
   }
   item.addEventListener("click", () => void openPage(page.rel));
@@ -722,14 +746,23 @@ async function loadList(): Promise<void> {
   const json = (await response.json()) as { pages: PageSummary[] };
   alleSeiten = json.pages;
   alleBriefe = json.pages.filter((page) => page.art === "brief");
-  seiten.replaceChildren(...json.pages.filter((page) => page.art !== "brief").map(listItem));
+  const baum = seitenBaum(json.pages.filter((page) => page.art !== "brief"));
+  seiten.replaceChildren(...baum.menue.flatMap(({ seite, unter }) => [
+    listItem(seite),
+    ...(unter.length ? [h("div", { class: "unterseiten" }, ...unter.map(listItem))] : []),
+  ]));
+  rechtliches.replaceChildren(...baum.rechtliches.map(listItem));
+  weitere.replaceChildren(...baum.weitere.map(listItem));
+  weitereGruppe.hidden = baum.weitere.length === 0;
   renderBriefe();
   const geloescht = (await fetch("/api/papierkorb")
     .then((res) => res.json())
     .catch(() => ({ pages: [] }))) as { pages: PageSummary[] };
   papierkorb.replaceChildren(...geloescht.pages.map(trashItem));
-  papierkorbGruppe.hidden = geloescht.pages.length === 0;
   papierkorbAnzahl = geloescht.pages.length;
+  papierkorbZahl.textContent = papierkorbAnzahl ? String(papierkorbAnzahl) : "";
+  papierkorbLeeren.hidden = papierkorbAnzahl === 0;
+  papierkorbHinweis.textContent = papierkorbAnzahl ? "Gelöschte Entwürfe. Zurückgeholt sind sie wieder Entwürfe." : "Der Papierkorb ist leer.";
 }
 
 /** Zeigt die neuesten Newsletter, ältere erst auf Wunsch. */
@@ -1013,7 +1046,12 @@ function markCurrent(): void {
   for (const item of root!.querySelectorAll<HTMLButtonElement>("nav button[data-anfrage], nav button[data-wunsch]")) {
     item.toggleAttribute("aria-current", (item.dataset.anfrage ?? item.dataset.wunsch) === gewaehlt);
   }
-  if (current) (isBrief(current) ? briefeGruppe : seitenGruppe).open = true;
+  // Die Gruppe der offenen Seite aufklappen. Die Hauptseiten stehen immer da.
+  if (current) {
+    if (isBrief(current)) briefeGruppe.open = true;
+    else if (rechtliches.querySelector(`button[data-rel="${CSS.escape(current.rel)}"]`)) rechtlichesGruppe.open = true;
+    else if (weitere.querySelector(`button[data-rel="${CSS.escape(current.rel)}"]`)) weitereGruppe.open = true;
+  }
 }
 
 /** Hält das Thema im Verzeichnis gleich, während getippt wird. */
@@ -2545,7 +2583,14 @@ root.querySelector("#seite-neu")!.addEventListener("click", () => void neueSeite
 // Ein vorhandenes Bild in den Newsletter setzen, an der Stelle, wo der Cursor steht.
 root.querySelector("#bild-aus-medien")!.addEventListener("click", async () => {
   const name = await waehleMedium();
-  if (name && crepe) crepe.editor.action(insert(`\n\n![1](/media/${name})\n\n`));
+  if (!name || !crepe) return;
+  // Ist Text markiert, kommt das Bild dahinter. Sonst ersetzte es die Markierung.
+  crepe.editor.action((ctx: { get(key: unknown): { state: EditorState; dispatch(tr: unknown): void } }) => {
+    const view = ctx.get(editorViewCtx);
+    const { doc, selection, tr } = view.state;
+    if (!selection.empty) view.dispatch(tr.setSelection(TextSelection.create(doc, selection.to)));
+  });
+  crepe.editor.action(insert(`\n\n![1](/media/${name})\n\n`));
 });
 
 const ladeMedien = medienAnsicht(medienSeite, (rel) => void openPage(rel), uploadImage);

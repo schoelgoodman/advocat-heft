@@ -8,7 +8,8 @@ Lokal liegt der Inhalt in `dev-content/` (gitignoriert, eigenes Git). Der Server
 npm install
 npm run dev
 npm run typecheck
-npm test   # Zugang, Herkunft, Bilder, Vorlagen
+npm test   # Zugang, Herkunft, Bilder, Vorlagen, Verzeichnis
+npm run test:browser   # die Redaktion in Chrome, mit einer Kopie von dev-content
 ```
 
 Die Seite ist dann auf `http://127.0.0.1:4321`, die Redaktion auf `http://127.0.0.1:4321/redaktion`. Eine geänderte Datei in `dev-content/` baut die betroffene Seite neu. Nach etwa 20 Sekunden Ruhe schreibt das Git in `dev-content/` eine Fassung.

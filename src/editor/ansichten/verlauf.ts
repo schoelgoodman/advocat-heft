@@ -20,8 +20,8 @@ export interface VerlaufAnschluss {
 }
 
 export function verlaufAnsicht(host: HTMLElement, anschluss: VerlaufAnschluss): () => Promise<void> {
-  const liste = h("ol", { class: "verlauf" });
-  const mehr = h("div", { class: "verlauf-mehr" });
+  const liste = h("ol", { class: "aenderungen" });
+  const mehr = h("div", { class: "aenderungen-mehr" });
   let geladen = 0;
   /** Die jeweils neueste Fassung einer Seite ist ihr jetziger Stand: Da gibt es nichts zurückzuholen. */
   const gesehen = new Set<string>();

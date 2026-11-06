@@ -13,6 +13,7 @@
     "editor:build": "vite build",
     "dev": "tsx src/server/index.ts",
     "test": "node --import tsx --test \"src/**/*.test.ts\"",
+    "test:browser": "node tests/browser/redaktion.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -30,6 +31,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.19.0",
+    "puppeteer-core": "^25.16.0",
     "typescript": "^5.9.3"
   }
 }
