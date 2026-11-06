@@ -88,7 +88,7 @@ Die Redaktion nimmt nur Anfragen an, die über SWAG und tinyauth kommen. SWAG sc
 
 ## Assistent
 
-Für den Assistenten in der Redaktion bei **Services → Advocat Redaktion** unter `assistent.xaiApiKey` den xAI-Schlüssel eintragen (bekommt man vom Betreiber, nicht raten). Apply. Ohne Schlüssel bleibt der Assistent aus. Designwünsche nutzen den Telegram-Bot von Advocat Finanz; dort muss nichts zusätzlich eingetragen werden.
+Für den Assistenten in der Redaktion bei **Services → Advocat Redaktion** unter `assistent.xaiApiKey` den xAI-Schlüssel eintragen (bekommt man vom Betreiber, nicht raten). Apply. Ohne Schlüssel bleibt der Assistent aus. Support-Nachrichten nutzen den Telegram-Bot von Advocat Finanz; dort muss nichts zusätzlich eingetragen werden.
 
 ## 3. Prüfen
 

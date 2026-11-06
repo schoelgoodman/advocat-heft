@@ -141,12 +141,10 @@ root.innerHTML = `
         <summary><button type="button" class="gruppe-titel" id="briefe-titel">Newsletter</button></summary>
         <nav id="briefe"></nav>
         <button type="button" class="leise mehr" id="mehr" hidden></button>
-        <button type="button" class="leise mehr" id="briefe-alle">Übersicht aller Newsletter</button>
       </details>
       <details id="anfragen-gruppe">
         <summary><button type="button" class="gruppe-titel" id="anfragen-titel">Kontaktaufnahme</button><span class="zahl" id="anfragen-zahl"></span></summary>
         <nav id="anfragen-liste"></nav>
-        <button type="button" class="leise mehr" id="anfragen-alle">Übersicht aller Anfragen</button>
       </details>
       <p class="kategorie">Seiten</p>
       <nav id="seiten"></nav>
@@ -163,7 +161,6 @@ root.innerHTML = `
       <details id="wuensche-gruppe">
         <summary><button type="button" class="gruppe-titel" id="wuensche-link">Support</button><span class="zahl" id="wuensche-zahl"></span><span class="marke neu" id="wuensche-neu" hidden>Neu</span></summary>
         <nav id="wuensche-liste"></nav>
-        <button type="button" class="leise mehr" id="wuensche-alle">Übersicht Support</button>
       </details>
       <button type="button" class="zeile-link" id="medien-link">Medien</button>
       <button type="button" class="zeile-link" id="verlauf-link">Verlauf</button>
@@ -2492,9 +2489,6 @@ document.addEventListener("keydown", (event) => {
 root.querySelector("#heim")!.addEventListener("click", async () => {
   if (await flushCommit()) showStart();
 });
-root.querySelector("#anfragen-alle")!.addEventListener("click", () => void showAnfragen());
-root.querySelector("#briefe-alle")!.addEventListener("click", () => void showBriefe());
-root.querySelector("#wuensche-alle")!.addEventListener("click", () => void showWuensche());
 for (const [knopf, art] of [["#start-wunsch", "funktion"], ["#start-fehler", "fehler"]] as const) {
   root.querySelector(knopf)!.addEventListener("click", async () => {
     await showWuensche();
@@ -2730,7 +2724,14 @@ function setzeThema(text: string): void {
 /** Was der Assistent sieht und wie er Text einsetzt. */
 function lage(): Lage {
   if (!current || !editorBereit() || form.hidden) {
-    return { ansicht: !anfragenSeite.hidden ? "anfragen" : !briefeSeite.hidden ? "briefe" : !wuenscheSeite.hidden ? "wuensche" : "start" };
+    return {
+      ansicht: !anfragenSeite.hidden ? "anfragen"
+        : !briefeSeite.hidden ? "briefe"
+        : !wuenscheSeite.hidden ? "wuensche"
+        : !medienSeite.hidden ? "medien"
+        : !verlaufSeite.hidden ? "verlauf"
+        : "start",
+    };
   }
   const doc = collect();
   return { ansicht: "blatt", rel: doc.rel, art: doc.art, titel: doc.titel, datum: doc.datum, entwurf: doc.entwurf, body: aktuellerText(), vorlage: doc.vorlage ?? undefined };

@@ -55,6 +55,20 @@ const vorDemKlick=await p.$eval("#verlauf-link",e=>e.getBoundingClientRect().top
 await p.click("#medien-link"); await sleep(900);
 ok("Verzeichnis: Medien öffnet ohne Sprung", await p.$eval("#medien-seite",e=>!e.hidden) && await p.$eval("#medien-link",e=>e.hasAttribute("aria-current")) && Math.abs(await p.$eval("#verlauf-link",e=>e.getBoundingClientRect().top)-vorDemKlick)<1);
 ok("Verzeichnis: Medien und Verlauf ohne Pfeil", await p.evaluate(()=>!document.querySelector("#medien-link").closest("details")&&!document.querySelector("#verlauf-link").closest("details")));
+ok("Verzeichnis: keine eigenen Übersicht-Links", await p.$$eval("aside button",l=>!l.some(x=>x.textContent.includes("Übersicht"))));
+for (const [gruppe,seite] of [["#briefe-gruppe","#briefe-seite"],["#anfragen-gruppe","#anfragen"],["#wuensche-gruppe","#wuensche-seite"]]) {
+  const zeigt=()=>p.$eval(seite,e=>!e.hidden); const auf=()=>p.$eval(gruppe,d=>d.open);
+  await p.click(`${gruppe} > summary`); await sleep(500);
+  ok(`Verzeichnis: ${gruppe} öffnet die Übersicht`, await zeigt() && await auf());
+  await p.click("#medien-link"); await sleep(500);
+  await p.click(`${gruppe} > summary`); await sleep(500);
+  ok(`Verzeichnis: ${gruppe} offen, Klick holt die Übersicht zurück`, await zeigt() && await auf());
+  await p.click(`${gruppe} > summary`); await sleep(300);
+  ok(`Verzeichnis: ${gruppe} zweiter Klick klappt zu`, await zeigt() && !(await auf()));
+}
+await p.click("#wuensche-gruppe > summary"); await sleep(500);
+await p.screenshot({path:`${shots}/support-gruppe.png`});
+await p.click("#medien-link"); await sleep(500);
 await p.screenshot({path:`${shots}/verwaltung.png`});
 await open("recht/impressum.md"); ok("Verzeichnis: Rechtliches klappt bei offener Seite auf", await p.$eval("#rechtliches-gruppe",d=>d.open));
 await p.screenshot({path:`${shots}/verzeichnis.png`});
@@ -71,6 +85,7 @@ for (const [breite,hoehe] of [[1700,1000],[1280,800],[1000,800],[390,844]]) {
 // jede Vorlage öffnet Felder
 for (const [rel,name] of [["kapitel/willkommen.md","start"],["kapitel/angebot.md","uebersicht"],["kapitel/ueber-uns.md","ueberuns"],["kapitel/kontakt.md","kontakt"],["kapitel/neuigkeiten.md","neuigkeiten"],["kapitel/stiftungen.md","abschnitte"]]) {
   await open(rel); ok(`${name}: Felder, kein Milkdown`, !(await p.$(".milkdown .ProseMirror")) && (await p.$$(".feld-gruppe")).length>=2);
+  ok(`${name}: Feld Bildbeschreibung beim Titelbild`, !!(await p.$('[data-pfad="bild.alt"] input')));
   await p.screenshot({path:`${shots}/v-${name}.png`,fullPage:true});
 }
 // Über uns: Text ändern, speichern, Website, Knopfbeschriftung
@@ -79,6 +94,11 @@ const name=await p.$('[data-pfad="sparring.name"] input'); await name.click({cou
 ok("Über uns gespeichert in Feldern", read("kapitel/ueber-uns.md").includes("name: Patrick Testname"));
 await sleep(1800); ok("Über uns auf Website", fs.readFileSync(`${site}/ueber-uns/index.html`,"utf8").includes("Patrick Testname"));
 ok("Status zeigt aktuell", (await p.$eval("#setz-status",e=>e.textContent)).startsWith("Website aktuell"));
+// Beschreibung des Titelbilds: gespeichert und beim Teilen der Seite
+await open("kapitel/kontakt.md");
+const titelAlt=await p.$('[data-pfad="bild.alt"] input'); await titelAlt.click({count:3}); await p.keyboard.type("Blick auf das Büro in St. Gallen"); await sleep(200); await speichern(); await sleep(1800);
+ok("Titelbild: Beschreibung gespeichert", read("kapitel/kontakt.md").includes("Blick auf das Büro in St. Gallen"));
+ok("Titelbild: Beschreibung beim Teilen", fs.readFileSync(`${site}/kontakt/index.html`,"utf8").includes('property="og:image:alt" content="Blick auf das Büro in St. Gallen"'));
 // Band-Titel jetzt frei
 await open("kapitel/angebot.md");
 const bt=await p.$('[data-pfad="band.titel"] input'); await bt.click({count:3}); await p.keyboard.type("Reden wir."); await sleep(200); await speichern(); await sleep(1800);

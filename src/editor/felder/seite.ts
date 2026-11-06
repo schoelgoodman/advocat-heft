@@ -141,8 +141,11 @@ export function mountSeite(host: HTMLElement, vorlage: Vorlage, start: Felder, a
     return rahmen("div", pfad, kopf, eingabe, optionen.hinweis ?? (optionen.einfach ? undefined : "Eine Leerzeile beginnt einen neuen Absatz."));
   }
 
-  /** Ein Bild: `pfad` zeigt auf eine Datei, oder mit `beschreibung` auf { src, alt }. */
-  function bild(pfad: string, name: string, optionen: { beschreibung?: boolean; hinweis?: string; dunkel?: boolean } = {}): HTMLElement {
+  /**
+   * Ein Bild: `pfad` zeigt auf eine Datei, oder mit `beschreibung` auf { src, alt }.
+   * `nurBeimTeilen`: Hintergrund- oder Vorschaubild. Seine Beschreibung sieht nur, wer die Seite geteilt bekommt.
+   */
+  function bild(pfad: string, name: string, optionen: { beschreibung?: boolean; nurBeimTeilen?: boolean; hinweis?: string; dunkel?: boolean } = {}): HTMLElement {
     const srcPfad = optionen.beschreibung === undefined && typeof lies(pfad) === "string" ? pfad : `${pfad}.src`;
     const src = String(lies(srcPfad) ?? "");
     const setze = (wert: string) => {
@@ -160,7 +163,7 @@ export function mountSeite(host: HTMLElement, vorlage: Vorlage, start: Felder, a
     const dateiName = src.split("/").pop() ?? "";
     return h(
       "div",
-      { class: meldung ? "feld hat-fehler" : "feld", "data-pfad": srcPfad, "data-bild": dateiName },
+      { class: meldung ? "feld hat-fehler" : "feld", "data-pfad": srcPfad, "data-bild": optionen.nurBeimTeilen ? null : dateiName },
       h("span", { class: "feld-name" }, name),
       src ? h("img", { class: optionen.dunkel ? "feld-bild dunkel" : "feld-bild", src: mediaPfad(src), alt: "" }) : null,
       h(
@@ -179,7 +182,13 @@ export function mountSeite(host: HTMLElement, vorlage: Vorlage, start: Felder, a
       ),
       optionen.hinweis ? h("small", { class: "feld-hinweis" }, optionen.hinweis) : null,
       meldung ? h("small", { class: "feld-fehler", "data-fehler": srcPfad }, meldung) : null,
-      optionen.beschreibung ? zeile(`${pfad}.alt`, "Bildbeschreibung", { hinweis: "Für Google und blinde Menschen: Was ist zu sehen?" }) : null,
+      optionen.beschreibung
+        ? zeile(`${pfad}.alt`, "Bildbeschreibung", {
+            hinweis: optionen.nurBeimTeilen
+              ? "Was ist zu sehen? Erscheint, wenn jemand die Seite teilt (WhatsApp, LinkedIn), nicht in der Google-Suche."
+              : "Für Google und blinde Menschen: Was ist zu sehen?",
+          })
+        : null,
     );
   }
 
@@ -351,7 +360,7 @@ export function mountSeite(host: HTMLElement, vorlage: Vorlage, start: Felder, a
     h("section", { class: "feld-gruppe" }, h("h2", {}, titel), ...kinder.flat());
   const notiz = (text_: string) => h("p", { class: "leise" }, text_);
 
-  const titelbild = () => gruppe("Titelbild", bild("bild", "Bild oben auf der Seite", { hinweis: "Querformat, mindestens 2000 Pixel breit. Darüber steht der Titel der Seite." }));
+  const titelbild = () => gruppe("Titelbild", bild("bild", "Bild oben auf der Seite", { beschreibung: true, nurBeimTeilen: true, hinweis: "Querformat, mindestens 2000 Pixel breit. Darüber steht der Titel der Seite." }));
   const band = () => gruppe(
     "Kontakt am Schluss",
     zeile("band.titel", "Titel"),
@@ -395,7 +404,7 @@ export function mountSeite(host: HTMLElement, vorlage: Vorlage, start: Felder, a
     start: () => [
       gruppe(
         "Kopf der Startseite",
-        bild("bild", "Grosses Bild"),
+        bild("bild", "Grosses Bild", { beschreibung: true, nurBeimTeilen: true }),
         bild("signet", "Zeichen über dem Titel", { dunkel: true }),
         zeile("titel", "Titel"),
         zeile("untertitel", "Untertitel"),
@@ -451,7 +460,7 @@ export function mountSeite(host: HTMLElement, vorlage: Vorlage, start: Felder, a
     ],
     neuigkeiten: () => [
       gruppe("Einleitung", notiz("Die Liste der Newsletter, die Suche und die Jahre baut die Website selbst."), text("text", "Kurzer Text über der Liste", { einfach: true })),
-      gruppe("Vorschaubild", bild("bild", "Bild beim Teilen der Seite", { hinweis: "Erscheint, wenn jemand die Seite teilt. Auf der Seite selbst steht kein Titelbild." })),
+      gruppe("Vorschaubild", bild("bild", "Bild beim Teilen der Seite", { beschreibung: true, nurBeimTeilen: true, hinweis: "Erscheint, wenn jemand die Seite teilt. Auf der Seite selbst steht kein Titelbild." })),
       band(),
     ],
   };

@@ -53,7 +53,7 @@ export interface Nachricht {
 
 /** Was Patrick gerade vor sich hat. Kommt vom Browser, weil ungespeicherte Änderungen zählen. */
 export interface Lage {
-  ansicht: "start" | "anfragen" | "briefe" | "wuensche" | "blatt";
+  ansicht: "start" | "anfragen" | "briefe" | "wuensche" | "medien" | "verlauf" | "blatt";
   rel?: string;
   art?: ContentDocument["art"];
   titel?: string;
@@ -103,7 +103,7 @@ function text(value: unknown, max: number): string {
 
 function cleanLage(value: unknown): Lage {
   const raw = (value ?? {}) as Record<string, unknown>;
-  const ansicht = ["blatt", "anfragen", "briefe", "wuensche"].includes(String(raw.ansicht)) ? (raw.ansicht as Lage["ansicht"]) : "start";
+  const ansicht = ["blatt", "anfragen", "briefe", "wuensche", "medien", "verlauf"].includes(String(raw.ansicht)) ? (raw.ansicht as Lage["ansicht"]) : "start";
   if (ansicht !== "blatt") return { ansicht };
   return {
     ansicht,
@@ -173,6 +173,8 @@ async function lageText(lage: Lage, frage: string): Promise<string> {
   if (lage.ansicht === "anfragen") teile.push("Patrick ist in der Kontaktaufnahme. Keine Seite ist offen.");
   if (lage.ansicht === "briefe") teile.push("Patrick ist in der Übersicht aller Newsletter. Keine Seite ist offen.");
   if (lage.ansicht === "wuensche") teile.push("Patrick ist auf der Seite «Support». Keine Seite ist offen.");
+  if (lage.ansicht === "medien") teile.push("Patrick ist unter «Medien». Keine Seite ist offen.");
+  if (lage.ansicht === "verlauf") teile.push("Patrick ist im «Verlauf». Keine Seite ist offen.");
   if (lage.ansicht === "blatt") {
     const art = lage.art === "brief" ? "Newsletter" : lage.art === "recht" ? "Rechtliche Seite" : "Feste Seite";
     teile.push(
