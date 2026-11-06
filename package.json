@@ -12,7 +12,8 @@
     "build": "tsx src/cli/build.ts",
     "editor:build": "vite build",
     "dev": "tsx src/server/index.ts",
-    "test": "node --import tsx --test \"src/**/*.test.ts\""
+    "test": "node --import tsx --test \"src/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@fontsource/manrope": "^5.3.0",

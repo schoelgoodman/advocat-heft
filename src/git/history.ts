@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { simpleGit, type SimpleGit } from "simple-git";
+import { schreibeAtomar } from "../content/atomar.ts";
 import { contentDir } from "../paths.ts";
 
 function git(): SimpleGit {
@@ -90,7 +91,5 @@ export async function showFile(rel: string, rev: string): Promise<string> {
 
 export async function restoreFile(rel: string, rev: string, from = rel): Promise<void> {
   const raw = await showFile(from, rev);
-  const file = path.join(contentDir(), rel);
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  await fs.writeFile(file, raw.endsWith("\n") ? raw : `${raw}\n`, "utf8");
+  await schreibeAtomar(path.join(contentDir(), rel), raw.endsWith("\n") ? raw : `${raw}\n`);
 }

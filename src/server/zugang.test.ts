@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import type http from "node:http";
 import { test } from "node:test";
-import { bildEndung, fremdeHerkunft, schluesselPasst } from "./zugang.ts";
+import { bildEndung, fremdeHerkunft, kanonischerHost, ohneEndSchraegstrich, schluesselPasst } from "./zugang.ts";
 
 function anfrage(method: string, headers: Record<string, string>): http.IncomingMessage {
   return { method, headers } as unknown as http.IncomingMessage;
@@ -46,4 +46,19 @@ test("Bilder: SVG und andere Dateien gehen nicht", () => {
   assert.equal(bildEndung("seite.html"), null);
   assert.equal(bildEndung("ohne-endung"), null);
   assert.equal(bildEndung(".png"), null);
+});
+
+test("Schrägstrich am Ende: bleibt auf der eigenen Seite", () => {
+  assert.equal(ohneEndSchraegstrich("/angebot/"), "/angebot");
+  assert.equal(ohneEndSchraegstrich("//boese.example/"), "/boese.example");
+  assert.equal(ohneEndSchraegstrich("///boese.example//"), "/boese.example");
+  assert.equal(ohneEndSchraegstrich("/\\\\boese.example/"), "/boese.example");
+});
+
+test("Kanonischer Name: nur die Adresse, die Google führen soll", () => {
+  const url = "https://advocat-finanz.ch";
+  assert.equal(kanonischerHost(anfrage("GET", { host: "advocat-finanz.ch" }), url), true);
+  assert.equal(kanonischerHost(anfrage("GET", { host: "advocat:4321", "x-forwarded-host": "advocat-finanz.ch" }), url), true);
+  assert.equal(kanonischerHost(anfrage("GET", { host: "advocat.heim.example" }), url), false);
+  assert.equal(kanonischerHost(anfrage("GET", {}), url), false);
 });

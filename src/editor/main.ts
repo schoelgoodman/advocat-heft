@@ -401,7 +401,7 @@ function setSaved(text: string, kind: "ok" | "busy" | "fehler" = "ok"): void {
 async function uploadImage(file: File): Promise<string> {
   const response = await fetch("/api/media", {
     method: "POST",
-    headers: { "x-filename": file.name },
+    headers: { "x-filename": encodeURIComponent(file.name) },
     body: file,
   });
   if (!response.ok) {

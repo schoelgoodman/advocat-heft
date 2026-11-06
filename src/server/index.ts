@@ -16,8 +16,10 @@ import {
   type Art,
   type ContentDocument,
 } from "../content/document.ts";
+import { schreibeAtomar } from "../content/atomar.ts";
 import { editorOrder, loadDocuments, loadPapierkorb, PAPIERKORB } from "../content/load.ts";
 import { notFoundPage } from "../design/page.ts";
+import { siteUrl } from "../design/seo.ts";
 import { commitIfChanged, ensureContentGit, logFile, restoreFile, showFile } from "../git/history.ts";
 import { anfragenDir, contentDir, repoRoot, siteDir } from "../paths.ts";
 import { buildSite, previewPage, rebuildDocuments } from "../render/build.ts";
@@ -27,7 +29,7 @@ import { importWord } from "./word.ts";
 import { seitenCheck, websiteCheck } from "./pruefung.ts";
 import { assistentBereit, clearVerlauf, handleChat, readVerlauf } from "./chat.ts";
 import { aendereWunsch, listWuensche, neuerWunsch } from "./wuensche.ts";
-import { bildEndung, fremdeHerkunft, schluesselPasst } from "./zugang.ts";
+import { bildEndung, fremdeHerkunft, kanonischerHost, ohneEndSchraegstrich, schluesselPasst } from "./zugang.ts";
 
 // Lokal stehen Schlüssel wie XAI_API_KEY in .env (gitignoriert). Auf Neo setzt sie der Container.
 if (process.env.NODE_ENV !== "production") {
@@ -130,9 +132,7 @@ async function readDoc(rel: string): Promise<ContentDocument> {
 }
 
 async function writeDoc(doc: ContentDocument): Promise<void> {
-  const file = path.join(contentDir(), doc.rel);
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  await fs.writeFile(file, serializeDocument(doc), "utf8");
+  await schreibeAtomar(path.join(contentDir(), doc.rel), serializeDocument(doc));
 }
 
 /** Der Anfang des Textes ohne Markdown, für die Übersicht der Newsletter. */
@@ -177,6 +177,15 @@ function einzeln<T>(arbeit: () => Promise<T>): Promise<T> {
   const lauf = vergabe.then(arbeit, arbeit);
   vergabe = lauf.catch(() => undefined);
   return lauf;
+}
+
+/** Der Browser schickt den Namen kodiert: Ein Header kann weder «–» noch ein zerlegtes «ü» tragen. */
+function dateiname(kodiert: string): string {
+  try {
+    return decodeURIComponent(kodiert);
+  } catch {
+    return kodiert;
+  }
 }
 
 /** Der Pfad selbst, wenn er frei ist, sonst mit -2, -3 … */
@@ -692,7 +701,7 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
 
   if (req.method === "POST" && url.pathname === "/api/media") {
     const nameHeader = req.headers["x-filename"];
-    const original = (Array.isArray(nameHeader) ? nameHeader[0] : nameHeader) ?? "bild.bin";
+    const original = dateiname((Array.isArray(nameHeader) ? nameHeader[0] : nameHeader) ?? "bild.bin");
     const ext = bildEndung(original);
     if (!ext) {
       throw new Error(path.extname(original).toLowerCase() === ".svg" ? "SVG geht nicht. Bitte als PNG speichern." : "Nur Bilder (PNG, JPG, GIF, WebP)");
@@ -851,8 +860,11 @@ async function main(): Promise<void> {
   if (setztSeite) {
     // Immer neu setzen: nach einem Code-Update passt altes HTML nicht zum neuen heft.css.
     console.log("Setze die Seiten …");
-    const built = await buildSite();
-    console.log(`${built.pages} Seiten gesetzt.`);
+    // Eine kaputte Datei darf die Seite nicht vom Netz nehmen: Was schon gesetzt ist, bleibt online.
+    await buildSite().then(
+      (built) => console.log(`${built.pages} Seiten gesetzt.`),
+      (error: unknown) => console.error("Setzen fehlgeschlagen, der letzte Stand bleibt online:", error instanceof Error ? error.message : error),
+    );
     // Anfragen nach Ablauf der Frist löschen: beim Start und danach einmal am Tag.
     const aufraeumen = () => void loescheAlteAnfragen().catch((error) => console.error("Anfragen löschen:", error instanceof Error ? error.message : error));
     aufraeumen();
@@ -944,6 +956,15 @@ async function main(): Promise<void> {
       });
       return;
     }
+    // Unter advocat.<domain> läuft dieselbe Seite. Google soll nur die eine Adresse führen.
+    if (setztSeite && !kanonischerHost(req, siteUrl())) {
+      res.setHeader("x-robots-tag", "noindex");
+      if (url.pathname === "/robots.txt") {
+        res.writeHead(200, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-cache" });
+        res.end("User-agent: *\nDisallow: /\n");
+        return;
+      }
+    }
     const kontakt = publicPath("kapitel/kontakt.md");
     if (setztSeite && req.method === "POST" && [kontakt, `${kontakt}/`, "/kontakt", "/kontakt/"].includes(url.pathname)) {
       void handleAnfrage(req, res).catch((error: unknown) => {
@@ -967,7 +988,7 @@ async function main(): Promise<void> {
     }
     // Eine Adresse pro Seite: /angebot/ (so hiess es unter WordPress) springt auf /angebot.
     if ((req.method === "GET" || req.method === "HEAD") && /.\/+$/.test(url.pathname)) {
-      res.writeHead(301, { location: url.pathname.replace(/\/+$/, "") + url.search });
+      res.writeHead(301, { location: ohneEndSchraegstrich(url.pathname) + url.search });
       res.end();
       return;
     }
