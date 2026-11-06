@@ -76,6 +76,10 @@ Den aktuellen Stand für den Betreiber holen (nur lesend, nichts anhalten): `git
 
 Einmal zum Umzug auf den Server ist das geschehen (Release `content-2026-10-29`, `advocat-content.zip` mit `.git`). Nicht wiederholen: Ein Zip ersetzt den ganzen Inhalt samt Patricks Arbeit. Für einen neuen Server den Betreiber fragen.
 
+### Umstellung der festen Seiten auf Felder
+
+Die erste Version mit Feldern stellt die festen Seiten beim Start der Redaktion selbst um und schreibt eine Fassung «Feste Seiten auf Felder umgestellt». Vor diesem einen Update `content` sichern (`cp -a content "content.alt-$(date +%F-%H%M)"`). Danach `docker logs advocat-redaktion | grep Umstellung`: Meldet es eine Seite, die «bleibt Text», läuft sie weiter mit dem freien Editor; dem Betreiber melden. Wer danach Inhalt als Bundle schickt, nimmt zuerst den Stand vom Server.
+
 `site/` nicht anfassen. Der Dienst setzt das HTML bei jedem Start neu.
 
 ## Schlüssel der Redaktion
@@ -93,6 +97,9 @@ Für den Assistenten in der Redaktion bei **Services → Advocat Redaktion** unt
 - `https://advocat.<domain>` zeigt die Startseite mit Bildern.
 - `https://advocat.<domain>/redaktion` antwortet 404. Das ist richtig.
 - `curl -s -o /dev/null -w '%{http_code}' http://advocat-redaktion:4321/api/pages` aus einem anderen Container im Netz `internal` (etwa `docker exec swag …`): `403`. Über `https://redaktion.<domain>/` geht es nach der Anmeldung.
+- `docker inspect advocat --format '{{.HostConfig.ReadonlyRootfs}} {{.HostConfig.Memory}}'` zeigt `true` und einen Speicherwert; `docker logs advocat` ohne `EROFS`.
+- `curl -sI https://advocat.<domain>//x//boese.example/ | grep -i ^location` zeigt `/boese.example`, keine fremde Adresse.
+- `curl -sI https://advocat.<domain>/ | grep -i x-robots` zeigt `noindex`, solange die Seite nicht unter ihrer eigenen Domain läuft.
 - `curl -sI https://advocat.<domain>/ | grep -i content-security` zeigt `default-src 'self'`; bei einer Datei `.svg` steht `sandbox`.
 - `https://redaktion.<domain>/` verlangt tinyauth und zeigt danach die Redaktion direkt an der Wurzel (`/redaktion` springt auf `/`). `redaktion.<domain>` nicht in die Custom Domains eintragen.
 - Nach einer Inhaltsübernahme: `git -C <appdata>/advocat/content log --oneline -5` zeigt oben die Fassungen aus dem Release (oder einen Merge-Commit darüber).

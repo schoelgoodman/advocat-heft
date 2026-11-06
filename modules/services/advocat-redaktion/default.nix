@@ -79,6 +79,16 @@
             "${appdata}/chat:/chat"
           ];
           networks = ["internal"];
+          # Nichts im Image ist beschreibbar (nur die Volumes und ein kleines /tmp), keine Linux-Rechte,
+          # keine Rechteausweitung, begrenzter Speicher und begrenzte Prozesse.
+          extraOptions = [
+            "--read-only"
+            "--tmpfs=/tmp:rw,noexec,nosuid,size=512m"
+            "--cap-drop=ALL"
+            "--security-opt=no-new-privileges"
+            "--pids-limit=256"
+            "--memory=2g"
+          ];
         };
       };
     };

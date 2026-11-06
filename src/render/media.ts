@@ -30,16 +30,19 @@ function loadSharp(): Promise<Sharp | null> {
 }
 
 async function shrink(data: Buffer, ext: string): Promise<Buffer | null> {
-  if (!SHRINKABLE.has(ext) || data.length < MIN_BYTES) return null;
+  if (!SHRINKABLE.has(ext)) return null;
   const sharp = await loadSharp();
   if (!sharp) return null;
+  // Auch ein kleines Foto kann seinen Aufnahmeort tragen: Das geht nie auf die Website.
+  const meta = data.length < MIN_BYTES ? await sharp(data, { failOn: "none" }).metadata() : null;
+  if (meta && !meta.exif && !meta.xmp && !meta.iptc) return null;
   // .rotate() ohne Winkel dreht nach EXIF; die Metadaten fallen danach weg.
   let image = sharp(data, { failOn: "none" }).rotate().resize({ width: MAX_WIDTH, withoutEnlargement: true });
   if (ext === ".png") image = image.png({ compressionLevel: 9, effort: 7 });
   else if (ext === ".webp") image = image.webp({ quality: 80 });
   else image = image.jpeg({ quality: 72, progressive: true, mozjpeg: true });
   const out = await image.toBuffer();
-  return out.length < data.length ? out : null;
+  return meta || out.length < data.length ? out : null;
 }
 
 /**

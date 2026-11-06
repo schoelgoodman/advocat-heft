@@ -1,7 +1,6 @@
 import { Window } from "happy-dom";
 import { publicPath, type Art } from "../content/document.ts";
 import { mediaSize, mediaVariants } from "../render/media.ts";
-import { angebote, istAngebot } from "./angebote.ts";
 import { clip, DEFAULT_DESCRIPTION, DEFAULT_IMAGE } from "./seo.ts";
 
 export interface Teaser {
@@ -40,13 +39,7 @@ export interface PageView {
   noindex?: boolean;
 }
 
-const PER_PAGE = 10;
-
-const CARD_HREF: Record<string, string> = {
-  "für privatpersonen": "/privatpersonen",
-  "für unternehmen": "/unternehmen-2",
-  "für stiftungen": "/stiftungen-2",
-};
+export const PER_PAGE = 10;
 
 const ADDRESS_LINES: Record<string, string[]> = {
   "Advocat Finanz AG Rosenbergstrasse 50 CH-9000 St.Gallen": [
@@ -75,7 +68,7 @@ const LONG_MONTHS = [
   "Juli", "August", "September", "Oktober", "November", "Dezember",
 ];
 
-function esc(value: string): string {
+export function esc(value: string): string {
   return value
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
@@ -83,11 +76,11 @@ function esc(value: string): string {
     .replaceAll('"', "&quot;");
 }
 
-function plain(node: { textContent: string | null }): string {
+export function plain(node: { textContent: string | null }): string {
   return (node.textContent ?? "").replace(/\s+/g, " ").trim();
 }
 
-function hyphenate(value: string): string {
+export function hyphenate(value: string): string {
   return value.replace(/\s+[–—]\s+/g, " - ");
 }
 
@@ -214,7 +207,7 @@ function soloAnchor(el: Element): HTMLAnchorElement | null {
 
 /** Bildbreite im Textfluss: Handy fast randlos, sonst die Textspalte. */
 const SIZES_PROSA = "(max-width: 820px) calc(100vw - 2.5rem), 760px";
-const SIZES_HERO = "(max-width: 767px) 100vw, min(1120px, 100vw - 7rem)";
+export const SIZES_HERO = "(max-width: 767px) 100vw, min(1120px, 100vw - 7rem)";
 const SIZES_CARD = "(max-width: 767px) calc(100vw - 2.5rem), (max-width: 1240px) 33vw, 360px";
 
 /** `srcset` aus den kleineren Fassungen, oder leer: dann lädt der Browser das Original. */
@@ -223,7 +216,7 @@ function srcset(src: string): string {
 }
 
 /** Ein Hintergrundbild als echtes <img>, damit der Browser die passende Grösse wählt. */
-function coverImage(className: string, src: string, sizes: string, eager: boolean): string {
+export function coverImage(className: string, src: string, sizes: string, eager: boolean): string {
   const set = srcset(src);
   const responsive = set ? ` srcset="${esc(set)}" sizes="${sizes}"` : "";
   const loading = eager ? ` fetchpriority="high"` : ` loading="lazy" decoding="async"`;
@@ -237,21 +230,24 @@ function articleHtml(teaser: Teaser): string {
   return `<article class="beitrag"><h2 class="entry-title"><a href="${esc(teaser.href)}">${esc(thema)}</a></h2><p class="post-meta"><time datetime="${esc(teaser.datum)}">${esc(shortDate(teaser.datum))}</time> · ${esc(listMeta(teaser))}</p>${excerpt}</article>`;
 }
 
-function cardAnchor(src: string, label: string, href: string): string {
+export function cardAnchor(src: string, label: string, href: string): string {
   return `<a class="karte" href="${esc(href)}">${coverImage("karte-bild", src, SIZES_CARD, false)}<span>${esc(label)}</span></a>`;
 }
+
+/** Bilder, die fest im Code stehen: Sie dürfen in den Medien nicht gelöscht werden. */
+export const FESTE_BILDER = ["Privatperson-scaled.jpg", "Unternehmen-scaled.jpg", "Stiftungen-scaled.jpg"];
 
 function standardCards(): string {
   return `<div class="karten karten-seite">${cardAnchor("/media/Privatperson-scaled.jpg", "Für Privatpersonen", "/privatpersonen")}${cardAnchor("/media/Unternehmen-scaled.jpg", "Für Unternehmen", "/unternehmen-2")}${cardAnchor("/media/Stiftungen-scaled.jpg", "Für Stiftungen", "/stiftungen-2")}</div>`;
 }
 
 /** Im Inhalt steht oft „Kontaktieren sie uns“. Auf dem Knopf immer mit grossem Sie. */
-function knopfText(label: string): string {
+export function knopfText(label: string): string {
   return label.replace(/^kontaktieren sie uns/i, "Kontaktieren Sie uns");
 }
 
 /** Neben dem Knopf Telefon und Mail: auf dem Handy ein Tipp bis zum Anruf. */
-function bandHtml(heading: string, paragraph: string, label: string, href: string): string {
+export function bandHtml(heading: string, paragraph: string, label: string, href: string): string {
   const direkt = `<p class="band-direkt"><a href="tel:+41712423030">+41 71 242 30 30</a><a href="mailto:office@advocat-finanz.ch">office@advocat-finanz.ch</a></p>`;
   return `<aside class="band"><div class="band-innen"><h2>${esc(heading)}</h2><p>${esc(paragraph)}</p><div class="aktionen"><a class="btn btn-solid" href="${esc(href)}">${esc(knopfText(label))}</a>${direkt}</div></div></aside>`;
 }
@@ -265,7 +261,7 @@ function standardBand(): string {
   );
 }
 
-function formHtml(): string {
+export function formHtml(): string {
   return `<form class="anfrage" action="/kontakt" method="post" novalidate>
     <div class="feld-reihe">
       <label class="feld"><span>Vorname</span><input name="vorname" autocomplete="given-name" maxlength="100" required aria-describedby="fehler-vorname"><span class="feld-fehler" id="fehler-vorname" hidden></span></label>
@@ -281,6 +277,11 @@ function formHtml(): string {
     <p class="form-fehler" role="alert" hidden>Bitte füllen Sie alle Felder aus.</p>
     <p class="form-danke" role="status" hidden>Vielen Dank. Wir haben Ihre Nachricht erhalten und melden uns bei Ihnen.</p>
   </form>`;
+}
+
+/** Die Karte lädt erst auf Klick (site.js), damit ohne Zustimmung nichts an Google geht. */
+export function kartePlatzhalter(href: string): string {
+  return `<div class="karte-frame karte-platzhalter" data-src="${esc(href)}" data-title="Advocat Finanz AG auf der Karte"><p>Die Karte stammt von Google Maps. Erst wenn Sie sie laden, werden Daten an Google übertragen.</p><p><button type="button" class="btn btn-ghost karte-laden">Karte laden</button></p><p><a href="${MAPS_LINK}">In Google Maps öffnen</a></p></div>`;
 }
 
 function repair(root: HTMLElement, doc: Document): void {
@@ -306,440 +307,23 @@ function repair(root: HTMLElement, doc: Document): void {
     const anchor = soloAnchor(paragraph);
     const href = anchor?.getAttribute("href") ?? "";
     if (anchor && /google\.com\/maps\/embed|\/maps\/embed/.test(href)) {
-      // Die Karte lädt erst auf Klick (site.js), damit ohne Zustimmung nichts an Google geht.
       const holder = doc.createElement("div");
-      holder.className = "karte-frame karte-platzhalter";
-      holder.setAttribute("data-src", href);
-      holder.setAttribute("data-title", "Advocat Finanz AG auf der Karte");
-      holder.innerHTML = `<p>Die Karte stammt von Google Maps. Erst wenn Sie sie laden, werden Daten an Google übertragen.</p><p><button type="button" class="btn btn-ghost karte-laden">Karte laden</button></p><p><a href="${MAPS_LINK}">In Google Maps öffnen</a></p>`;
-      paragraph.replaceWith(holder);
+      holder.innerHTML = kartePlatzhalter(href);
+      paragraph.replaceWith(holder.firstElementChild!);
     }
   }
-}
-
-function takeHero(root: HTMLElement, input: RenderInput): string {
-  if (input.art === "brief" || input.art === "recht") return "";
-  if (input.rel === "kapitel/neuigkeiten.md") {
-    const image = firstElement(root);
-    if (image && isImgOnly(image)) image.remove();
-    const heading = firstElement(root);
-    if (heading && headingLevel(heading) && /^neuigkeiten$/i.test(plain(heading))) heading.remove();
-    return "";
-  }
-  const image = firstElement(root);
-  if (!image || !isImgOnly(image)) return "";
-  const src = imageSrc(image);
-  image.remove();
-
-  if (input.rel === "kapitel/willkommen.md") {
-    let tree = "";
-    let title = "Advocat Finanz";
-    let sub = "Vermögen und recht - ein leben lang";
-    const signet = firstElement(root);
-    if (signet && isImgOnly(signet)) {
-      // Schmuck: der Titel darunter sagt schon «Advocat Finanz». Screenreader überspringen den Baum.
-      tree = `<img class="held-baum" src="${esc(imageSrc(signet))}" alt="" width="256" height="256">`;
-      signet.remove();
-    }
-    const titleNode = firstElement(root);
-    if (titleNode && headingLevel(titleNode)) {
-      title = plain(titleNode);
-      titleNode.remove();
-    }
-    const subNode = firstElement(root);
-    if (subNode && headingLevel(subNode)) {
-      sub = hyphenate(plain(subNode));
-      subNode.remove();
-    }
-    return `<section class="held held-start">${coverImage("held-bild", src, SIZES_HERO, true)}<div class="held-innen">${tree}<h1 class="held-titel">${esc(title)}</h1><p class="held-untertitel">${esc(sub)}</p></div></section>`;
-  }
-
-  let title = input.titel;
-  const heading = firstElement(root);
-  if (heading && headingLevel(heading) && plain(heading).toLowerCase() === input.titel.toLowerCase()) {
-    title = plain(heading);
-    heading.remove();
-  }
-  return `<section class="held held-seite">${coverImage("held-bild", src, SIZES_HERO, true)}<h1>${esc(title)}</h1></section>`;
-}
-
-function extractCards(root: HTMLElement, home: boolean): void {
-  const kids = [...root.children] as HTMLElement[];
-  let index = 0;
-  while (index < kids.length - 1) {
-    const cards: string[] = [];
-    let cursor = index;
-    while (cursor < kids.length - 1) {
-      const image = kids[cursor];
-      const heading = kids[cursor + 1];
-      if (!image.isConnected || !isImgOnly(image) || headingLevel(heading) !== 3) break;
-      const href = CARD_HREF[plain(heading).toLowerCase()];
-      if (!href) break;
-      cards.push(cardAnchor(imageSrc(image), plain(heading), href));
-      cursor += 2;
-    }
-    if (!cards.length) {
-      index += 1;
-      continue;
-    }
-    const box = root.ownerDocument.createElement("div");
-    box.className = home ? "karten karten-home" : "karten karten-seite";
-    box.innerHTML = cards.join("");
-    kids[index].replaceWith(box);
-    for (let removeAt = index + 1; removeAt < cursor; removeAt += 1) kids[removeAt].remove();
-    index = cursor;
-  }
-}
-
-function isBandHeading(el: Element): boolean {
-  return headingLevel(el) > 0 && /^kontaktieren sie uns\.?$/i.test(plain(el));
-}
-
-function isCta(el: Element | null): el is HTMLElement {
-  return !!el && el.tagName === "P" && /^kontaktieren sie uns\.?$/i.test(plain(el));
-}
-
-function extractBand(root: HTMLElement): void {
-  for (const el of [...root.children]) {
-    if (!el.isConnected || !isBandHeading(el)) continue;
-    const paragraph = el.nextElementSibling as HTMLElement | null;
-    const after = paragraph?.nextElementSibling as HTMLElement | null;
-    const sentence = paragraph && paragraph.tagName === "P" && !isCta(paragraph)
-      ? plain(paragraph)
-      : "Gerne stehen wir Ihnen beratend zur Seite und freuen uns auf einen Kontakt.";
-    const cta = isCta(paragraph) ? paragraph : isCta(after) ? after : null;
-    const anchor = cta ? soloAnchor(cta) : null;
-    const label = cta ? plain(cta) : "Kontaktieren sie uns";
-    const href = anchor?.getAttribute("href") || "/kontakt";
-    const aside = root.ownerDocument.createElement("aside");
-    aside.className = "band";
-    aside.innerHTML = bandHtml(plain(el), sentence, label, href).replace(/^<aside class="band">|<\/aside>$/g, "");
-    el.replaceWith(aside);
-    if (paragraph && paragraph !== cta && paragraph.tagName === "P") paragraph.remove();
-    cta?.remove();
-  }
-}
-
-function isBlock(el: Element): boolean {
-  return el.classList.contains("band") || el.classList.contains("karten") || el.classList.contains("abschnitt") || el.classList.contains("weitere");
-}
-
-function isLeistungen(el: Element): boolean {
-  return headingLevel(el) > 0 && /^leistungen:?$/i.test(plain(el));
-}
-
-function demote(el: HTMLElement, tag: string): HTMLElement {
-  const next = el.ownerDocument.createElement(tag);
-  next.innerHTML = el.innerHTML;
-  el.replaceWith(next);
-  return next;
-}
-
-function column(doc: Document, className: string, nodes: Element[]): HTMLElement {
-  const box = doc.createElement("div");
-  box.className = `${className} prosa`;
-  box.append(...nodes);
-  return box;
-}
-
-/** Setzt den Abschnitt an die Stelle des ersten Knotens. */
-function section(doc: Document, tinted: boolean, nodes: Element[]): void {
-  const anchor = doc.createElement("div");
-  nodes[0].before(anchor);
-  const box = doc.createElement("section");
-  box.className = tinted ? "abschnitt abschnitt-ton" : "abschnitt";
-  const inner = doc.createElement("div");
-  inner.className = "abschnitt-innen";
-  inner.append(...nodes);
-  box.append(inner);
-  anchor.replaceWith(box);
-}
-
-/** Text links (2/3), „Leistungen:“ rechts (1/3), wie die Angebotsseiten oben. Folgezeilen teilen einen Grund. */
-function leistungsSpalten(root: HTMLElement): void {
-  const doc = root.ownerDocument;
-  const rows: HTMLElement[] = [];
-  for (const heading of [...root.children]) {
-    if (!heading.isConnected || !isLeistungen(heading)) continue;
-    const main: Element[] = [];
-    let cursor = heading.previousElementSibling;
-    while (cursor && headingLevel(cursor) !== 2 && !isBlock(cursor)) {
-      main.unshift(cursor);
-      cursor = cursor.previousElementSibling;
-    }
-    while (cursor && headingLevel(cursor) > 0 && !isLeistungen(cursor)) {
-      main.unshift(cursor);
-      cursor = cursor.previousElementSibling;
-    }
-    if (!main.length) continue;
-    const side: Element[] = [];
-    let follow = heading.nextElementSibling;
-    while (follow && !(headingLevel(follow) > 0 && headingLevel(follow) <= 2) && !isBlock(follow)) {
-      side.push(follow);
-      follow = follow.nextElementSibling;
-    }
-    const row = doc.createElement("div");
-    row.className = "spalten spalten-2-1";
-    main[0].before(row);
-    row.append(column(doc, "spalte", main), column(doc, "spalte spalte-seite", [demote(heading as HTMLElement, "h3"), ...side]));
-    rows.push(row);
-  }
-  // Direkt aufeinanderfolgende Zeilen in einen Abschnitt.
-  let group: HTMLElement[] = [];
-  const close = () => {
-    if (!group.length) return;
-    section(doc, true, group);
-    group = [];
-  };
-  for (const row of rows) {
-    if (group.length && group[group.length - 1].nextElementSibling !== row) close();
-    group.push(row);
-  }
-  close();
-}
-
-/** Inhaltsverzeichnis unter dem Titelbild: je Leistungsabschnitt (Text links, Leistungen rechts) ein nummerierter Eintrag. */
-function sprungMenu(root: HTMLElement): string {
-  const links: string[] = [];
-  for (const heading of root.querySelectorAll(".spalten-2-1 > .spalte:first-child > h2:first-child")) {
-    const id = heading.getAttribute("id");
-    if (!id) continue;
-    const nr = String(links.length + 1).padStart(2, "0");
-    links.push(`<li><a href="#${esc(id)}"><span class="sprung-nr" aria-hidden="true">${nr}</span>${esc(plain(heading))}</a></li>`);
-  }
-  if (links.length < 2) return "";
-  return `<nav class="sprung" aria-labelledby="sprung-titel"><p class="sprung-titel" id="sprung-titel">Auf dieser Seite</p><ol class="sprung-liste">${links.join("")}</ol></nav>`;
-}
-
-/** Am Ende einer Angebotsseite, vor «Kontaktieren Sie uns»: die beiden anderen Angebote. */
-function weitereAngebote(root: HTMLElement, here: string): void {
-  if (!istAngebot(here)) return;
-  const links = angebote().filter((angebot) => angebot.href !== here)
-    .map(({ href, name }) => `<li><a href="${href}">Für ${esc(name)}<span class="weitere-pfeil" aria-hidden="true">→</span></a></li>`)
-    .join("");
-  const nav = root.ownerDocument.createElement("nav");
-  nav.className = "weitere";
-  nav.setAttribute("aria-labelledby", "weitere-titel");
-  nav.innerHTML = `<p class="sprung-titel" id="weitere-titel">Weitere Angebote</p><ul class="sprung-liste">${links}</ul>`;
-  const band = [...root.children].find((el) => el.classList.contains("band"));
-  if (band) band.before(nav);
-  else root.append(nav);
-}
-
-function headingNamed(root: HTMLElement, pattern: RegExp): HTMLElement | null {
-  return ([...root.children] as HTMLElement[]).find((el) => headingLevel(el) === 2 && pattern.test(plain(el))) ?? null;
-}
-
-function takeUntil(start: Element | null, stop: (el: Element) => boolean): Element[] {
-  const nodes: Element[] = [];
-  let cursor = start;
-  while (cursor && !stop(cursor) && !isBlock(cursor)) {
-    nodes.push(cursor);
-    cursor = cursor.nextElementSibling;
-  }
-  return nodes;
-}
-
-/** Über uns: Porträt (1/3) neben dem Werdegang (2/3), Partner nebeneinander (1/2 · 1/2). */
-function ueberUnsSpalten(root: HTMLElement): void {
-  const doc = root.ownerDocument;
-  const sparring = headingNamed(root, /^ihr sparringpartner$/i);
-  const partner = headingNamed(root, /^unsere partnerunternehmen$/i);
-
-  if (sparring) {
-    const body = takeUntil(sparring.nextElementSibling, (el) => el === partner);
-    const portrait = body[0] && isImgOnly(body[0]) ? body[0] : null;
-    const split = body.findIndex((el, index) => index > 1 && headingLevel(el) === 2);
-    if (portrait && split > 0) {
-      const row = doc.createElement("div");
-      row.className = "spalten spalten-1-2";
-      row.append(column(doc, "spalte spalte-profil", body.slice(0, split)), column(doc, "spalte", body.slice(split)));
-      sparring.before(row);
-      section(doc, true, [sparring, row]);
-    }
-  }
-
-  if (partner) {
-    const body = takeUntil(partner.nextElementSibling, () => false);
-    const groups: Element[][] = [];
-    for (const el of body) {
-      const open = groups[groups.length - 1];
-      if (headingLevel(el) === 2 && (!open || isImgOnly(open[open.length - 1]))) groups.push([el]);
-      else if (open) open.push(el);
-    }
-    if (groups.length > 1) {
-      const row = doc.createElement("div");
-      row.className = "spalten spalten-1-1";
-      for (const group of groups) {
-        // Zweite Überschrift ist der Untertitel des Partners.
-        const sub = group[1];
-        if (sub && headingLevel(sub) === 2) group[1] = demote(sub as HTMLElement, "h3");
-        row.append(column(doc, "spalte", group));
-      }
-      partner.before(row);
-      section(doc, false, [partner, row]);
-    }
-  }
-}
-
-function styleSoloLinks(root: HTMLElement): void {
-  for (const paragraph of [...root.querySelectorAll("p")]) {
-    if (paragraph.closest(".band")) continue;
-    const anchor = soloAnchor(paragraph);
-    if (!anchor) continue;
-    const label = plain(anchor).toLowerCase();
-    if (label === "zu unserem angebot" || label === "mehr neuigkeiten" || label === "hier zu unserem angebot") {
-      paragraph.classList.add("aktionen");
-      anchor.classList.add("btn", "btn-ghost");
-    } else if (label === "kontaktieren sie uns") {
-      paragraph.classList.add("aktionen");
-      anchor.classList.add("btn", "btn-solid");
-      anchor.textContent = knopfText(plain(anchor));
-    }
-  }
-}
-
-function accordion(root: HTMLElement): void {
-  const kids = [...root.children] as HTMLElement[];
-  const next: Node[] = [];
-  let openedInSection = false;
-  let index = 0;
-  while (index < kids.length) {
-    const el = kids[index];
-    const level = headingLevel(el);
-    if (level === 2) openedInSection = false;
-    if (level === 3) {
-      const details = root.ownerDocument.createElement("details");
-      details.className = "frage";
-      if (!openedInSection) {
-        details.open = true;
-        openedInSection = true;
-      }
-      const summary = root.ownerDocument.createElement("summary");
-      summary.textContent = plain(el);
-      const answer = root.ownerDocument.createElement("div");
-      answer.className = "antwort";
-      index += 1;
-      while (index < kids.length) {
-        const follow = kids[index];
-        const followLevel = headingLevel(follow);
-        if (followLevel === 2 || followLevel === 3) break;
-        if (follow.classList.contains("band") || follow.classList.contains("karten")) break;
-        answer.appendChild(follow);
-        index += 1;
-      }
-      details.append(summary, answer);
-      next.push(details);
-      continue;
-    }
-    next.push(el);
-    index += 1;
-  }
-  root.replaceChildren(...next);
-}
-
-function layoutKontakt(root: HTMLElement): string {
-  const frame = root.querySelector(".karte-frame");
-  frame?.remove();
-  const kids = [...root.children] as HTMLElement[];
-  const split = kids.findIndex((el) => headingLevel(el) > 0 && /^unser standort$/i.test(plain(el)));
-  const introNodes = split === -1 ? kids : kids.slice(0, split);
-  const addressNodes = split === -1 ? [] : kids.slice(split);
-  const doc = root.ownerDocument;
-  const intro = doc.createElement("div");
-  intro.className = "kontakt-intro";
-  intro.append(...introNodes);
-  const form = doc.createElement("div");
-  form.innerHTML = formHtml();
-  const address = doc.createElement("div");
-  address.className = "adresse prosa";
-  address.append(...addressNodes);
-  const grid = doc.createElement("div");
-  grid.className = "kontakt-grid";
-  const fields = form.firstElementChild;
-  if (fields) grid.append(fields, address);
-  const wrap = doc.createElement("div");
-  wrap.className = "inhalt";
-  wrap.append(intro, grid);
-  const map = frame
-    ? `<div class="karte-voll">${frame.outerHTML}</div>`
-    : "";
-  return `${wrap.outerHTML}${map}`;
 }
 
 /** Ein Newsletter als Karte; der Titellink deckt die ganze Karte ab. */
-function teaserCard(teaser: Teaser): string {
+export function teaserCard(teaser: Teaser): string {
   return `<article class="teaser"><p class="post-meta"><time datetime="${esc(teaser.datum)}">${esc(shortDate(teaser.datum))}</time></p><h3 class="teaser-titel"><a href="${esc(teaser.href)}">${esc(teaser.titel)}</a></h3>${teaser.excerpt ? `<p class="teaser-text">${esc(teaser.excerpt)}</p>` : ""}<span class="teaser-mehr" aria-hidden="true">Weiterlesen →</span></article>`;
 }
 
-/** «Unsere Neuigkeiten»: die drei neuesten als Kartenreihe in voller Breite, «Mehr Neuigkeiten» darunter. */
-function insertTeasers(root: HTMLElement, teasers: Teaser[]): void {
-  for (const heading of root.querySelectorAll("h1,h2,h3")) {
-    if (!/^unsere neuigkeiten$/i.test(plain(heading))) continue;
-    const doc = root.ownerDocument;
-    const next = heading.nextElementSibling;
-    const more = next?.classList.contains("aktionen") ? next : null;
-    const grid = doc.createElement("div");
-    grid.className = "teaser-raster";
-    grid.innerHTML = teasers.slice(0, 3).map(teaserCard).join("");
-    const title = doc.createElement("h2");
-    title.textContent = plain(heading);
-    const nodes: Element[] = [title, grid];
-    if (more) nodes.push(more);
-    heading.replaceWith(title);
-    section(doc, false, nodes);
-    title.closest(".abschnitt")?.classList.add("neuigkeiten-start");
-    break;
-  }
-  for (const heading of root.querySelectorAll("h1,h2")) {
-    if (/herzlich willkommen/i.test(plain(heading))) heading.textContent = hyphenate(plain(heading));
-  }
-}
-
-function serializeFlow(root: HTMLElement): string {
-  const doc = root.ownerDocument;
-  const parts: string[] = [];
-  let bucket = doc.createElement("div");
-  bucket.className = "inhalt prosa";
-  const flush = (extra = "") => {
-    if (![...bucket.childNodes].some((node) => node.nodeType !== 3 || (node.textContent ?? "").trim())) return;
-    if (extra) bucket.classList.add(extra);
-    parts.push(bucket.outerHTML);
-    bucket = doc.createElement("div");
-    bucket.className = "inhalt prosa";
-  };
-  for (const node of [...root.childNodes]) {
-    if (node.nodeType === 3 && !(node.textContent ?? "").trim()) continue;
-    if (!node.isConnected) continue;
-    if (node.nodeType === 1) {
-      const el = node as HTMLElement;
-      if (isBlock(el)) {
-        const home = el.classList.contains("karten-home");
-        flush(home ? "inhalt-intro" : "");
-        if (home) {
-          // «Zu unserem Angebot» gehört zu den Karten, nicht allein in den weissen Raum darunter.
-          const next = el.nextElementSibling;
-          const more = next?.classList.contains("aktionen") ? next : null;
-          more?.remove();
-          parts.push(`<section class="karten-band">${el.outerHTML}${more ? more.outerHTML : ""}</section>`);
-        } else parts.push(el.outerHTML);
-        continue;
-      }
-    }
-    bucket.appendChild(node);
-  }
-  flush();
-  return parts.join("\n");
-}
-
 /** Die ersten richtigen Absätze, ohne Formular, Adressen und Knöpfe. */
-function describe(root: HTMLElement): string {
+export function describe(root: HTMLElement): string {
   let text = "";
   for (const paragraph of root.querySelectorAll("p")) {
     if (paragraph.closest("form, .band, .aktionen, .karten")) continue;
-    // Der Satz unter „Kontaktieren Sie uns.“ wird später das Band und steht auf jeder Seite.
-    const before = paragraph.previousElementSibling;
-    if (before && isBandHeading(before)) continue;
     const clone = paragraph.cloneNode(true) as HTMLElement;
     for (const br of clone.querySelectorAll("br")) br.replaceWith(" ");
     const value = plain(clone);
@@ -771,13 +355,13 @@ function briefNav(input: RenderInput): string {
 const NEUIGKEITEN = "kapitel/neuigkeiten.md";
 
 /** Die Seiten des Archivs hängen an der Adresse von Neuigkeiten, auch wenn Patrick sie umbenennt. */
-function pageHref(page: number): string {
+export function pageHref(page: number): string {
   const archiv = publicPath(NEUIGKEITEN);
   return page <= 1 ? archiv : `${archiv}/page/${page}`;
 }
 
-/** intro: der Text aus neuigkeiten.md zwischen Titel und «Kontaktieren Sie uns.», als HTML. */
-function archiveHtml(input: RenderInput, intro: string): string {
+/** intro: die Einleitung der Seite Neuigkeiten, als HTML. */
+export function archiveHtml(input: Pick<RenderInput, "titel" | "teasers" | "page">, intro: string): string {
   const page = Math.max(1, input.page ?? 1);
   const pages = Math.max(1, Math.ceil(input.teasers.length / PER_PAGE));
   const slice = input.teasers.slice((page - 1) * PER_PAGE, page * PER_PAGE);
@@ -828,50 +412,61 @@ function archiveHtml(input: RenderInput, intro: string): string {
   <script type="application/json" id="suchindex">${index}</script>`;
 }
 
-function hereFor(input: RenderInput): string {
-  if (input.rel === "kapitel/neuigkeiten.md" && (input.page ?? 1) > 1) return pageHref(input.page ?? 1);
-  return publicPath(input.rel);
+/** Ladehinweise und Masse für Bilder im Text. Titel- und Kartenbilder setzt das Layout selbst. */
+export function bilderAufbereiten(root: HTMLElement): void {
+  for (const image of root.querySelectorAll("img")) {
+    if (/\b(held-bild|held-baum|karte-bild)\b/.test(image.getAttribute("class") ?? "")) continue;
+    image.setAttribute("loading", "lazy");
+    image.setAttribute("decoding", "async");
+    // Der Editor schrieb früher das Grössenverhältnis («1.00») als Beschreibung und Patricks
+    // Bildbeschreibung als Titel. Dann gilt der Titel; die Datei wird beim nächsten Speichern richtig.
+    const alt = image.getAttribute("alt") ?? "";
+    if (/^\d+(\.\d+)?$/.test(alt.trim())) {
+      image.setAttribute("alt", image.getAttribute("title")?.trim() ?? "");
+      image.removeAttribute("title");
+    }
+    if (!image.getAttribute("alt")) image.setAttribute("alt", "");
+    if (image.getAttribute("title") === "") image.removeAttribute("title");
+    const masse = image.hasAttribute("width") ? null : mediaSize(image.getAttribute("src") ?? "");
+    if (masse) {
+      image.setAttribute("width", String(masse.width));
+      image.setAttribute("height", String(masse.height));
+    }
+    const set = srcset(image.getAttribute("src") ?? "");
+    if (set) {
+      image.setAttribute("srcset", set);
+      image.setAttribute("sizes", SIZES_PROSA);
+    }
+  }
 }
 
+/** Führt fertiges HTML einmal durch das DOM: Bilder aufbereiten, einheitlich ausgeben. */
+export function imDom<T>(html: string, arbeit: (root: HTMLElement) => T): T {
+  const window = new Window({ url: "https://advocat.local/" });
+  try {
+    const doc = window.document as unknown as Document;
+    const root = doc.createElement("div");
+    doc.body.appendChild(root);
+    root.innerHTML = html.replaceAll("%22", "&quot;");
+    return arbeit(root);
+  } finally {
+    window.happyDOM.close();
+  }
+}
+
+/** Seiten aus Text: Newsletter, das Rechtliche und feste Seiten, die nicht in eine Vorlage passen. */
 export function renderDocument(input: RenderInput): PageView {
   const view: PageView = {
     title: documentTitle(input.rel, input.titel),
-    here: hereFor(input),
+    here: publicPath(input.rel),
     main: "",
     description: DEFAULT_DESCRIPTION,
     image: DEFAULT_IMAGE,
   };
-  const window = new Window({ url: "https://advocat.local/" });
-  try {
-    // Die Helfer sind gegen die Browser-Typen geschrieben. happy-dom verhält sich gleich, hat aber eigene Typen.
-    const doc = window.document as unknown as Document;
-    const root = doc.createElement("div");
-    doc.body.appendChild(root);
-    root.innerHTML = input.html.replaceAll("%22", "&quot;");
+  return imDom(input.html, (root) => {
+    const doc = root.ownerDocument;
     repair(root, doc);
-    for (const image of root.querySelectorAll("img")) {
-      image.setAttribute("loading", "lazy");
-      image.setAttribute("decoding", "async");
-      // Der Editor schrieb früher das Grössenverhältnis («1.00») als Beschreibung und Patricks
-      // Bildbeschreibung als Titel. Dann gilt der Titel; die Datei wird beim nächsten Speichern richtig.
-      const alt = image.getAttribute("alt") ?? "";
-      if (/^\d+(\.\d+)?$/.test(alt.trim())) {
-        image.setAttribute("alt", image.getAttribute("title")?.trim() ?? "");
-        image.removeAttribute("title");
-      }
-      if (!image.getAttribute("alt")) image.setAttribute("alt", "");
-      if (image.getAttribute("title") === "") image.removeAttribute("title");
-      const masse = image.hasAttribute("width") ? null : mediaSize(image.getAttribute("src") ?? "");
-      if (masse) {
-        image.setAttribute("width", String(masse.width));
-        image.setAttribute("height", String(masse.height));
-      }
-      const set = srcset(image.getAttribute("src") ?? "");
-      if (set) {
-        image.setAttribute("srcset", set);
-        image.setAttribute("sizes", SIZES_PROSA);
-      }
-    }
+    bilderAufbereiten(root);
     const firstImage = root.querySelector("img");
     const firstSrc = firstImage?.getAttribute("src");
     if (firstImage && firstSrc && !/\.svg$/i.test(firstSrc)) {
@@ -879,51 +474,19 @@ export function renderDocument(input: RenderInput): PageView {
       view.imageAlt = firstImage.getAttribute("alt") ?? "";
     }
     view.description = describe(root) || DEFAULT_DESCRIPTION;
-    const hero = takeHero(root, input);
     if (input.art === "brief") {
       view.article = { datum: input.datum };
       const minuten = input.teasers.find((teaser) => teaser.href === view.here)?.minuten ?? readingMinutes(root);
       view.main = `<article class="beitrag einzel"><p class="zurueck"><a href="/neuigkeiten">← Alle Neuigkeiten</a></p><h1>${esc(input.titel)}</h1><p class="post-meta"><time datetime="${esc(input.datum)}">${esc(longDate(input.datum))}</time> · ${minuten} Min. Lesezeit</p><div class="prosa">${root.innerHTML}</div>${briefNav(input)}</article>${standardCards()}${standardBand()}`;
       return view;
     }
-    if (input.rel === "kapitel/neuigkeiten.md") {
-      extractBand(root);
-      const band = root.querySelector(".band");
-      band?.remove();
-      // Was Patrick zwischen Titel und «Kontaktieren Sie uns.» schreibt, steht unter der Überschrift.
-      const intro = root.innerHTML.trim();
-      const page = Math.max(1, input.page ?? 1);
-      const titel = page > 1 ? `${input.titel} – Seite ${page}` : input.titel;
-      if (page > 1) view.title = documentTitle(input.rel, titel);
-      if (view.description === DEFAULT_DESCRIPTION && input.teasers.length) {
-        view.description = clip(`Newsletter von Advocat Finanz: ${input.teasers.slice((page - 1) * PER_PAGE, page * PER_PAGE).map((teaser) => teaser.titel).join(" · ")}`);
-      }
-      view.main = `${archiveHtml(input, intro)}${band ? band.outerHTML : standardBand()}`;
-      return view;
+    const heading = firstElement(root);
+    if (input.art === "recht" && heading && headingLevel(heading) === 2 && plain(heading).toLowerCase() === input.titel.toLowerCase()) {
+      const title = doc.createElement("h1");
+      title.textContent = plain(heading);
+      heading.replaceWith(title);
     }
-    if (input.art === "recht") {
-      const heading = firstElement(root);
-      if (heading && headingLevel(heading) === 2 && plain(heading).toLowerCase() === input.titel.toLowerCase()) {
-        const title = doc.createElement("h1");
-        title.textContent = plain(heading);
-        heading.replaceWith(title);
-      }
-    }
-    extractCards(root, input.rel === "kapitel/willkommen.md");
-    extractBand(root);
-    styleSoloLinks(root);
-    leistungsSpalten(root);
-    if (input.rel === "kapitel/ueber-uns.md") ueberUnsSpalten(root);
-    if (input.rel === "kapitel/faq.md") accordion(root);
-    if (input.rel === "kapitel/willkommen.md") insertTeasers(root, input.teasers);
-    if (input.rel === "kapitel/kontakt.md") {
-      view.main = `${hero}${layoutKontakt(root)}`;
-      return view;
-    }
-    weitereAngebote(root, view.here);
-    view.main = `${hero}${sprungMenu(root)}${serializeFlow(root)}`;
+    view.main = `<div class="inhalt prosa">${root.innerHTML}</div>`;
     return view;
-  } finally {
-    window.happyDOM.close();
-  }
+  });
 }

@@ -2,7 +2,8 @@ import fs from "node:fs/promises";
 import type http from "node:http";
 import path from "node:path";
 import { briefsNewestFirst, loadDocuments } from "../content/load.ts";
-import { publicPath, type ContentDocument } from "../content/document.ts";
+import { mitFeldern, publicPath, textVon, type ContentDocument } from "../content/document.ts";
+import { ausText, istVorlage, type Vorlage } from "../content/seiten.ts";
 import { absoluteUrl, DEFAULT_DESCRIPTION } from "../design/seo.ts";
 import { chatDir } from "../paths.ts";
 import { pageView } from "../render/build.ts";
@@ -60,6 +61,8 @@ export interface Lage {
   entwurf?: boolean;
   body?: string;
   auswahl?: string;
+  /** Hat die Seite Felder, ist `body` ihre Textform. */
+  vorlage?: Vorlage;
 }
 
 const VERLAUF = "verlauf.json";
@@ -111,6 +114,7 @@ function cleanLage(value: unknown): Lage {
     entwurf: raw.entwurf === true,
     body: text(raw.body, MAX_TEXT),
     auswahl: text(raw.auswahl, 4000),
+    vorlage: istVorlage(raw.vorlage) ? raw.vorlage : undefined,
   };
 }
 
@@ -121,15 +125,19 @@ function briefKopf(doc: ContentDocument): string {
 /** Was Google von der offenen Seite zeigt, aus demselben Code wie die Website. So muss das Modell nicht raten. */
 async function googleText(lage: Lage): Promise<string> {
   try {
-    const view = await pageView({
+    // Noch nicht Gespeichertes zählt: Die Felder kommen aus dem Text, den der Browser mitschickt.
+    const felder = lage.vorlage ? ausText(lage.vorlage, lage.titel ?? "", lage.body ?? "") : null;
+    const view = await pageView(mitFeldern({
       rel: lage.rel ?? "",
       art: lage.art ?? "kapitel",
       titel: lage.titel ?? "",
       datum: lage.datum ?? "",
       nummer: null,
       entwurf: lage.entwurf ?? false,
-      body: lage.body ?? "",
-    });
+      vorlage: felder ? lage.vorlage : null,
+      felder,
+      body: felder ? "" : lage.body ?? "",
+    }));
     // Auf festen Seiten ist ein Bild ganz oben das Titelbild: ein Hintergrund, dessen Beschreibung Google nicht liest.
     const bilder = [...(lage.body ?? "").matchAll(/!\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g)];
     const titelbild = lage.art === "kapitel" && /^!\[/.test((lage.body ?? "").trim()) ? bilder.shift() : undefined;
@@ -179,11 +187,11 @@ async function lageText(lage: Lage, frage: string): Promise<string> {
   // kaum eigenen Text, die Seiten zu Privatpersonen, Unternehmen und Stiftungen dafür viel.
   if (lage.ansicht === "blatt" && lage.art === "kapitel") {
     const andere = (await loadDocuments().catch(() => []))
-      .filter((doc) => doc.art === "kapitel" && !doc.entwurf && doc.rel !== lage.rel && doc.body.trim());
+      .filter((doc) => doc.art === "kapitel" && !doc.entwurf && doc.rel !== lage.rel && textVon(doc).trim());
     if (andere.length) {
       teile.push(
         "# Die anderen festen Seiten im Wortlaut\nQuellen für Aussagen auf der offenen Seite: Was hier steht, darfst du dort aufnehmen.",
-        ...andere.map((doc) => `## ${doc.titel} (${publicPath(doc.rel)})\n"""\n${doc.body.trim()}\n"""`),
+        ...andere.map((doc) => `## ${doc.titel} (${publicPath(doc.rel)})\n"""\n${textVon(doc).trim()}\n"""`),
       );
     }
   }

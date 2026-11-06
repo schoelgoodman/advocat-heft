@@ -7,7 +7,8 @@ Lokal liegt der Inhalt in `dev-content/` (gitignoriert, eigenes Git). Der Server
 ```sh
 npm install
 npm run dev
-npm test   # Zugang zur Redaktion, Herkunft, erlaubte Bilder
+npm run typecheck
+npm test   # Zugang, Herkunft, Bilder, Vorlagen
 ```
 
 Die Seite ist dann auf `http://127.0.0.1:4321`, die Redaktion auf `http://127.0.0.1:4321/redaktion`. Eine geänderte Datei in `dev-content/` baut die betroffene Seite neu. Nach etwa 20 Sekunden Ruhe schreibt das Git in `dev-content/` eine Fassung.
@@ -76,7 +77,7 @@ Danach den Inhalt wie gewohnt pflegen und neue Fassungen als Bundle an den Serve
 
 Jede Seite bekommt Beschreibung, canonical, Open Graph und auf der Startseite bzw. bei Newslettern strukturierte Daten (`src/design/seo.ts`). Die Beschreibung sind die ersten Absätze der Seite; wer sie ändern will, ändert den Anfang des Textes. Der Setzer schreibt `sitemap.xml` und `robots.txt` mit. Die Adresse darin kommt aus `SITE_URL` (Standard `https://advocat-finanz.ch`, auf Neo die Option `siteUrl`). Der Server leitet `/angebot/` auf `/angebot` und alte WordPress-Bilder unter `/wp-content/uploads/…` auf `/media/…` um. Die Redaktion und `/api` tragen `X-Robots-Tag: noindex`.
 
-Bilder gehen verkleinert auf die Seite (`src/render/media.ts`, mit sharp): höchstens 2000 px breit, neu komprimiert, unter demselben Namen. Das Original im Inhalt bleibt unverändert. Lädt sharp nicht, gehen die Originale raus und das Log sagt es.
+Bilder gehen verkleinert und ohne Metadaten auf die Seite (`src/render/media.ts`, mit sharp): höchstens 2000 px breit, neu komprimiert, unter demselben Namen. Das Original im Inhalt bleibt unverändert. Lädt sharp nicht, gehen die Originale raus und das Log sagt es.
 
 ## Kontaktformular
 
@@ -96,6 +97,16 @@ Der Assistent hat keine Werkzeuge. Der Server schickt ihm die Anleitung (`src/se
 
 Support an die Betreuung, in drei Arten: Feature (etwas Neues in der Redaktion), Bug (etwas in der Redaktion geht nicht) und Styling (Aussehen der Website). Intern heissen sie weiter `funktion`, `fehler` und `design`. Der Assistent schreibt sie auf, ein Feature als kleinen Entwurf (Was fehlt, Wozu, Vorschlag), einen Bug als Meldung zum Nachstellen (Was passiert, Wo und wie, Erwartet, Wie oft). Patrick kann den Text auf der Karte ändern, «An Support senden» bzw. «Bug melden» schickt ihn über denselben Telegram-Bot wie die Anfragen; ein Bug bringt Browser und Fenstergrösse mit. Jeder Eintrag bleibt in `CHAT_DIR/wuensche.json` und steht in der Redaktion unter «Support», mit Stand offen oder erledigt; dort lässt sich auch ohne Assistenten einer schreiben. Der Verlauf des Assistenten liegt daneben in `CHAT_DIR/verlauf.json`, nicht im Inhalts-Git. «Neues Gespräch» leert nur den Verlauf.
 
+## Felder und Vorlagen
+
+Feste und selbst angelegte Seiten haben Felder statt Markdown. Die Datei bleibt `kapitel/<name>.md`, damit Adresse und Fassungen weiterlaufen, aber der Inhalt steht als YAML unter `felder:` im Kopf, daneben `vorlage:`. Die Vorlagen stehen in `src/content/seiten.ts` (Felder, Prüfung, Textform), `src/design/seiten.ts` (wie die Website sie setzt) und `src/editor/felder/seite.ts` (die Felder in der Redaktion). Eine neue Vorlage braucht einen Eintrag an allen drei Orten. Newsletter und das Rechtliche bleiben Markdown mit Milkdown.
+
+Keine Überschrift entscheidet mehr über die Gestaltung. Die Textform gibt es für den Assistenten, den Fassungsvergleich und alte Fassungen: Eine Datei ohne `vorlage:` bekommt beim Lesen ihre Felder (`mitFeldern`), und die Redaktion schreibt beim Start einmal alle um (`src/content/migration.ts`, eine Fassung «Feste Seiten auf Felder umgestellt»). Was in keine Vorlage passt, bleibt Text und bleibt bei Milkdown; das Log sagt es.
+
+Neue Seiten: «Neue Seite anlegen» in der Redaktion (`POST /api/seiten`) gibt der Seite die Vorlage `abschnitte`. «Im Hauptmenü zeigen» setzt `menue: true`. «Kopie anlegen» behält die Vorlage; Startseite, Kontakt und Neuigkeiten gibt es nur einmal (`EINMALIG`).
+
+Online-Seiten gehen erst mit «Speichern & veröffentlichen» auf die Website, Entwürfe speichern sich von selbst. Jedes Speichern nennt den Stand der Datei (`version`); passt er nicht mehr, antwortet der Server 409, statt still zu überschreiben. Der Server prüft Felder und Bilder erneut (422 mit den Feldern). `site/status.json` sagt der Redaktion, ob das Setzen geklappt hat.
+
 ## Word-Import
 
 In einem Entwurf liest «Word importieren» (oder eine .docx, auf den Text gezogen) eine Word-Datei ein (`src/server/word.ts`, mit mammoth). Es bleibt, was die Website kennt: Zwischentitel, Absätze, Listen, Zitate, fett, kursiv, Links, Bilder. Ganz fette kurze Absätze und von Hand gesetzte Punkte (•, –) gelten als Zwischentitel bzw. Liste, Tabellen werden zu Zeilen mit « · ». Die erste Überschrift wird das Thema. Bilder landen als `media/word-…` im Inhalt; EMF, WMF und SVG lässt der Import aus (SVG kann Skript enthalten), die meldet die Redaktion. Alte .doc-Dateien gehen nicht.
@@ -112,7 +123,7 @@ Die öffentliche Seite heisst `advocat.<domain>`. Die Redaktion ist ein eigener 
 
 Der eigene Dienst ist nötig, weil SWAG Zertifikate nur für die Subdomains der Dienste holt. `redaktion.<domain>` nie als Custom Domain eintragen: Neo leitet Custom Domains auf die öffentliche Seite, dort ist `/redaktion` 404. Eine eigene Domain wie `advocat-finanz.ch` kommt in die Custom Domains von `advocat`.
 
-Ein gespeicherter Satz erscheint ohne `neo activate`. Ein neuer Newsletter beginnt als Entwurf (`entwurf: true` im Frontmatter); der Setzer lässt ihn aus, bis er in der Redaktion veröffentlicht wird. Beim Veröffentlichen bekommt die Datei das Thema in den Namen, damit die Adresse wie bei den bisherigen Newslettern lautet. Zurücksetzen schreibt die alte Datei zurück und macht einen neuen Commit `Wiederhergestellt: …`.
+Eine gespeicherte Änderung erscheint ohne `neo activate`. Ein neuer Newsletter beginnt als Entwurf (`entwurf: true` im Frontmatter); der Setzer lässt ihn aus, bis er in der Redaktion veröffentlicht wird. Beim Veröffentlichen bekommt die Datei das Thema in den Namen, damit die Adresse wie bei den bisherigen Newslettern lautet. Zurücksetzen schreibt die alte Datei zurück und macht einen neuen Commit `Wiederhergestellt: …`.
 
 Die Flake läuft auf Neo (zuletzt `b5552f1`, 4.11.2026).
 
@@ -123,7 +134,8 @@ Was hier steht, hat einen Grund. Nicht zurückbauen, ohne den Grund zu kennen.
 - **Neo entfernt CSP und X-Frame-Options der Container** (für die Einbettung in der Neo-Oberfläche). Die Content-Security-Policy setzt darum nginx in `modules/services/*/swag.nix`, nicht die App. Was die App selbst setzt, gilt nur lokal. Lädt die Seite etwas Neues von aussen (Skript, Rahmen, Schrift), muss es dort in die CSP, sonst blockiert der Browser es.
 - **Schlüssel zwischen SWAG und Redaktion.** Der Container `advocat-redaktion` hängt im Netz `internal`, das auch andere Dienste erreichen. nginx schickt nach tinyauth den Header `X-Redaktion-Schluessel` mit (Neo-Secret `schluessel`, gerendert nach `swag/nginx/neo-secrets/`, nie im Nix-Store). Mit `ROLLE=redaktion` lehnt der Server jede Anfrage ohne ihn ab: 403, oder 503, wenn kein Schlüssel eingestellt ist. Lokal (ohne `ROLLE`) gibt es keine Prüfung.
 - **Herkunft.** Ändernde Anfragen an `/api` müssen von der Redaktion selbst kommen (Origin), weil das tinyauth-Cookie für alle Subdomains gilt.
-- **Kein SVG** in Upload und Word-Import: Ein SVG kann Skript enthalten und liefe direkt geöffnet mit der Anmeldung der Redaktion. Vorhandene SVG bekommen von nginx `Content-Security-Policy: sandbox`.
+- **Uploads** (`src/server/bilder.ts`): Was eine Datei ist, entscheiden ihre Bytes. JPEG, PNG und WebP gehen durch sharp und verlieren ihre Metadaten; ein SVG wird zu PNG, weil es Skript enthalten kann. Vorhandene SVG bekommen von nginx `Content-Security-Policy: sandbox`.
+- **Container** laufen mit nur lesbarem Image, ohne Linux-Rechte und mit begrenztem Speicher. Der Container `advocat` sieht den Inhalt nur lesend.
 - **Text aus dem Editor** geht durch das Schema von Milkdown: rohes HTML kommt escaped heraus, `javascript:`-Links leer. Antworten des Assistenten werden vor dem Einsetzen escaped.
 
-Die Prüfungen stehen in `src/server/zugang.ts`, die Tests daneben (`npm test`).
+Die Prüfungen stehen in `src/server/zugang.ts`, die Tests daneben (`npm test`). Die öffentliche Seite lädt nur eigene Bilder (`img-src 'self' data:`); die Redaktion darf auch Bilder von `https:` zeigen, weil sich im Newsletter eine Bildadresse einfügen lässt.

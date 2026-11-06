@@ -29,6 +29,8 @@ export interface Lage {
   datum?: string;
   entwurf?: boolean;
   body?: string;
+  /** Hat die Seite Felder, ist `body` ihre Textform. */
+  vorlage?: string;
   auswahl?: string;
 }
 

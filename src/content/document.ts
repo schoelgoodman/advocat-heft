@@ -1,4 +1,6 @@
 import path from "node:path";
+import YAML from "yaml";
+import { alsText, ausText, istVorlage, VORLAGE_VON, type Felder, type Vorlage } from "./seiten.ts";
 
 export type Art = "brief" | "kapitel" | "recht";
 
@@ -13,6 +15,11 @@ export interface DocumentMeta {
   adresse?: string | null;
   /** Nur übrige Seiten: frühere Adressen. Sie leiten auf die heutige weiter. */
   frueher?: string[];
+  /** Nur feste Seiten: Sie steht zusätzlich im Hauptmenü. */
+  menue?: boolean;
+  /** Feste Seiten: ihr Aufbau. Die Felder stehen dann in `felder`, der Text bleibt leer. */
+  vorlage?: Vorlage | null;
+  felder?: Felder | null;
   /** Pfad relativ zu CONTENT_DIR, mit Schrägstrichen. */
   rel: string;
 }
@@ -46,6 +53,11 @@ export function serializeDocument(doc: ContentDocument): string {
   if (doc.entwurf) lines.push("entwurf: true");
   if (doc.adresse) lines.push(`adresse: ${doc.adresse}`);
   if (doc.frueher?.length) lines.push(`frueher: ${doc.frueher.join(" ")}`);
+  if (doc.menue) lines.push("menue: true");
+  if (doc.vorlage && doc.felder) {
+    lines.push(`vorlage: ${doc.vorlage}`, YAML.stringify({ felder: doc.felder }, { lineWidth: 0 }).trimEnd(), "---", "");
+    return lines.join("\n");
+  }
   lines.push("---", "", doc.body.trim(), "");
   return lines.join("\n");
 }
@@ -55,8 +67,10 @@ export function parseDocument(raw: string, rel: string): ContentDocument {
   if (!match) {
     throw new Error(`Kein Frontmatter in ${rel}`);
   }
+  // Die Felder sind verschachtelt und stehen zuletzt. Der Kopf davor bleibt Zeile für Zeile.
+  const kopf = match[1].split(/^felder:/m);
   const fields = new Map<string, string>();
-  for (const line of match[1].split(/\r?\n/)) {
+  for (const line of kopf[0].split(/\r?\n/)) {
     const sep = line.indexOf(":");
     if (sep === -1) continue;
     fields.set(line.slice(0, sep).trim(), line.slice(sep + 1).trim());
@@ -67,7 +81,9 @@ export function parseDocument(raw: string, rel: string): ContentDocument {
   }
   const nummerRaw = fields.get("nummer");
   const nummer = nummerRaw && nummerRaw !== '""' ? Number(nummerRaw) : null;
-  return {
+  const vorlage = unquote(fields.get("vorlage") ?? "");
+  const felder = kopf.length > 1 && istVorlage(vorlage) ? ((YAML.parse(`felder:${kopf.slice(1).join("felder:")}`) as { felder: Felder }).felder) : null;
+  return mitFeldern({
     rel: rel.replaceAll("\\", "/"),
     datum: unquote(fields.get("datum") ?? ""),
     art: art as Art,
@@ -76,8 +92,46 @@ export function parseDocument(raw: string, rel: string): ContentDocument {
     entwurf: unquote(fields.get("entwurf") ?? "") === "true",
     adresse: istAdresse(unquote(fields.get("adresse") ?? "")) ? unquote(fields.get("adresse") ?? "") : null,
     frueher: unquote(fields.get("frueher") ?? "").split(/\s+/).filter(istAdresse),
-    body: match[2].trim(),
-  };
+    menue: unquote(fields.get("menue") ?? "") === "true",
+    vorlage: felder && istVorlage(vorlage) ? vorlage : null,
+    felder,
+    body: felder ? "" : match[2].trim(),
+  });
+}
+
+/**
+ * Eine feste Seite, die noch als Markdown vorliegt (alte Fassung, noch nicht umgestellt), bekommt
+ * ihre Felder. Passt ihr Text nicht verlustfrei hinein, bleibt sie Text: nichts geht verloren.
+ */
+export function mitFeldern(doc: ContentDocument): ContentDocument {
+  if (doc.felder || doc.art !== "kapitel") return doc;
+  const name = doc.rel.replace(/^papierkorb\//, "");
+  const vorlage = VORLAGE_VON[name];
+  const felder = vorlage ? ausText(vorlage, doc.titel, doc.body) : null;
+  return felder ? { ...doc, vorlage, felder, body: "" } : doc;
+}
+
+/** Der Text einer Seite: die Felder als Text, oder der Text selbst. Für Assistent und Fassungen. */
+export function textVon(doc: Pick<ContentDocument, "vorlage" | "felder" | "titel" | "body">): string {
+  return doc.vorlage && doc.felder ? alsText(doc.vorlage, doc.titel, doc.felder) : doc.body;
+}
+
+/** Ein Wert in allen Feldern ersetzen. Für neue Adressen: Links stehen als Ziel oder im Text. */
+function aendereFelder<T>(wert: T, aendern: (text: string) => string): T {
+  if (typeof wert === "string") return aendern(wert) as T;
+  if (Array.isArray(wert)) return wert.map((x) => aendereFelder(x, aendern)) as T;
+  if (wert && typeof wert === "object") {
+    return Object.fromEntries(Object.entries(wert).map(([name, x]) => [name, aendereFelder(x, aendern)])) as T;
+  }
+  return wert;
+}
+
+/** Links einer Seite auf `alt` zeigen danach auf `neu`, im Text wie in den Feldern. */
+export function seiteMitNeuerAdresse(doc: ContentDocument, alt: string, neu: string): ContentDocument {
+  const body = ersetzeAdresse(doc.body, alt, neu);
+  if (!doc.felder) return body === doc.body ? doc : { ...doc, body };
+  const felder = aendereFelder(doc.felder, (text) => (text === alt ? neu : ersetzeAdresse(text, alt, neu)));
+  return JSON.stringify(felder) === JSON.stringify(doc.felder) ? doc : { ...doc, felder };
 }
 
 function istAdresse(value: string): boolean {
@@ -119,7 +173,14 @@ let eigene = new Map<string, string>();
 let umleitungen = new Map<string, string>();
 let belegt = new Set<string>();
 
-export function merkeAdressen(docs: ReadonlyArray<Pick<DocumentMeta, "rel" | "art" | "adresse" | "frueher">>): void {
+let imMenue: Array<{ href: string; label: string }> = [];
+
+/** Selbst angelegte Seiten, die ins Hauptmenü sollen. Ändert sich das, werden alle Seiten neu gesetzt. */
+export function menueSeiten(): ReadonlyArray<{ href: string; label: string }> {
+  return imMenue;
+}
+
+export function merkeAdressen(docs: ReadonlyArray<Pick<DocumentMeta, "rel" | "art" | "adresse" | "frueher" | "menue" | "entwurf" | "titel">>): void {
   const nextEigene = new Map<string, string>();
   for (const doc of docs) {
     if (doc.art !== "brief" && doc.rel !== STARTSEITE && doc.adresse) nextEigene.set(doc.rel, doc.adresse);
@@ -135,11 +196,15 @@ export function merkeAdressen(docs: ReadonlyArray<Pick<DocumentMeta, "rel" | "ar
     }
   }
   umleitungen = next;
+  imMenue = docs
+    .filter((doc) => doc.menue && !doc.entwurf && doc.art === "kapitel")
+    .map((doc) => ({ href: publicPath(doc.rel), label: doc.titel }))
+    .sort((a, b) => a.label.localeCompare(b.label, "de"));
 }
 
 /** Ein Stempel der Adressen. Ändert er sich, müssen alle Seiten neu gesetzt werden (Menü, Links). */
 export function adressStempel(): string {
-  return JSON.stringify([[...eigene].sort(), [...umleitungen].sort()]);
+  return JSON.stringify([[...eigene].sort(), [...umleitungen].sort(), imMenue]);
 }
 
 /** Alle Adressen, die früher galten und heute weiterleiten. */

@@ -3,6 +3,7 @@ import path from "node:path";
 import { Window } from "happy-dom";
 import mammoth from "mammoth";
 import { contentDir } from "../paths.ts";
+import { verarbeiteBild } from "./bilder.ts";
 
 /**
  * Word-Datei (.docx) zu Markdown für die Redaktion. mammoth liest Word und gibt
@@ -140,7 +141,12 @@ export async function importWord(bytes: Buffer): Promise<WordImport> {
         const name = `word-${stamp}-${bilder.length + 1}${ext}`;
         const file = path.join(contentDir(), "media", name);
         await fs.mkdir(path.dirname(file), { recursive: true });
-        await fs.writeFile(file, await image.readAsBuffer());
+        const sauber = await verarbeiteBild(Buffer.from(await image.readAsBuffer())).catch(() => null);
+        if (!sauber) {
+          ausgelassen += 1;
+          return { src: "" };
+        }
+        await fs.writeFile(file, sauber.daten);
         bilder.push(`media/${name}`);
         return { src: `../media/${name}` };
       }),

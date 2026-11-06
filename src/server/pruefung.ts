@@ -90,7 +90,7 @@ export function probleme(doc: Pick<ContentDocument, "art" | "titel">, view: Page
 const gemerkt = new Map<string, { schluessel: string; probleme: Problem[] }>();
 
 async function pruefe(doc: ContentDocument): Promise<Problem[]> {
-  const schluessel = createHash("sha1").update(`${doc.titel}\n${doc.body}`).digest("hex");
+  const schluessel = createHash("sha1").update(`${doc.titel}\n${doc.body}\n${JSON.stringify(doc.felder ?? null)}`).digest("hex");
   const alt = gemerkt.get(doc.rel);
   if (alt?.schluessel === schluessel) return alt.probleme;
   const ergebnis = probleme(doc, await pageView(doc));

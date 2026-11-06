@@ -1,6 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
 import type http from "node:http";
-import path from "node:path";
 
 /**
  * Wer und was in die Redaktion darf. Ohne Zustand, damit es sich testen lässt (zugang.test.ts).
@@ -38,14 +37,6 @@ export function fremdeHerkunft(req: http.IncomingMessage): boolean {
   }
   const eigene = [req.headers.host, req.headers["x-forwarded-host"]].flatMap((value) => String(value ?? "").split(","));
   return !eigene.map((value) => value.trim()).includes(host);
-}
-
-/** Bildformate, die die Redaktion annimmt. Kein SVG: Es kann Skript enthalten, und Neo entfernt den Sandbox-Header. */
-export const BILD_ENDUNGEN = [".png", ".jpg", ".jpeg", ".gif", ".webp"];
-
-export function bildEndung(dateiname: string): string | null {
-  const ext = path.extname(dateiname).toLowerCase().replace(/[^.a-z0-9]/g, "");
-  return BILD_ENDUNGEN.includes(ext) ? ext : null;
 }
 
 /**
