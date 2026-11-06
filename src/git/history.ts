@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { simpleGit, type SimpleGit } from "simple-git";
+import { schreibeAtomar } from "../content/atomar.ts";
 import { contentDir } from "../paths.ts";
 
 function git(): SimpleGit {
@@ -90,7 +91,45 @@ export async function showFile(rel: string, rev: string): Promise<string> {
 
 export async function restoreFile(rel: string, rev: string, from = rel): Promise<void> {
   const raw = await showFile(from, rev);
-  const file = path.join(contentDir(), rel);
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  await fs.writeFile(file, raw.endsWith("\n") ? raw : `${raw}\n`, "utf8");
+  await schreibeAtomar(path.join(contentDir(), rel), raw.endsWith("\n") ? raw : `${raw}\n`);
+}
+
+export interface VerlaufEintrag {
+  rev: string;
+  date: string;
+  message: string;
+  /** Status (A, M, D) und Pfad. Umbenannt heisst hier: alt gelöscht, neu dazu. */
+  dateien: { status: string; pfad: string }[];
+}
+
+/** Alle Fassungen des Inhalts, die neueste zuerst. */
+export async function logAlles(limit: number, skip: number): Promise<VerlaufEintrag[]> {
+  await ensureContentGit();
+  const result = await git().raw(["log", `-n${limit}`, `--skip=${skip}`, "--no-merges", "--no-renames", "--name-status", "--format=%x1e%H%x09%aI%x09%s"]);
+  return result
+    .split("\x1e")
+    .map((eintrag) => eintrag.trim())
+    .filter(Boolean)
+    .map((eintrag) => {
+      const [kopf = "", ...zeilen] = eintrag.split("\n").filter(Boolean);
+      const [rev = "", date = "", ...rest] = kopf.split("\t");
+      const dateien = zeilen.map((zeile) => {
+        const [status = "", pfad = ""] = zeile.split("\t");
+        return { status, pfad };
+      });
+      return { rev, date, message: rest.join("\t"), dateien };
+    });
+}
+
+/** Holt eine Datei so zurück, wie sie in `rev` war. Für Bilder: Sie sind nicht Text. */
+export function holeDateiZurueck(rel: string, rev: string): Promise<void> {
+  if (!/^[0-9a-f]{7,40}(\^)?$/i.test(rev)) return Promise.reject(new Error("Ungültige Fassung"));
+  if (rel.includes("..") || path.isAbsolute(rel)) return Promise.reject(new Error("Ungültiger Pfad"));
+  return nacheinander(async () => {
+    await git().raw(["restore", `--source=${rev}`, "--staged", "--worktree", "--", rel]);
+  });
+}
+
+export async function gibtEsInFassung(rel: string, rev: string): Promise<boolean> {
+  return git().raw(["cat-file", "-e", `${rev}:${rel}`]).then(() => true, () => false);
 }

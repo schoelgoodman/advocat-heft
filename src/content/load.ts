@@ -13,7 +13,6 @@ const REGISTER_ORDER = [
   "kapitel/unternehmen.md",
   "kapitel/stiftungen.md",
   "kapitel/neuigkeiten.md",
-  "kapitel/faq.md",
   "kapitel/kontakt.md",
 ] as const;
 
@@ -25,7 +24,6 @@ const REGISTER_LABELS: Record<(typeof REGISTER_ORDER)[number], string> = {
   "kapitel/unternehmen.md": "Unternehmen",
   "kapitel/stiftungen.md": "Stiftungen",
   "kapitel/neuigkeiten.md": "Neuigkeiten",
-  "kapitel/faq.md": "FAQ",
   "kapitel/kontakt.md": "Kontakt",
 };
 

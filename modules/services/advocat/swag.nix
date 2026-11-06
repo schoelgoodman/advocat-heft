@@ -18,7 +18,7 @@
       "default-src 'self'"
       "script-src 'self'"
       "style-src 'self'"
-      "img-src 'self' data: https:"
+      "img-src 'self' data:"
       "font-src 'self'"
       "connect-src 'self'"
       "frame-src https://www.google.com"

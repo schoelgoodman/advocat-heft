@@ -29,6 +29,8 @@ export interface Lage {
   datum?: string;
   entwurf?: boolean;
   body?: string;
+  /** Hat die Seite Felder, ist `body` ihre Textform. */
+  vorlage?: string;
   auswahl?: string;
 }
 
@@ -39,8 +41,8 @@ export interface Anschluss {
   offen(): { rel: string; titel: string } | null;
   /** Der Text der offenen Seite als Markdown, wie er in der Datei steht. */
   markdown(): string | null;
-  /** Ersetzt den Text der offenen Seite. Rückgängig mit Ctrl+Z, gespeichert wie getippt. */
-  setzeText(markdown: string): void;
+  /** Ersetzt den Text der offenen Seite. False: Er passt nicht in die Felder der Seite, nichts geändert. */
+  setzeText(markdown: string): boolean;
   setzeThema(thema: string): void;
   /**
    * Legt einen neuen Newsletter-Entwurf an und öffnet ihn. Ist schon ein leerer Entwurf offen,
@@ -478,8 +480,11 @@ export async function mountAssistent(anschluss: Anschluss, bereit: boolean): Pro
         } else {
           neu = teil.neu;
         }
+        if (!anschluss.setzeText(neu)) {
+          melde(element, "Dieser Vorschlag passt nicht in die Felder der Seite. Bitte den Text kopieren und ins passende Feld einsetzen.");
+          return;
+        }
         vorher = jetzt;
-        anschluss.setzeText(neu);
       }
       uebernehmen.disabled = true;
       uebernehmen.textContent = "Übernommen ✓";

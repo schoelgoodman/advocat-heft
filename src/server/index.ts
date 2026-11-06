@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
@@ -7,27 +8,35 @@ import { createServer as createVite, type ViteDevServer } from "vite";
 import {
   adresseBelegt,
   adresseReserviert,
-  ersetzeAdresse,
   parseDocument,
   publicPath,
   redirectTarget,
+  seiteMitNeuerAdresse,
   serializeDocument,
   standardPfad,
+  textVon,
   type Art,
   type ContentDocument,
 } from "../content/document.ts";
+import { schreibeAtomar } from "../content/atomar.ts";
 import { editorOrder, loadDocuments, loadPapierkorb, PAPIERKORB } from "../content/load.ts";
 import { notFoundPage } from "../design/page.ts";
-import { commitIfChanged, ensureContentGit, logFile, restoreFile, showFile } from "../git/history.ts";
+import { siteUrl } from "../design/seo.ts";
+import { stelleSeitenUm } from "../content/migration.ts";
+import { EINMALIG, neueSeite, pruefeFelder, VORLAGE_VON, type Felder } from "../content/seiten.ts";
+import { commitIfChanged, ensureContentGit, gibtEsInFassung, holeDateiZurueck, logAlles, logFile, restoreFile, showFile } from "../git/history.ts";
 import { anfragenDir, contentDir, repoRoot, siteDir } from "../paths.ts";
-import { buildSite, previewPage, rebuildDocuments } from "../render/build.ts";
-import { publishMedia } from "../render/media.ts";
+import { buildSite, previewPage, rebuildDocuments, textHtml } from "../render/build.ts";
+import { publishMedia, pruneVariants } from "../render/media.ts";
 import { AUFBEWAHRUNG_MONATE, handleAnfrage, listAnfragen, loescheAlteAnfragen, setAnfrageStatus } from "./anfrage.ts";
+import { verarbeiteBild } from "./bilder.ts";
+import { bilderIn, listeMedien, medienName, pruefeLoeschbar, sendeVorschau } from "./medien.ts";
+import { leseStatus, schreibeStatus } from "./status.ts";
 import { importWord } from "./word.ts";
 import { seitenCheck, websiteCheck } from "./pruefung.ts";
 import { assistentBereit, clearVerlauf, handleChat, readVerlauf } from "./chat.ts";
 import { aendereWunsch, listWuensche, neuerWunsch } from "./wuensche.ts";
-import { bildEndung, fremdeHerkunft, schluesselPasst } from "./zugang.ts";
+import { fremdeHerkunft, kanonischerHost, ohneEndSchraegstrich, schluesselPasst } from "./zugang.ts";
 
 // Lokal stehen Schlüssel wie XAI_API_KEY in .env (gitignoriert). Auf Neo setzt sie der Container.
 if (process.env.NODE_ENV !== "production") {
@@ -65,7 +74,31 @@ const REDAKTION_URL = (process.env.REDAKTION_URL ?? "/redaktion").trim();
 
 /** Setzt geänderte Seiten neu, wenn dieser Prozess die Seite setzt. Sonst tut es der Container `seite`. */
 async function updateSite(rels: string[]): Promise<void> {
-  if (setztSeite) await rebuildDocuments(rels);
+  if (setztSeite) setzeNeu(rels);
+}
+
+/** Warten, bis das Setzen fertig ist; schnelle Änderungen nacheinander werden ein Durchgang. */
+let setztGerade = false;
+const wartend = new Set<string>();
+
+function setzeNeu(rels: string[]): void {
+  for (const rel of rels) wartend.add(rel);
+  if (setztGerade) return;
+  setztGerade = true;
+  void (async () => {
+    while (wartend.size) {
+      const dran = [...wartend];
+      wartend.clear();
+      try {
+        await rebuildDocuments(dran);
+        await schreibeStatus();
+      } catch (error) {
+        console.error("Setzen fehlgeschlagen, der letzte Stand bleibt online:", error instanceof Error ? error.message : error);
+        await schreibeStatus(error);
+      }
+    }
+    setztGerade = false;
+  })();
 }
 const ARTS: readonly Art[] = ["brief", "kapitel", "recht"];
 
@@ -129,10 +162,47 @@ async function readDoc(rel: string): Promise<ContentDocument> {
   return parseDocument(await fs.readFile(path.join(contentDir(), rel), "utf8"), rel);
 }
 
+const pruefsumme = (daten: string | Buffer) => createHash("sha1").update(daten).digest("hex").slice(0, 16);
+
+/** Der Stand einer Datei. Wer speichert, nennt den Stand, von dem er ausging. */
+async function stand(rel: string): Promise<string> {
+  return fs.readFile(path.join(contentDir(), rel)).then(pruefsumme, () => "");
+}
+
+/** Eine Seite für den Browser: mit Adresse und Stand. */
+async function fuerBrowser(doc: ContentDocument, href = publicPath(doc.rel)) {
+  return { ...doc, href, version: await stand(doc.rel) };
+}
+
+/** Fehler, die zu einem Feld gehören. Der Browser zeigt sie dort an. */
+class FeldFehler extends Error {
+  felder: Record<string, string>;
+  constructor(felder: Record<string, string>) {
+    super(felder._ ?? felder.neu ?? "Bitte die markierten Felder prüfen.");
+    this.felder = felder;
+  }
+}
+
+/** Jede Datei in den Feldern muss es geben, sonst fehlt das Bild auf der Website. */
+async function pruefeBilderDa(felder: Felder): Promise<void> {
+  const fehler: Record<string, string> = {};
+  const gehe = async (wert: unknown, pfad: string): Promise<void> => {
+    if (Array.isArray(wert)) for (const [i, x] of wert.entries()) await gehe(x, pfad ? `${pfad}.${i}` : String(i));
+    else if (wert && typeof wert === "object") for (const [name, x] of Object.entries(wert)) await gehe(x, pfad ? `${pfad}.${name}` : name);
+    else if (typeof wert === "string" && wert.startsWith("../media/") && !(await exists(wert.slice(3)))) fehler[pfad] = "Dieses Bild gibt es nicht mehr. Bitte ein anderes wählen.";
+  };
+  await gehe(felder, "");
+  if (Object.keys(fehler).length) throw new FeldFehler(fehler);
+}
+
+function pruefeSeite(doc: ContentDocument): void {
+  if (!doc.vorlage || !doc.felder) return;
+  const fehler = pruefeFelder(doc.vorlage, doc.titel, doc.felder);
+  if (Object.keys(fehler).length) throw new FeldFehler(fehler);
+}
+
 async function writeDoc(doc: ContentDocument): Promise<void> {
-  const file = path.join(contentDir(), doc.rel);
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  await fs.writeFile(file, serializeDocument(doc), "utf8");
+  await schreibeAtomar(path.join(contentDir(), doc.rel), serializeDocument(doc));
 }
 
 /** Der Anfang des Textes ohne Markdown, für die Übersicht der Newsletter. */
@@ -150,6 +220,8 @@ function auszug(body: string): string {
 function summary(doc: ContentDocument) {
   return {
     auszug: doc.art === "brief" ? auszug(doc.body) : "",
+    vorlage: doc.vorlage ?? null,
+    menue: doc.menue ?? false,
     rel: doc.rel,
     titel: doc.titel,
     art: doc.art,
@@ -177,6 +249,15 @@ function einzeln<T>(arbeit: () => Promise<T>): Promise<T> {
   const lauf = vergabe.then(arbeit, arbeit);
   vergabe = lauf.catch(() => undefined);
   return lauf;
+}
+
+/** Der Browser schickt den Namen kodiert: Ein Header kann weder «–» noch ein zerlegtes «ü» tragen. */
+function dateiname(kodiert: string): string {
+  try {
+    return decodeURIComponent(kodiert);
+  } catch {
+    return kodiert;
+  }
 }
 
 /** Der Pfad selbst, wenn er frei ist, sonst mit -2, -3 … */
@@ -278,19 +359,48 @@ function cacheControl(urlPath: string): string {
   return "no-cache";
 }
 
+/** Gepackte Fassungen im Speicher. Der Schlüssel enthält die Prüfsumme, und nach rund 40 MB fängt es neu an. */
+const gepackt = new Map<string, Buffer>();
+let gepacktBytes = 0;
+
+function packe(data: Buffer, art: "br" | "gzip", etag: string): Buffer {
+  const schluessel = `${art}|${etag}`;
+  const da = gepackt.get(schluessel);
+  if (da) return da;
+  const out = art === "br"
+    ? zlib.brotliCompressSync(data, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 9, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: data.length } })
+    : zlib.gzipSync(data, { level: 9 });
+  if (gepacktBytes + out.length > 40 * 1024 * 1024) {
+    gepackt.clear();
+    gepacktBytes = 0;
+  }
+  gepackt.set(schluessel, out);
+  gepacktBytes += out.length;
+  return out;
+}
+
 function send(req: http.IncomingMessage, res: http.ServerResponse, file: string, data: Buffer, urlPath: string): void {
   const ext = path.extname(file).toLowerCase();
+  const etag = `"${pruefsumme(data)}"`;
   const headers: http.OutgoingHttpHeaders = {
     "content-type": MIME[ext] ?? "application/octet-stream",
     "cache-control": cacheControl(urlPath),
+    etag,
   };
   // Ein SVG kann Skript enthalten (etwa aus einer Word-Datei). Direkt geöffnet läuft es sonst mit dem Login der Redaktion.
   if (ext === ".svg") headers["content-security-policy"] = "sandbox; default-src 'none'; img-src data:; style-src 'unsafe-inline'; frame-ancestors 'self'";
-  if (PACKBAR.has(ext)) {
-    headers.vary = "Accept-Encoding";
-    if (/\bgzip\b/.test(String(req.headers["accept-encoding"] ?? "")) && data.length > 1024) {
-      headers["content-encoding"] = "gzip";
-      data = zlib.gzipSync(data);
+  if (PACKBAR.has(ext)) headers.vary = "Accept-Encoding";
+  if (req.headers["if-none-match"] === etag) {
+    res.writeHead(304, headers);
+    res.end();
+    return;
+  }
+  if (PACKBAR.has(ext) && data.length > 1024) {
+    const annahme = String(req.headers["accept-encoding"] ?? "");
+    const art = /\bbr\b/.test(annahme) ? "br" : /\bgzip\b/.test(annahme) ? "gzip" : null;
+    if (art) {
+      headers["content-encoding"] = art;
+      data = packe(data, art, etag);
     }
   }
   res.writeHead(200, headers);
@@ -367,15 +477,18 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
       sendJson(res, 200, { pages: editorOrder(docs).map(summary) });
       return;
     }
-    const doc = await readDoc(safeRel(rel));
-    sendJson(res, 200, { ...doc, href: publicPath(doc.rel) });
+    sendJson(res, 200, await fuerBrowser(await readDoc(safeRel(rel))));
     return;
   }
 
   if (req.method === "GET" && url.pathname === "/api/papierkorb") {
     const docs = await loadPapierkorb();
-    docs.sort((a, b) => a.titel.localeCompare(b.titel, "de"));
-    sendJson(res, 200, { pages: docs.map(summary) });
+    const seiten = await Promise.all(docs.map(async (doc) => ({
+      ...summary(doc),
+      geloeschtAm: await fs.stat(path.join(contentDir(), doc.rel)).then((stat) => stat.mtime.toISOString(), () => ""),
+    })));
+    seiten.sort((a, b) => b.geloeschtAm.localeCompare(a.geloeschtAm));
+    sendJson(res, 200, { pages: seiten });
     return;
   }
 
@@ -419,6 +532,88 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
 
   if (req.method === "GET" && url.pathname === "/api/info") {
     sendJson(res, 200, { publicUrl: PUBLIC_URL, assistent: assistentBereit() });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/status") {
+    res.setHeader("cache-control", "no-store");
+    sendJson(res, 200, { status: await leseStatus() });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/medien") {
+    res.setHeader("cache-control", "no-store");
+    sendJson(res, 200, { medien: await listeMedien() });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/medien/vorschau") {
+    await sendeVorschau(url.searchParams.get("name"), Number(url.searchParams.get("w")) || 240, res);
+    return;
+  }
+
+  // Nur was nichts mehr braucht. Die Fassung bleibt im Inhalts-Git, «Rückgängig» holt sie von dort.
+  if (req.method === "DELETE" && url.pathname === "/api/medien") {
+    const name = medienName(url.searchParams.get("name"));
+    await flushPending();
+    await pruefeLoeschbar(name);
+    await commitIfChanged(`Bild hochgeladen: ${name}`, [`media/${name}`]);
+    await fs.rm(path.join(contentDir(), "media", name), { force: true });
+    const rev = await commitIfChanged(`Bild gelöscht: ${name}`, [`media/${name}`]);
+    sendJson(res, 200, { rev });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/medien/zurueck") {
+    const payload = JSON.parse((await readBody(req)).toString("utf8")) as { name?: string; rev?: string };
+    const name = medienName(payload.name);
+    await holeDateiZurueck(`media/${name}`, `${String(payload.rev ?? "")}^`);
+    await commitIfChanged(`Bild zurückgeholt: ${name}`, [`media/${name}`]);
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  // Der ganze Verlauf des Inhalts, nicht nur der einer Seite.
+  if (req.method === "GET" && url.pathname === "/api/verlauf") {
+    res.setHeader("cache-control", "no-store");
+    const seite = 50;
+    const eintraege = await logAlles(seite + 1, Number(url.searchParams.get("skip")) || 0);
+    sendJson(res, 200, { eintraege: eintraege.slice(0, seite), mehr: eintraege.length > seite });
+    return;
+  }
+
+  // Eine neue feste Seite. Sie beginnt als Entwurf und hat von Anfang an Felder.
+  if (req.method === "POST" && url.pathname === "/api/seiten") {
+    const payload = JSON.parse((await readBody(req)).toString("utf8")) as { titel?: string };
+    const titel = String(payload.titel ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
+    const fehlt = (text: string) => new FeldFehler({ neu: text });
+    if (!titel) throw fehlt("Bitte einen Titel eingeben.");
+    const slug = slugify(titel);
+    if (!slug || adresseReserviert(`/${slug}`)) throw fehlt(`Die Adresse «/${slug}» braucht die Website selbst. Bitte einen anderen Titel wählen.`);
+    await flushPending();
+    await einzeln(async () => {
+      const docs = await loadDocuments();
+      const rel = await freeRel(`kapitel/${slug}.md`);
+      if (docs.some((doc) => publicPath(doc.rel) === publicPath(rel))) throw fehlt(`Die Adresse «${publicPath(rel)}» ist schon vergeben. Bitte einen anderen Titel wählen.`);
+      const start = docs.find((doc) => doc.vorlage === "start")?.felder as { bild?: { src?: string } } | null | undefined;
+      const namen = await fs.readdir(path.join(contentDir(), "media")).catch(() => [] as string[]);
+      const bild = start?.bild?.src ?? (namen.find((name) => /\.(jpe?g|png|webp)$/i.test(name)) ? `../media/${namen.find((name) => /\.(jpe?g|png|webp)$/i.test(name))}` : "");
+      if (!bild) throw fehlt("Es gibt noch kein Bild für den Kopf der Seite. Bitte zuerst eines hochladen.");
+      const doc: ContentDocument = {
+        rel,
+        art: "kapitel",
+        titel,
+        datum: new Date().toISOString().slice(0, 10),
+        nummer: null,
+        entwurf: true,
+        vorlage: "abschnitte",
+        felder: neueSeite(bild),
+        body: "",
+      };
+      await writeDoc(doc);
+      await commitIfChanged(`Neue Seite: ${titel}`, [rel]);
+      sendJson(res, 200, await fuerBrowser(doc));
+    });
     return;
   }
 
@@ -477,7 +672,7 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     const neu = `/${slug}`;
     const alt = publicPath(rel);
     if (neu === alt) {
-      sendJson(res, 200, { ...doc, href: alt });
+      sendJson(res, 200, await fuerBrowser(doc, alt));
       return;
     }
     if (adresseReserviert(neu)) throw new Error(`«${neu}» braucht die Website selbst. Bitte eine andere Adresse wählen.`);
@@ -486,15 +681,14 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
       throw new Error(`«${neu}» hat schon die Seite «${andere?.titel ?? neu}». Bitte eine andere Adresse wählen.`);
     }
     const frueher = [...new Set([...(doc.frueher ?? []), alt])].filter((href) => href !== neu && href !== standardPfad(rel));
-    const geaendert: ContentDocument = { ...doc, adresse: neu === standardPfad(rel) ? null : neu, frueher };
+    const geaendert: ContentDocument = seiteMitNeuerAdresse({ ...doc, adresse: neu === standardPfad(rel) ? null : neu, frueher }, alt, neu);
     // Links auf die alte Adresse in allen Seiten, auch in dieser und in Entwürfen.
     const touched: string[] = [rel];
     for (const other of docs) {
-      const body = ersetzeAdresse(other.rel === rel ? geaendert.body : other.body, alt, neu);
-      if (other.rel === rel) {
-        geaendert.body = body;
-      } else if (body !== other.body) {
-        await writeDoc({ ...other, body });
+      if (other.rel === rel) continue;
+      const neuGesetzt = seiteMitNeuerAdresse(other, alt, neu);
+      if (neuGesetzt !== other) {
+        await writeDoc(neuGesetzt);
         touched.push(other.rel);
       }
     }
@@ -503,42 +697,59 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     await updateSite(touched);
     await commitIfChanged(`Neue Adresse: ${doc.titel} ${alt} → ${neu}`, touched);
     console.log(`Adresse ${rel}: ${alt} → ${neu} (${touched.length - 1} Seiten mit Links angepasst)`);
-    sendJson(res, 200, { ...geaendert, href: neu, angepasst: touched.length - 1 });
+    sendJson(res, 200, { ...(await fuerBrowser(geaendert, neu)), angepasst: touched.length - 1 });
     return;
   }
 
   if (req.method === "PUT" && url.pathname === "/api/pages") {
-    const payload = JSON.parse((await readBody(req)).toString("utf8")) as ContentDocument;
+    const payload = JSON.parse((await readBody(req)).toString("utf8")) as ContentDocument & { version?: string };
     const rel = safeRel(payload.rel);
-    if (!ARTS.includes(payload.art)) throw new Error("Unbekannte Art");
-    // Veröffentlichen und Zurückziehen haben eigene Wege. Ein spätes Speichern ändert den Stand nie.
-    const before = await readDoc(rel).catch(() => null);
-    // Neue Seiten entstehen nur über ihre eigenen Wege. Ein spätes Speichern auf eine Datei, die
-    // inzwischen veröffentlicht (umbenannt) oder im Papierkorb ist, würde sie sonst als Seite zurückholen.
-    if (!before) {
-      sendJson(res, 409, { error: "Diese Seite gibt es unter diesem Namen nicht mehr." });
-      return;
-    }
-    const doc: ContentDocument = {
-      rel,
-      art: payload.art,
-      titel: String(payload.titel ?? "").trim() || "Ohne Titel",
-      datum: String(payload.datum ?? ""),
-      nummer: payload.nummer == null || payload.nummer === ("" as unknown) ? null : Number(payload.nummer),
-      entwurf: before.entwurf ?? false,
-      // Die Adresse hat einen eigenen Weg (/api/adresse): Speichern beim Tippen ändert sie nie.
-      adresse: before.adresse ?? null,
-      frueher: before.frueher ?? [],
-      body: String(payload.body ?? ""),
-    };
-    if (doc.nummer != null && !Number.isFinite(doc.nummer)) doc.nummer = null;
-    // Online hängt die Adresse an der Nummer. Ändern geht nur im Entwurf.
-    if (!before.entwurf) doc.nummer = before.nummer;
-    await writeDoc(doc);
-    await updateSite([rel]);
-    scheduleCommit(commitMessage(doc), rel);
-    console.log(`schreibt ${rel}`);
-    sendJson(res, 200, { ok: true, message: commitMessage(doc) });
+    await einzeln(async () => {
+      // Veröffentlichen und Zurückziehen haben eigene Wege. Ein spätes Speichern ändert den Stand nie.
+      const before = await readDoc(rel).catch(() => null);
+      // Neue Seiten entstehen nur über ihre eigenen Wege. Ein spätes Speichern auf eine Datei, die
+      // inzwischen veröffentlicht (umbenannt) oder im Papierkorb ist, würde sie sonst als Seite zurückholen.
+      if (!before) {
+        sendJson(res, 409, { error: "Diese Seite gibt es unter diesem Namen nicht mehr. Bitte im Verzeichnis neu öffnen." });
+        return;
+      }
+      // Anderes Fenster, oder eine neue Adresse hat Links in dieser Seite geändert: nichts still überschreiben.
+      if (payload.version !== (await stand(rel))) {
+        sendJson(res, 409, { error: "Diese Seite wurde inzwischen anderswo geändert. Bitte neu öffnen, dann erst weiterarbeiten." });
+        return;
+      }
+      const titel = String(payload.titel ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
+      const datum = String(payload.datum ?? "");
+      if (datum && !/^\d{4}-\d{2}-\d{2}$/.test(datum)) throw new FeldFehler({ datum: "Kein gültiges Datum." });
+      const nummer = payload.nummer == null || payload.nummer === ("" as unknown) ? null : Number(payload.nummer);
+      if (typeof payload.body !== "string" || payload.body.length > 1_000_000) throw new Error("Text fehlt oder ist zu lang.");
+      const doc: ContentDocument = {
+        rel,
+        // Was eine Seite ist, ändert sich beim Speichern nie.
+        art: before.art,
+        titel: titel || "Ohne Titel",
+        datum,
+        nummer: nummer != null && Number.isInteger(nummer) && nummer > 0 && nummer < 10_000 ? nummer : null,
+        entwurf: before.entwurf ?? false,
+        // Die Adresse hat einen eigenen Weg (/api/adresse): Speichern beim Tippen ändert sie nie.
+        adresse: before.adresse ?? null,
+        frueher: before.frueher ?? [],
+        // Eigene Seiten dürfen ins Menü. Die festen stehen dort schon oder gehören in den Fuss.
+        menue: before.art === "kapitel" && !VORLAGE_VON[rel] ? payload.menue === true : false,
+        vorlage: before.vorlage ?? null,
+        felder: before.vorlage ? payload.felder ?? null : null,
+        body: before.vorlage ? "" : payload.body,
+      };
+      // Online hängt die Adresse an der Nummer. Ändern geht nur im Entwurf.
+      if (!before.entwurf) doc.nummer = before.nummer;
+      pruefeSeite(doc);
+      if (doc.felder) await pruefeBilderDa(doc.felder);
+      await writeDoc(doc);
+      await updateSite([rel]);
+      scheduleCommit(commitMessage(doc), rel);
+      console.log(`schreibt ${rel}`);
+      sendJson(res, 200, { ok: true, message: commitMessage(doc), version: await stand(rel) });
+    });
     return;
   }
 
@@ -558,7 +769,7 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
       await writeDoc(doc);
       scheduleCommit(`Entwurf: Newsletter ${nummer}`, doc.rel);
       console.log(`neuer Entwurf ${doc.rel}`);
-      sendJson(res, 200, { ...doc, href: publicPath(doc.rel) });
+      sendJson(res, 200, await fuerBrowser(doc));
     });
     return;
   }
@@ -568,6 +779,7 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     await flushPending();
     await einzeln(async () => {
       const source = await readDoc(safeRel(payload.rel ?? ""));
+      if (source.vorlage && EINMALIG.includes(source.vorlage)) throw new Error("Diese Seite gibt es nur einmal. Für eine neue Seite «Neue Seite» wählen.");
       let doc: ContentDocument;
       if (source.art === "brief") {
         const nummer = await nextNummer();
@@ -591,12 +803,13 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
           // Die Adresse gehört dem Original. Die Kopie bekommt ihre aus dem Dateinamen.
           adresse: null,
           frueher: [],
+          menue: false,
         };
       }
       await writeDoc(doc);
       await commitIfChanged(`Kopie: ${doc.titel}`, [doc.rel]);
       console.log(`kopiert ${source.rel} nach ${doc.rel}`);
-      sendJson(res, 200, { ...doc, href: publicPath(doc.rel) });
+      sendJson(res, 200, await fuerBrowser(doc));
     });
     return;
   }
@@ -607,6 +820,7 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     await flushPending();
     const doc = await readDoc(oldRel);
     if (doc.art === "brief" && !thema(doc.titel)) throw new Error("Bitte zuerst ein Thema eingeben.");
+    pruefeSeite(doc);
     if (doc.art === "brief") {
       const doppelt = (await loadDocuments()).find(
         (other) => other.art === "brief" && !other.entwurf && other.rel !== oldRel && other.nummer === doc.nummer,
@@ -634,7 +848,8 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     await updateSite([oldRel, rel]);
     await commitIfChanged(`Veröffentlicht: ${published.titel}`, [oldRel, rel]);
     console.log(`veröffentlicht ${rel}`);
-    sendJson(res, 200, { ...published, href: publicPath(rel) });
+    await loadDocuments();
+    sendJson(res, 200, await fuerBrowser(published));
     return;
   }
 
@@ -648,7 +863,8 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     await updateSite([rel]);
     await commitIfChanged(`Zurückgezogen: ${doc.titel}`, [rel]);
     console.log(`zurückgezogen ${rel}`);
-    sendJson(res, 200, { ...doc, href: publicPath(rel) });
+    await loadDocuments();
+    sendJson(res, 200, await fuerBrowser(doc));
     return;
   }
 
@@ -662,11 +878,14 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
       const frei = await freeRel(`${PAPIERKORB}/${rel}`);
       await fs.mkdir(path.dirname(path.join(contentDir(), frei)), { recursive: true });
       await fs.rename(path.join(contentDir(), rel), path.join(contentDir(), frei));
+      // Das Datum der Datei zeigt der Papierkorb als «gelöscht am».
+      const jetzt = new Date();
+      await fs.utimes(path.join(contentDir(), frei), jetzt, jetzt);
       return frei;
     });
     await commitIfChanged(`In den Papierkorb: ${doc.titel}`, [rel, ziel]);
     console.log(`Papierkorb ${rel}`);
-    sendJson(res, 200, { ok: true });
+    sendJson(res, 200, { ok: true, papierkorb: ziel });
     return;
   }
 
@@ -685,28 +904,25 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
       await fs.rm(path.join(contentDir(), from), { force: true });
       await commitIfChanged(`Zurückgeholt: ${doc.titel}`, [from, doc.rel]);
       console.log(`zurückgeholt ${doc.rel}`);
-      sendJson(res, 200, { ...doc, href: publicPath(doc.rel) });
+      sendJson(res, 200, await fuerBrowser(doc));
     });
     return;
   }
 
   if (req.method === "POST" && url.pathname === "/api/media") {
     const nameHeader = req.headers["x-filename"];
-    const original = (Array.isArray(nameHeader) ? nameHeader[0] : nameHeader) ?? "bild.bin";
-    const ext = bildEndung(original);
-    if (!ext) {
-      throw new Error(path.extname(original).toLowerCase() === ".svg" ? "SVG geht nicht. Bitte als PNG speichern." : "Nur Bilder (PNG, JPG, GIF, WebP)");
-    }
+    const original = dateiname((Array.isArray(nameHeader) ? nameHeader[0] : nameHeader) ?? "bild.bin");
     const stem = path
       .basename(original, path.extname(original))
       .replace(/[^A-Za-z0-9._-]+/g, "-")
+      .replace(/^[-.]+/, "")
       .slice(0, 40) || "bild";
-    const name = `${stem}-${Date.now().toString(36)}${ext}`;
-    const bytes = await readBody(req);
-    if (bytes.length > 20 * 1024 * 1024) throw new Error("Bild ist zu gross");
+    // Eines nach dem anderen: Ein grosses Foto belegt beim Entpacken einige hundert MB.
+    const bild = await einzeln(async () => verarbeiteBild(await readBody(req)));
+    const name = `${stem}-${Date.now().toString(36)}${bild.endung}`;
     const media = path.join(contentDir(), "media", name);
     await fs.mkdir(path.dirname(media), { recursive: true });
-    await fs.writeFile(media, bytes);
+    await fs.writeFile(media, bild.daten);
     if (setztSeite) await copyMediaFile(media);
     pendingFiles.add(`media/${name}`);
     sendJson(res, 200, { url: `../media/${name}` });
@@ -715,7 +931,9 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
 
   if (req.method === "POST" && url.pathname === "/api/import") {
     const rel = safeRel(url.searchParams.get("rel") ?? "");
-    if (!(await readDoc(rel)).entwurf) throw new Error("Word-Dateien lassen sich nur in einen Entwurf importieren.");
+    const ziel = await readDoc(rel);
+    if (!ziel.entwurf) throw new Error("Word-Dateien lassen sich nur in einen Entwurf importieren.");
+    if (ziel.felder) throw new Error("Diese Seite hat Felder. Word-Dateien gehen nur in Newsletter.");
     const bytes = await readBody(req);
     if (bytes.length > 30 * 1024 * 1024) throw new Error("Die Word-Datei ist zu gross (höchstens 30 MB).");
     // .docx ist ein Zip. Alte .doc-Dateien beginnen anders und kann mammoth nicht lesen.
@@ -742,9 +960,8 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     const from = safeRel(url.searchParams.get("path") ?? rel);
     const raw = await showFile(from, rev);
     const doc = parseDocument(raw, from);
-    const { markdownToHtml } = await import("../render/crepe.ts");
-    const { publishHtml } = await import("../render/build.ts");
-    sendJson(res, 200, { body: doc.body, html: publishHtml(await markdownToHtml(doc.body)), titel: doc.titel });
+    const text = textVon(doc);
+    sendJson(res, 200, { body: text, html: await textHtml(text), titel: doc.titel });
     return;
   }
 
@@ -758,13 +975,22 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     await restoreFile(rel, rev, from);
     // Nur der Text kommt zurück. Ob die Seite online ist, bleibt, wie es war.
     // Auch die Adresse bleibt: andere Seiten verlinken schon auf die heutige.
-    const doc: ContentDocument = { ...(await readDoc(rel)), rel, entwurf: before.entwurf, adresse: before.adresse ?? null, frueher: before.frueher ?? [] };
+    const doc: ContentDocument = { ...(await readDoc(rel)), rel, entwurf: before.entwurf, adresse: before.adresse ?? null, frueher: before.frueher ?? [], menue: before.menue };
+    // Bilder dieser Fassung, die inzwischen gelöscht sind, kommen mit. Sonst fehlten sie auf der Website.
+    const bilder: string[] = [];
+    for (const name of bilderIn(`${textVon(doc)}\n${JSON.stringify(doc.felder ?? null)}`)) {
+      const datei = `media/${name}`;
+      if ((await exists(datei)) || !(await gibtEsInFassung(datei, rev))) continue;
+      await holeDateiZurueck(datei, rev);
+      if (setztSeite) await copyMediaFile(path.join(contentDir(), datei));
+      bilder.push(datei);
+    }
     await writeDoc(doc);
     await updateSite([rel]);
     const message = `Wiederhergestellt: ${doc.titel}`;
-    await commitIfChanged(message, [rel]);
+    await commitIfChanged(message, [rel, ...bilder]);
     console.log(`wiederhergestellt ${rel} aus ${rev.slice(0, 7)}`);
-    sendJson(res, 200, { ok: true, doc });
+    sendJson(res, 200, { ok: true, doc: await fuerBrowser(doc) });
     return;
   }
 
@@ -816,6 +1042,13 @@ async function copyMediaFile(file: string): Promise<void> {
   await publishMedia(file, path.join(siteDir(), rel));
 }
 
+async function entferneMedium(rel: string): Promise<void> {
+  const ordner = path.join(siteDir(), "media");
+  const name = path.basename(rel);
+  await fs.rm(path.join(ordner, name), { force: true });
+  await pruneVariants(ordner, new Set(await fs.readdir(path.join(contentDir(), "media")).catch(() => [] as string[])));
+}
+
 function watchContent(): void {
   watch(contentDir(), {
     ignoreInitial: true,
@@ -828,31 +1061,52 @@ function watchContent(): void {
     console.error(error instanceof Error ? error.message : error);
   }).on("all", (event, file) => {
     const rel = path.relative(contentDir(), file).replaceAll("\\", "/");
-    if (rel.startsWith("media/") && (event === "add" || event === "change")) {
-      void copyMediaFile(file).catch((error: unknown) => {
-        console.error(error instanceof Error ? error.message : error);
-      });
+    if (rel.startsWith("media/")) {
+      if (event === "add" || event === "change") {
+        void copyMediaFile(file).catch((error: unknown) => {
+          console.error(error instanceof Error ? error.message : error);
+        });
+      } else if (event === "unlink") {
+        // In den Medien gelöscht: auch von der Website, samt ihren kleineren Fassungen.
+        void entferneMedium(rel).catch((error: unknown) => {
+          console.error(error instanceof Error ? error.message : error);
+        });
+      }
       return;
     }
     if (!rel.endsWith(".md") || rel.includes("..")) return;
     if (!rel.startsWith("briefe/") && !rel.startsWith("kapitel/") && !rel.startsWith("recht/")) return;
     console.log(`setzt ${rel}`);
-    void rebuildDocuments([rel]).catch((error: unknown) => {
-      console.error(error instanceof Error ? error.message : error);
-    });
+    setzeNeu([rel]);
   });
 }
 
 async function main(): Promise<void> {
   console.log(`Rolle: ${ROLLE}`);
-  if (hatRedaktion) await ensureContentGit();
+  if (hatRedaktion) {
+    await ensureContentGit();
+    await stelleSeitenUm().catch((error: unknown) => {
+      console.error("Umstellung auf Felder fehlgeschlagen:", error instanceof Error ? error.message : error);
+    });
+  }
   // Die Adressen der Seiten kennen, bevor die erste Anfrage kommt.
   await loadDocuments().catch(() => []);
   if (setztSeite) {
     // Immer neu setzen: nach einem Code-Update passt altes HTML nicht zum neuen heft.css.
+    // Eine kaputte Datei darf die Seite nicht vom Netz nehmen: Was schon gesetzt ist, bleibt online.
     console.log("Setze die Seiten …");
-    const built = await buildSite();
-    console.log(`${built.pages} Seiten gesetzt.`);
+    const setzen = buildSite().then(
+      async (built) => {
+        console.log(`${built.pages} Seiten gesetzt.`);
+        await schreibeStatus();
+      },
+      async (error: unknown) => {
+        console.error("Setzen fehlgeschlagen, der letzte Stand bleibt online:", error instanceof Error ? error.message : error);
+        await schreibeStatus(error);
+      },
+    );
+    // Liegt schon eine Website da, antwortet der Server gleich und setzt im Hintergrund.
+    if (!(await fs.stat(path.join(siteDir(), "index.html")).then(() => true, () => false))) await setzen;
     // Anfragen nach Ablauf der Frist löschen: beim Start und danach einmal am Tag.
     const aufraeumen = () => void loescheAlteAnfragen().catch((error) => console.error("Anfragen löschen:", error instanceof Error ? error.message : error));
     aufraeumen();
@@ -940,9 +1194,20 @@ async function main(): Promise<void> {
       void handleApi(req, res, url).catch((error: unknown) => {
         const message = error instanceof Error ? error.message : "Fehler";
         console.error(`${req.method} ${url.pathname}: ${message}`);
-        if (!res.headersSent) sendJson(res, 400, { error: message });
+        if (res.headersSent) return;
+        if (error instanceof FeldFehler) sendJson(res, 422, { error: message, felder: error.felder });
+        else sendJson(res, 400, { error: message });
       });
       return;
+    }
+    // Unter advocat.<domain> läuft dieselbe Seite. Google soll nur die eine Adresse führen.
+    if (setztSeite && !kanonischerHost(req, siteUrl())) {
+      res.setHeader("x-robots-tag", "noindex");
+      if (url.pathname === "/robots.txt") {
+        res.writeHead(200, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-cache" });
+        res.end("User-agent: *\nDisallow: /\n");
+        return;
+      }
     }
     const kontakt = publicPath("kapitel/kontakt.md");
     if (setztSeite && req.method === "POST" && [kontakt, `${kontakt}/`, "/kontakt", "/kontakt/"].includes(url.pathname)) {
@@ -967,7 +1232,7 @@ async function main(): Promise<void> {
     }
     // Eine Adresse pro Seite: /angebot/ (so hiess es unter WordPress) springt auf /angebot.
     if ((req.method === "GET" || req.method === "HEAD") && /.\/+$/.test(url.pathname)) {
-      res.writeHead(301, { location: url.pathname.replace(/\/+$/, "") + url.search });
+      res.writeHead(301, { location: ohneEndSchraegstrich(url.pathname) + url.search });
       res.end();
       return;
     }

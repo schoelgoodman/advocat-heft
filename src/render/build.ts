@@ -4,7 +4,9 @@ import { adresseReserviert, adressStempel, alteAdressen, publicPath, type Conten
 import { briefsNewestFirst, loadDocuments } from "../content/load.ts";
 import { excerptFromMarkdown, minutesFromMarkdown, renderDocument, type PageView, type Teaser } from "../design/layout.ts";
 import { pageShell } from "../design/page.ts";
+import { renderSeite } from "../design/seiten.ts";
 import { robotsTxt, sitemapXml, type SitemapEntry } from "../design/seo.ts";
+import { schreibeAtomar } from "../content/atomar.ts";
 import { repoRoot, siteDir, contentDir } from "../paths.ts";
 import { markdownToHtml } from "./crepe.ts";
 import { publishMedia, pruneVariants, VARIANT_DIR } from "./media.ts";
@@ -49,19 +51,13 @@ async function copyMediaDir(from: string, to: string): Promise<void> {
   }
 }
 
-/** Leert den Ordner, lässt ihn aber stehen. Auf Neo ist SITE_DIR ein Bind-Mount, rmdir gibt dort EBUSY. */
-async function emptyDir(dir: string, keep = new Set<string>()): Promise<void> {
-  await fs.mkdir(dir, { recursive: true });
-  for (const name of await fs.readdir(dir)) {
-    if (keep.has(name)) continue;
-    await fs.rm(path.join(dir, name), { recursive: true, force: true });
-  }
-}
+/** Was beim ganzen Setzen entstanden ist. Alles andere im Ordner ist von früher und fällt danach weg. */
+let gesetzt: Set<string> | null = null;
 
 async function writePage(site: string, href: string, html: string): Promise<void> {
-  const file = pageFile(site, href);
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  await fs.writeFile(file, html, "utf8");
+  gesetzt?.add(href === "/" ? "index.html" : href.replace(/^\//, "").split("/")[0]);
+  // Besucher sehen eine Seite ganz oder gar nicht, nie halb.
+  await schreibeAtomar(pageFile(site, href), html);
 }
 
 export async function copyAssets(): Promise<void> {
@@ -92,18 +88,28 @@ function teasersFor(briefs: ContentDocument[]): Teaser[] {
   }));
 }
 
+/** Text zu HTML, wie es auf die Seite kommt. */
+export async function textHtml(markdown: string): Promise<string> {
+  return publishHtml(await markdownToHtml(markdown));
+}
+
+/** Eine Seite, fertig gesetzt: aus den Feldern ihrer Vorlage, oder aus ihrem Text. */
+async function ansicht(doc: ContentDocument, teasers: Teaser[], page?: number): Promise<PageView> {
+  if (doc.vorlage && doc.felder) return renderSeite({ ...doc, vorlage: doc.vorlage, felder: doc.felder, teasers, page }, textHtml);
+  return renderDocument({ ...doc, html: await textHtml(doc.body), teasers, page });
+}
+
 async function writeDocument(site: string, doc: ContentDocument, teasers: Teaser[]): Promise<void> {
-  const html = publishHtml(await markdownToHtml(doc.body));
-  if (doc.rel === "kapitel/neuigkeiten.md") {
+  if (doc.vorlage === "neuigkeiten") {
     const pages = Math.max(1, Math.ceil(teasers.length / 10));
     await fs.rm(path.join(site, publicPath(doc.rel).replace(/^\//, ""), "page"), { recursive: true, force: true });
     for (let page = 1; page <= pages; page += 1) {
-      const view = renderDocument({ ...doc, html, teasers, page });
+      const view = await ansicht(doc, teasers, page);
       await writePage(site, view.here, pageShell(view));
     }
     return;
   }
-  const view = renderDocument({ ...doc, html, teasers });
+  const view = await ansicht(doc, teasers);
   await writePage(site, view.here, pageShell(view));
 }
 
@@ -140,8 +146,7 @@ export async function previewPage(doc: ContentDocument): Promise<string> {
 /** Titel, Beschreibung und Vorschaubild, wie Google sie von dieser Seite liest. Für den Assistenten. */
 export async function pageView(doc: ContentDocument): Promise<PageView> {
   const teasers = teasersFor(briefsNewestFirst(await publishedDocuments()));
-  const html = publishHtml(await markdownToHtml(doc.body));
-  return renderDocument({ ...doc, html, teasers });
+  return ansicht(doc, teasers);
 }
 
 export async function buildSite(): Promise<{ pages: number; index: string }> {
@@ -149,27 +154,38 @@ export async function buildSite(): Promise<{ pages: number; index: string }> {
   const briefs = briefsNewestFirst(docs);
   const teasers = teasersFor(briefs);
   const site = siteDir();
+  await fs.mkdir(site, { recursive: true });
+  // Der Ordner wird nicht vorher geleert: Die Website bleibt online, auch wenn das Setzen scheitert.
   // Die Bildfassungen bleiben stehen: sie neu zu rechnen kostet beim Start eine halbe Minute.
-  await emptyDir(site, new Set(["media"]));
-  await emptyDir(path.join(site, "media"), new Set([VARIANT_DIR]));
-
   const media = path.join(contentDir(), "media");
   try {
     await copyMediaDir(media, path.join(site, "media"));
   } catch {
     // Noch keine Bilder.
   }
-  await pruneVariants(path.join(site, "media"), new Set(await fs.readdir(media).catch(() => [] as string[])));
+  const bilder = new Set(await fs.readdir(media).catch(() => [] as string[]));
+  await pruneVariants(path.join(site, "media"), bilder);
+  for (const name of await fs.readdir(path.join(site, "media")).catch(() => [] as string[])) {
+    if (name !== VARIANT_DIR && !bilder.has(name)) await fs.rm(path.join(site, "media", name), { recursive: true, force: true });
+  }
   await copyAssets();
 
   gesetzteAdressen = adressStempel();
   gesetzteReihe = briefReihe(teasers);
   let index = "Willkommen";
-  for (const doc of docs) {
-    await writeDocument(site, doc, teasers);
-    if (doc.rel === "kapitel/willkommen.md") index = doc.titel;
+  gesetzt = new Set(["media", "fonts", "brand", "heft.css", "site.js", "sitemap.xml", "robots.txt", "status.json"]);
+  try {
+    for (const doc of docs) {
+      await writeDocument(site, doc, teasers);
+      if (doc.rel === "kapitel/willkommen.md") index = doc.titel;
+    }
+    await writeIndexFiles(site, docs);
+    for (const name of await fs.readdir(site)) {
+      if (!gesetzt.has(name)) await fs.rm(path.join(site, name), { recursive: true, force: true });
+    }
+  } finally {
+    gesetzt = null;
   }
-  await writeIndexFiles(site, docs);
   return { pages: docs.length, index };
 }
 

@@ -70,11 +70,22 @@
           user = "${toString config.neo.core.uid}:${toString config.neo.core.gid}";
           autoStart = true;
           volumes = [
-            "${appdata}/content:/content"
+            # Nur lesen: Die Seite setzt aus dem Inhalt, schreiben tut ihn die Redaktion.
+            "${appdata}/content:/content:ro"
             "${appdata}/site:/site"
             "${appdata}/anfragen:/anfragen"
           ];
           networks = ["internal"];
+          # Nichts im Image ist beschreibbar (nur die Volumes und ein kleines /tmp), keine Linux-Rechte,
+          # keine Rechteausweitung, begrenzter Speicher und begrenzte Prozesse.
+          extraOptions = [
+            "--read-only"
+            "--tmpfs=/tmp:rw,noexec,nosuid,size=512m"
+            "--cap-drop=ALL"
+            "--security-opt=no-new-privileges"
+            "--pids-limit=256"
+            "--memory=2g"
+          ];
         };
       };
     };

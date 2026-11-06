@@ -1,4 +1,4 @@
-import { aktuell, aktuelleLinks } from "../content/document.ts";
+import { aktuell, aktuelleLinks, menueSeiten } from "../content/document.ts";
 import { angebote, istAngebot } from "./angebote.ts";
 import type { PageView } from "./layout.ts";
 import { absoluteUrl, DEFAULT_DESCRIPTION, DEFAULT_IMAGE, jsonLd, organization, SITE_NAME, siteUrl } from "./seo.ts";
@@ -85,11 +85,13 @@ function headMeta(view: PageView): string {
 
 export function pageShell(view: PageView): string {
   const year = new Date().getFullYear();
-  const links = NAV.map(([href, label]) => {
+  // Selbst angelegte Seiten stehen vor «Neuigkeiten», in alphabetischer Reihenfolge.
+  const menue: Array<[string, string]> = menueSeiten().map(({ href, label }) => [href, label]);
+  const links = [...NAV.slice(0, 3), ...menue, ...NAV.slice(3)].map(([href, label]) => {
     if (href === "/angebot") return angebotNav(view.here);
     const ziel = aktuell(href);
     const mark = current(ziel, view.here) ? ' aria-current="page"' : "";
-    return `<a href="${ziel}"${mark}>${label}</a>`;
+    return `<a href="${ziel}"${mark}>${esc(label)}</a>`;
   }).join("");
   // Links im Text und im Layout auf alte Adressen zeigen auf die heutigen (umbenannte Seiten, alte Newsletter-Adressen).
   return aktuelleLinks(`<!DOCTYPE html>

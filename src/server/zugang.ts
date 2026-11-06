@@ -1,6 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
 import type http from "node:http";
-import path from "node:path";
 
 /**
  * Wer und was in die Redaktion darf. Ohne Zustand, damit es sich testen lässt (zugang.test.ts).
@@ -40,10 +39,19 @@ export function fremdeHerkunft(req: http.IncomingMessage): boolean {
   return !eigene.map((value) => value.trim()).includes(host);
 }
 
-/** Bildformate, die die Redaktion annimmt. Kein SVG: Es kann Skript enthalten, und Neo entfernt den Sandbox-Header. */
-export const BILD_ENDUNGEN = [".png", ".jpg", ".jpeg", ".gif", ".webp"];
+/**
+ * Eine Adresse mit Schrägstrich am Ende, ohne ihn. Führende Schrägstriche fallen zu einem zusammen:
+ * Aus «//boese.example/» darf nie «Location: //boese.example» werden, das führte auf die fremde Seite.
+ */
+export function ohneEndSchraegstrich(pathname: string): string {
+  return `/${pathname.replace(/^[/\\]+|\/+$/g, "")}`;
+}
 
-export function bildEndung(dateiname: string): string | null {
-  const ext = path.extname(dateiname).toLowerCase().replace(/[^.a-z0-9]/g, "");
-  return BILD_ENDUNGEN.includes(ext) ? ext : null;
+/**
+ * Unter der Adresse, die Google führen soll? Dieselbe Seite läuft auch unter advocat.<domain>; das soll
+ * nie als Doppel im Suchindex landen. nginx reicht den Namen weiter, den der Besucher aufgerufen hat.
+ */
+export function kanonischerHost(req: http.IncomingMessage, siteUrl: string): boolean {
+  const host = String(req.headers["x-forwarded-host"] ?? req.headers.host ?? "").split(",")[0].trim().toLowerCase();
+  return host === new URL(siteUrl).host;
 }

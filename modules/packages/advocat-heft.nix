@@ -25,7 +25,7 @@
         ];
       };
       # Nach jeder Änderung an package-lock.json neu: prefetch-npm-deps package-lock.json
-      npmDepsHash = "sha256-nFsxpbXPt3Y2B9q/MEhTpCxLNuPv470u0IURSp3oInk=";
+      npmDepsHash = "sha256-yHNUAqHnZ0VMlQ85KaW3BaGADIRWsSWVX8U5D6QUwHo=";
       npmBuildScript = "editor:build";
       installPhase = ''
         runHook preInstall

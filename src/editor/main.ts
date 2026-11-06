@@ -1,10 +1,19 @@
 import * as crepeModule from "@milkdown/crepe";
+import * as milkdownCore from "@milkdown/kit/core";
+import { TextSelection, type EditorState } from "@milkdown/kit/prose/state";
 import * as milkdownUtils from "@milkdown/kit/utils";
 import "@milkdown/crepe/theme/common/style.css";
 import "@milkdown/crepe/theme/frame.css";
 import "./redaktion.css";
+import { EINMALIG, klartextBloecke, VORLAGE_VON, vorlageName } from "../content/seiten.ts";
 import type { Art, ContentDocument } from "../content/document.ts";
 import { mountAssistent, type AktionArt, type Lage, type SeiteKurz } from "./assistent.ts";
+import { medienAnsicht, waehleMedium } from "./ansichten/medien.ts";
+import { bloecke, markiereUnterschiede, norm } from "./ansichten/vergleich.ts";
+import { verlaufAnsicht } from "./ansichten/verlauf.ts";
+import { h, toast } from "./dom.ts";
+import { seitenBaum, seitenName } from "./verzeichnis.ts";
+import { mountSeite, type FelderEditor } from "./felder/seite.ts";
 
 interface CrepeApi {
   markdownUpdated(fn: (ctx: unknown, markdown: string, prev: string) => void): void;
@@ -39,7 +48,8 @@ interface CrepeCtor {
 
 const Crepe = (crepeModule as unknown as { Crepe: CrepeCtor }).Crepe;
 // Die Typen von @milkdown/utils lösen unter NodeNext nicht auf. Daher von Hand, wie bei Crepe.
-const { replaceAll } = milkdownUtils as unknown as { replaceAll(markdown: string, flush?: boolean): unknown };
+const { editorViewCtx } = milkdownCore as unknown as { editorViewCtx: unknown };
+const { insert, replaceAll } = milkdownUtils as unknown as { insert(markdown: string): unknown; replaceAll(markdown: string, flush?: boolean): unknown };
 
 interface PageSummary {
   rel: string;
@@ -50,9 +60,13 @@ interface PageSummary {
   entwurf: boolean;
   href: string;
   auszug: string;
+  vorlage: ContentDocument["vorlage"];
+  menue?: boolean;
+  geloeschtAm?: string;
 }
 
-type Doc = ContentDocument & { href: string };
+/** `version`: Stand der Datei beim Laden. Wer speichert, nennt ihn, damit nichts still überschrieben wird. */
+type Doc = ContentDocument & { href: string; version: string };
 
 interface Anfrage {
   id: string;
@@ -74,6 +88,12 @@ const root = document.querySelector<HTMLElement>("#redaktion");
 if (!root) throw new Error("Redaktion fehlt");
 
 let crepe: CrepeEditor | null = null;
+/** Statt Crepe, wenn die offene Seite Felder hat. Es ist immer nur eines von beiden da. */
+let felder: FelderEditor | null = null;
+/** Eine Online-Seite hat Änderungen, die noch nicht auf der Website sind. */
+let liveUngespeichert = false;
+let speichernKnopf: HTMLButtonElement | null = null;
+let verwerfenKnopf: HTMLButtonElement | null = null;
 let current: Doc | null = null;
 let saveTimer: number | null = null;
 let armed = false;
@@ -106,7 +126,8 @@ root.innerHTML = `
   <div class="schleier" aria-hidden="true"></div>
   <div class="redaktion">
     <aside id="verzeichnis">
-      <button type="button" class="wort" id="heim" title="Zur Startseite">
+      <div class="verzeichnis-kopf">
+        <button type="button" class="wort" id="heim" title="Zur Startseite">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 11 12 4l9 7M6 9.5V20h4.5v-5.5h3V20H18V9.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
         Redaktion
       </button>
@@ -114,35 +135,50 @@ root.innerHTML = `
         <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3.5 12h17M12 3.5c2.4 2.3 3.6 5.1 3.6 8.5s-1.2 6.2-3.6 8.5c-2.4-2.3-3.6-5.1-3.6-8.5s1.2-6.2 3.6-8.5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
         Zur Website
       </a>
-      <!-- Jede Gruppe gleich: die Zeile klappt die Liste auf und öffnet die Übersicht, wo es eine gibt. -->
-      <details id="anfragen-gruppe">
-        <summary><button type="button" class="gruppe-titel" id="anfragen-titel">Kontaktaufnahme</button><span class="zahl" id="anfragen-zahl"></span></summary>
-        <nav id="anfragen-liste"></nav>
-        <button type="button" class="leise mehr" id="anfragen-alle">Übersicht aller Anfragen</button>
-      </details>
+      </div>
+      <p class="kategorie">Täglich</p>
       <details id="briefe-gruppe">
         <summary><button type="button" class="gruppe-titel" id="briefe-titel">Newsletter</button></summary>
         <nav id="briefe"></nav>
         <button type="button" class="leise mehr" id="mehr" hidden></button>
         <button type="button" class="leise mehr" id="briefe-alle">Übersicht aller Newsletter</button>
       </details>
-      <details id="seiten-gruppe">
-        <summary><span class="gruppe-titel">Übrige Seiten</span></summary>
-        <nav id="seiten"></nav>
+      <details id="anfragen-gruppe">
+        <summary><button type="button" class="gruppe-titel" id="anfragen-titel">Kontaktaufnahme</button><span class="zahl" id="anfragen-zahl"></span></summary>
+        <nav id="anfragen-liste"></nav>
+        <button type="button" class="leise mehr" id="anfragen-alle">Übersicht aller Anfragen</button>
       </details>
+      <p class="kategorie">Seiten</p>
+      <nav id="seiten"></nav>
+      <details id="rechtliches-gruppe">
+        <summary><span class="gruppe-titel">Rechtliches</span></summary>
+        <nav id="rechtliches"></nav>
+      </details>
+      <details id="weitere-gruppe" hidden>
+        <summary><span class="gruppe-titel">Weitere Seiten</span></summary>
+        <nav id="weitere"></nav>
+      </details>
+      <button type="button" class="leise mehr" id="seite-neu">Neue Seite anlegen</button>
+      <p class="kategorie">Verwaltung</p>
       <details id="wuensche-gruppe">
         <summary><button type="button" class="gruppe-titel" id="wuensche-link">Support</button><span class="zahl" id="wuensche-zahl"></span><span class="marke neu" id="wuensche-neu" hidden>Neu</span></summary>
         <nav id="wuensche-liste"></nav>
         <button type="button" class="leise mehr" id="wuensche-alle">Übersicht Support</button>
       </details>
-      <details id="papierkorb-gruppe" hidden>
-        <summary><span class="gruppe-titel">Papierkorb</span></summary>
-        <p class="leise">Gelöschte Entwürfe. Zurückgeholt sind sie wieder Entwürfe.</p>
+      <button type="button" class="zeile-link" id="medien-link">Medien</button>
+      <button type="button" class="zeile-link" id="verlauf-link">Verlauf</button>
+      <details id="papierkorb-gruppe">
+        <summary><span class="gruppe-titel">Papierkorb</span><span class="zahl" id="papierkorb-zahl"></span></summary>
+        <p class="leise" id="papierkorb-hinweis"></p>
         <nav id="papierkorb"></nav>
         <button type="button" class="leise mehr gefahr" id="papierkorb-leeren">Papierkorb leeren</button>
       </details>
+      <p class="setz-status" id="setz-status" role="status"></p>
     </aside>
     <main>
+      <div class="setz-warnung" id="setz-warnung" role="alert" hidden></div>
+      <section id="medien-seite" hidden></section>
+      <section id="verlauf-seite" hidden></section>
       <section id="start">
         <h1 id="gruss">Guten Tag, Patrick.</h1>
         <div class="aufgaben">
@@ -202,13 +238,15 @@ root.innerHTML = `
         <div class="angaben" id="angaben">
           <label class="datum" id="nummer-feld">Nummer <input type="number" id="nummer" min="1" max="9999" step="1" inputmode="numeric"></label>
           <label class="datum" id="datum-feld">Datum <input type="date" id="datum"></label>
+          <label class="datum" id="menue-feld"><input type="checkbox" id="menue"> Im Hauptmenü zeigen</label>
           <label class="datum adresse-feld" id="adresse-feld">Adresse <span class="adresse-eingabe"><span class="adresse-vor" id="adresse-vor"></span><input type="text" id="adresse" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done"></span></label>
         </div>
         <p class="nummer-hinweis" id="adresse-hinweis" hidden></p>
         <p class="nummer-hinweis" id="nummer-hinweis" hidden></p>
         <aside class="google-hinweise" id="google-hinweise" hidden aria-live="polite"></aside>
         <div id="editor"></div>
-        <p class="tipp">Tipp: Am Anfang einer leeren Zeile <kbd>/</kbd> tippen für Zwischentitel, Liste oder Bild. Text markieren für fett, kursiv oder Link.</p>
+        <div id="felder" hidden></div>
+        <p class="tipp" id="tipp">Tipp: Am Anfang einer leeren Zeile <kbd>/</kbd> tippen für Zwischentitel, Liste oder Bild. Text markieren für fett, kursiv oder Link. <button type="button" class="leise" id="bild-aus-medien">Bild aus Medien einfügen</button></p>
         <details id="fassungen-gruppe">
           <summary>Frühere Fassungen</summary>
           <p class="leise">Jede Fassung lässt sich ansehen und zurückholen. Nichts geht verloren.</p>
@@ -234,9 +272,14 @@ const briefe = root.querySelector<HTMLElement>("#briefe")!;
 const seiten = root.querySelector<HTMLElement>("#seiten")!;
 const mehr = root.querySelector<HTMLButtonElement>("#mehr")!;
 const briefeGruppe = root.querySelector<HTMLDetailsElement>("#briefe-gruppe")!;
-const seitenGruppe = root.querySelector<HTMLDetailsElement>("#seiten-gruppe")!;
+const rechtlichesGruppe = root.querySelector<HTMLDetailsElement>("#rechtliches-gruppe")!;
+const rechtliches = root.querySelector<HTMLElement>("#rechtliches")!;
+const weitereGruppe = root.querySelector<HTMLDetailsElement>("#weitere-gruppe")!;
+const weitere = root.querySelector<HTMLElement>("#weitere")!;
 const papierkorb = root.querySelector<HTMLElement>("#papierkorb")!;
-const papierkorbGruppe = root.querySelector<HTMLDetailsElement>("#papierkorb-gruppe")!;
+const papierkorbZahl = root.querySelector<HTMLElement>("#papierkorb-zahl")!;
+const papierkorbLeeren = root.querySelector<HTMLButtonElement>("#papierkorb-leeren")!;
+const papierkorbHinweis = root.querySelector<HTMLElement>("#papierkorb-hinweis")!;
 let papierkorbAnzahl = 0;
 root.querySelector("#papierkorb-leeren")!.addEventListener("click", () => {
   void deleteFromTrash(null, papierkorbAnzahl === 1 ? "Ein Eintrag" : `Alle ${papierkorbAnzahl} Einträge`);
@@ -282,11 +325,27 @@ const datumInput = root.querySelector<HTMLInputElement>("#datum")!;
 const nummerFeld = root.querySelector<HTMLElement>("#nummer-feld")!;
 const nummerInput = root.querySelector<HTMLInputElement>("#nummer")!;
 const nummerHinweis = root.querySelector<HTMLElement>("#nummer-hinweis")!;
+const menueFeld = root.querySelector<HTMLElement>("#menue-feld")!;
+const menueInput = root.querySelector<HTMLInputElement>("#menue")!;
+const medienSeite = root.querySelector<HTMLElement>("#medien-seite")!;
+const verlaufSeite = root.querySelector<HTMLElement>("#verlauf-seite")!;
+const medienLink = root.querySelector<HTMLButtonElement>("#medien-link")!;
+const verlaufLink = root.querySelector<HTMLButtonElement>("#verlauf-link")!;
+const setzStatus = root.querySelector<HTMLElement>("#setz-status")!;
+const setzWarnung = root.querySelector<HTMLElement>("#setz-warnung")!;
 const adresseFeld = root.querySelector<HTMLElement>("#adresse-feld")!;
 const adresseVor = root.querySelector<HTMLElement>("#adresse-vor")!;
 const adresseInput = root.querySelector<HTMLInputElement>("#adresse")!;
 const adresseHinweis = root.querySelector<HTMLElement>("#adresse-hinweis")!;
 const editorHost = root.querySelector<HTMLElement>("#editor")!;
+// Die Werkzeugleiste des Texts klebt direkt unter der Leiste mit den Knöpfen, wie hoch die auch ist.
+const leiste = root.querySelector<HTMLElement>(".leiste")!;
+new ResizeObserver(() => {
+  const klebt = getComputedStyle(leiste).position === "sticky";
+  document.documentElement.style.setProperty("--leiste-hoehe", klebt ? `${leiste.offsetHeight}px` : "0px");
+}).observe(leiste);
+const felderHost = root.querySelector<HTMLElement>("#felder")!;
+const tipp = root.querySelector<HTMLElement>("#tipp")!;
 const fassungenGruppe = root.querySelector<HTMLDetailsElement>("#fassungen-gruppe")!;
 const fassungen = root.querySelector<HTMLOListElement>("#fassungen")!;
 const vorschau = root.querySelector<HTMLElement>("#vorschau")!;
@@ -312,6 +371,9 @@ function ask(options: { titel: string; text: string; ja: string; nein?: string; 
     frage.addEventListener("close", () => resolve(frage.returnValue === "ja"), { once: true });
   });
 }
+
+const eingangFormat = new Intl.DateTimeFormat("de-CH", { dateStyle: "medium", timeStyle: "short" });
+const tagFormat = new Intl.DateTimeFormat("de-CH", { dateStyle: "medium" });
 
 /** Die öffentliche Adresse kommt vom Server (PUBLIC_URL). Lokal ist es derselbe Server. */
 let publicOrigin = "";
@@ -401,7 +463,7 @@ function setSaved(text: string, kind: "ok" | "busy" | "fehler" = "ok"): void {
 async function uploadImage(file: File): Promise<string> {
   const response = await fetch("/api/media", {
     method: "POST",
-    headers: { "x-filename": file.name },
+    headers: { "x-filename": encodeURIComponent(file.name) },
     body: file,
   });
   if (!response.ok) {
@@ -415,13 +477,39 @@ async function uploadImage(file: File): Promise<string> {
   return json.url.replace("../media/", "/media/");
 }
 
+/** Der Text der offenen Seite, wie ihn Assistent und Fassungsvergleich sehen. */
+function aktuellerText(): string {
+  if (felder) return felder.markdown();
+  return crepe ? forFile(crepe.getMarkdown()).trim() : "";
+}
+
+function editorBereit(): boolean {
+  return felder != null || crepe != null;
+}
+
 async function mountEditor(markdown: string): Promise<void> {
   armed = false;
   if (crepe) {
     await crepe.destroy();
     crepe = null;
   }
+  felder = null;
   editorHost.replaceChildren();
+  felderHost.replaceChildren();
+  const hatFelder = current?.vorlage && current.felder ? current : null;
+  editorHost.hidden = hatFelder != null;
+  felderHost.hidden = hatFelder == null;
+  tipp.hidden = hatFelder != null;
+  if (hatFelder) {
+    felder = mountSeite(felderHost, hatFelder.vorlage!, hatFelder.felder!, {
+      seitenTitel: () => titelInput.value.trim() || current?.titel || "",
+      geaendert: () => scheduleSave(),
+      ladeBild: uploadImage,
+      frage: ask,
+    });
+    armed = true;
+    return;
+  }
   const next = new Crepe({
     root: editorHost,
     defaultValue: forEditor(markdown),
@@ -429,9 +517,28 @@ async function mountEditor(markdown: string): Promise<void> {
       [Crepe.Feature.CodeMirror]: false,
       [Crepe.Feature.Latex]: false,
       [Crepe.Feature.AI]: false,
-      [Crepe.Feature.TopBar]: false,
+      [Crepe.Feature.TopBar]: true,
     },
     featureConfigs: {
+      // Auf allen Bildschirmen. Griff und Blase bei markiertem Text gibt es auf dem Telefon nicht (redaktion.css).
+      [Crepe.Feature.TopBar]: {
+        headingOptions: [
+          { label: "Absatz", level: null },
+          { label: "Zwischentitel", level: 2 },
+          { label: "Kleiner Zwischentitel", level: 3 },
+        ],
+        buildTopBar: (bar: { getGroup(name: string): { group: { items: { key: string }[] } } }) => {
+          const behalte = (name: string, ...keys: string[]) => {
+            const gruppe = bar.getGroup(name).group;
+            gruppe.items = gruppe.items.filter((item) => keys.includes(item.key));
+          };
+          behalte("formatting", "bold", "italic");
+          behalte("list", "bullet-list", "ordered-list");
+          behalte("insert", "link", "image");
+          behalte("block");
+          behalte("more");
+        },
+      },
       [Crepe.Feature.Placeholder]: { text: "Hier den Text schreiben …", mode: "doc" },
       [Crepe.Feature.Toolbar]: { linkLabel: "Link" },
       [Crepe.Feature.ImageBlock]: {
@@ -526,7 +633,7 @@ function zeigeMenue(anker: HTMLElement, page: PageSummary): void {
     : ["Auf der Website ansehen ↗", () => void window.open(`${publicOrigin}${page.href}`, "_blank", "noopener")];
   const punkte: [string, () => void][] = [
     ["Öffnen", () => void openPage(page.rel)],
-    ["Kopie anlegen", () => void copyPage(page.rel)],
+    ...(page.vorlage && EINMALIG.includes(page.vorlage) ? [] : [["Kopie anlegen", () => void copyPage(page.rel)] as [string, () => void]]),
     ansehen,
   ];
   menue.replaceChildren(
@@ -574,7 +681,7 @@ function listItem(page: PageSummary): HTMLElement {
     item.append(head, text);
   } else {
     head.innerHTML = `<span class="marke">Entwurf</span>`;
-    text.textContent = page.titel;
+    text.textContent = seitenName(page);
     item.append(...(page.entwurf ? [head, text] : [text]));
   }
   item.addEventListener("click", () => void openPage(page.rel));
@@ -601,6 +708,7 @@ function trashItem(page: PageSummary): HTMLElement {
   const text = document.createElement("span");
   text.className = "thema";
   text.textContent = isBrief(page) ? `Nr. ${page.nummer ?? ""} · ${thema(page.titel) || "Ohne Thema"}` : page.titel;
+  if (page.geloeschtAm) text.append(h("small", { class: "geloescht-am" }, `Gelöscht am ${tagFormat.format(new Date(page.geloeschtAm))}`));
   const titel = isBrief(page) ? `Nr. ${page.nummer ?? ""} · ${thema(page.titel) || "Ohne Thema"}` : page.titel;
   const loeschen = button("Endgültig löschen", "leise gefahr", () => void deleteFromTrash(page.rel, titel));
   zeile.append(text, button("Zurückholen", "leise", () => void restoreFromTrash(page.rel)), loeschen);
@@ -634,14 +742,23 @@ async function loadList(): Promise<void> {
   const json = (await response.json()) as { pages: PageSummary[] };
   alleSeiten = json.pages;
   alleBriefe = json.pages.filter((page) => page.art === "brief");
-  seiten.replaceChildren(...json.pages.filter((page) => page.art !== "brief").map(listItem));
+  const baum = seitenBaum(json.pages.filter((page) => page.art !== "brief"));
+  seiten.replaceChildren(...baum.menue.flatMap(({ seite, unter }) => [
+    listItem(seite),
+    ...(unter.length ? [h("div", { class: "unterseiten" }, ...unter.map(listItem))] : []),
+  ]));
+  rechtliches.replaceChildren(...baum.rechtliches.map(listItem));
+  weitere.replaceChildren(...baum.weitere.map(listItem));
+  weitereGruppe.hidden = baum.weitere.length === 0;
   renderBriefe();
   const geloescht = (await fetch("/api/papierkorb")
     .then((res) => res.json())
     .catch(() => ({ pages: [] }))) as { pages: PageSummary[] };
   papierkorb.replaceChildren(...geloescht.pages.map(trashItem));
-  papierkorbGruppe.hidden = geloescht.pages.length === 0;
   papierkorbAnzahl = geloescht.pages.length;
+  papierkorbZahl.textContent = papierkorbAnzahl ? String(papierkorbAnzahl) : "";
+  papierkorbLeeren.hidden = papierkorbAnzahl === 0;
+  papierkorbHinweis.textContent = papierkorbAnzahl ? "Gelöschte Entwürfe. Zurückgeholt sind sie wieder Entwürfe." : "Der Papierkorb ist leer.";
 }
 
 /** Zeigt die neuesten Newsletter, ältere erst auf Wunsch. */
@@ -892,6 +1009,10 @@ function kurzerName(name: string): string {
  * erst nach einem Klick auf die Sprechblase oben rechts am Bild; das übernimmt hier der Knopf.
  */
 function zumBild(name: string): void {
+  if (felder) {
+    felder.fokusBild(name);
+    return;
+  }
   const block = [...editorHost.querySelectorAll<HTMLElement>(".milkdown-image-block")].find((el) => {
     const src = el.querySelector("img")?.getAttribute("src") ?? "";
     return decodeURIComponent(src.split("/").pop() ?? "") === name;
@@ -921,7 +1042,12 @@ function markCurrent(): void {
   for (const item of root!.querySelectorAll<HTMLButtonElement>("nav button[data-anfrage], nav button[data-wunsch]")) {
     item.toggleAttribute("aria-current", (item.dataset.anfrage ?? item.dataset.wunsch) === gewaehlt);
   }
-  if (current) (isBrief(current) ? briefeGruppe : seitenGruppe).open = true;
+  // Die Gruppe der offenen Seite aufklappen. Die Hauptseiten stehen immer da.
+  if (current) {
+    if (isBrief(current)) briefeGruppe.open = true;
+    else if (rechtliches.querySelector(`button[data-rel="${CSS.escape(current.rel)}"]`)) rechtlichesGruppe.open = true;
+    else if (weitere.querySelector(`button[data-rel="${CSS.escape(current.rel)}"]`)) weitereGruppe.open = true;
+  }
 }
 
 /** Hält das Thema im Verzeichnis gleich, während getippt wird. */
@@ -951,7 +1077,7 @@ function pruefeNummer(): void {
 }
 
 function collect(): ContentDocument {
-  if (!current || !crepe) throw new Error("Keine Seite");
+  if (!current || !editorBereit()) throw new Error("Keine Seite");
   const brief = isBrief(current);
   const nummer = gewaehlteNummer();
   return {
@@ -961,12 +1087,17 @@ function collect(): ContentDocument {
     entwurf: current.entwurf,
     titel: brief ? briefTitel(nummer, titelInput.value) : titelInput.value.trim() || current.titel,
     datum: brief ? datumInput.value || current.datum : current.datum,
-    body: forFile(crepe.getMarkdown()).trim(),
+    menue: !menueFeld.hidden && menueInput.checked,
+    vorlage: felder ? current.vorlage : null,
+    felder: felder ? felder.werte() : null,
+    // Hat die Seite Felder, ist der Text leer: Sie sind das, was gespeichert wird.
+    body: felder ? "" : aktuellerText(),
   };
 }
 
 function same(a: ContentDocument, b: ContentDocument): boolean {
-  return a.titel === b.titel && a.datum === b.datum && a.nummer === b.nummer && a.body.trim() === b.body.trim();
+  return a.titel === b.titel && a.datum === b.datum && a.nummer === b.nummer && a.body.trim() === b.body.trim()
+    && Boolean(a.menue) === Boolean(b.menue) && JSON.stringify(a.felder ?? null) === JSON.stringify(b.felder ?? null);
 }
 
 function viewHref(doc: Doc): string {
@@ -982,30 +1113,74 @@ function renderStand(): void {
   nummerInput.value = String(doc.nummer ?? "");
   pruefeNummer();
   aktionen.replaceChildren();
-  // Online sieht das Blatt anders aus: jede Änderung ist sofort auf der Website.
+  const einmalig = doc.vorlage != null && EINMALIG.includes(doc.vorlage);
+  // Online sieht das Blatt anders aus: Was gespeichert wird, ist auf der Website.
   form.dataset.stand = doc.entwurf ? "entwurf" : "online";
   // Was die Seite wegnimmt (Löschen, Zurückziehen) steht links für sich, die übrigen Knöpfe rechts.
   if (doc.entwurf) {
     stand.innerHTML = `<span class="marke">Entwurf</span> Nur hier in der Redaktion sichtbar.`;
     aktionen.append(
       button("Löschen", "leise weg", () => void deleteDraft()),
-      button("Word importieren", "leise", () => wordInput.click()),
-      button("Kopie anlegen", "leise", () => void copyPage(doc.rel)),
+      ...(doc.felder ? [] : [button("Word importieren", "leise", () => wordInput.click())]),
+      ...(einmalig ? [] : [button("Kopie anlegen", "leise", () => void copyPage(doc.rel))]),
       button("Vorschau", "", () => void openPreview()),
       button("Veröffentlichen", "haupt", () => void publish()),
     );
     return;
   }
-  stand.innerHTML = `<span class="marke online">Online</span> Jede Änderung erscheint sofort auf der Website.`;
+  stand.innerHTML = `<span class="marke online">Online</span> Änderungen erscheinen erst nach dem Speichern auf der Website.`;
   if (doc.rel !== STARTSEITE) aktionen.append(button("Zurückziehen", "leise weg", () => void unpublish()));
-  aktionen.append(button("Kopie anlegen", "leise", () => void copyPage(doc.rel)));
+  if (!einmalig) aktionen.append(button("Kopie anlegen", "leise", () => void copyPage(doc.rel)));
   const link = document.createElement("a");
   link.className = "knopf";
   link.href = viewHref(doc);
   link.target = "_blank";
   link.rel = "noopener";
   link.textContent = "Auf der Website ansehen ↗";
-  aktionen.append(link);
+  verwerfenKnopf = button("Verwerfen", "leise", () => void verwerfen());
+  verwerfenKnopf.hidden = !liveUngespeichert;
+  speichernKnopf = button("Speichern & veröffentlichen", "haupt", () => void saveNow());
+  speichernKnopf.disabled = !liveUngespeichert;
+  aktionen.append(link, verwerfenKnopf, speichernKnopf);
+}
+
+/** Zeigt, ob die Online-Seite vom gespeicherten Stand abweicht. Tippen und Zurücktippen ergibt keine Änderung. */
+function pruefeLive(): void {
+  if (!current || !editorBereit()) return;
+  liveUngespeichert = !same(collect(), current);
+  if (speichernKnopf) speichernKnopf.disabled = !liveUngespeichert;
+  if (verwerfenKnopf) verwerfenKnopf.hidden = !liveUngespeichert;
+  setSaved(liveUngespeichert ? "Noch nicht veröffentlicht" : "", liveUngespeichert ? "busy" : "ok");
+}
+
+async function verwerfen(): Promise<void> {
+  if (!current) return;
+  const ja = await ask({
+    titel: "Änderungen verwerfen?",
+    text: "Die Seite springt zurück auf den Stand, der auf der Website ist.",
+    ja: "Verwerfen",
+    nein: "Abbrechen",
+    gefahr: true,
+  });
+  if (!ja || !current) return;
+  // Patrick hat entschieden: Beim Neuladen nichts mehr fragen, auch nicht nach unvollständigen Feldern.
+  liveUngespeichert = false;
+  felder = null;
+  await openPage(current.rel);
+}
+
+/**
+ * Vor einer Aktion, die vom gespeicherten Stand ausgeht. Entwürfe speichern sich von selbst. Bei einer
+ * Online-Seite hiesse das, Halbfertiges zu veröffentlichen: Dort entscheidet Patrick zuerst.
+ */
+async function erstSichern(): Promise<boolean> {
+  if (!liveUngespeichert) return saveNow();
+  await ask({
+    titel: "Noch nicht gespeichert",
+    text: "Diese Seite hat Änderungen, die noch nicht auf der Website sind. Bitte zuerst speichern oder verwerfen.",
+    ja: "OK",
+  });
+  return false;
 }
 
 /** «Guten Morgen» bis elf, dann «Guten Tag», ab fünf «Guten Abend». Auch spät in der Nacht noch Abend. */
@@ -1016,15 +1191,18 @@ function gruss(): string {
   return "Guten Abend, Patrick.";
 }
 
+/** Von den Ansichten rechts ist immer nur eine sichtbar. */
+function zeigeNur(ansicht: HTMLElement): void {
+  for (const el of [start, form, anfragenSeite, briefeSeite, wuenscheSeite, medienSeite, verlaufSeite]) el.hidden = el !== ansicht;
+  medienLink.toggleAttribute("aria-current", ansicht === medienSeite);
+  verlaufLink.toggleAttribute("aria-current", ansicht === verlaufSeite);
+}
+
 function showStart(): void {
   root!.querySelector("#gruss")!.textContent = gruss();
   current = null;
   gewaehlt = null;
-  form.hidden = true;
-  anfragenSeite.hidden = true;
-  briefeSeite.hidden = true;
-  wuenscheSeite.hidden = true;
-  start.hidden = false;
+  zeigeNur(start);
   void loadCheck();
   merke("");
   // Auf der Startseite ist das Verzeichnis zugeklappt. Eine geöffnete Seite klappt ihre Gruppe selbst auf.
@@ -1041,12 +1219,9 @@ async function openPage(rel: string): Promise<void> {
   }
   current = (await response.json()) as Doc;
   gewaehlt = null;
+  liveUngespeichert = false;
   const brief = isBrief(current);
-  start.hidden = true;
-  anfragenSeite.hidden = true;
-  briefeSeite.hidden = true;
-  wuenscheSeite.hidden = true;
-  form.hidden = false;
+  zeigeNur(form);
   kennung.textContent = brief ? `Newsletter ${current.nummer ?? ""}` : current.art === "recht" ? "Rechtliches" : "Seite";
   titelInput.placeholder = brief ? "Thema, z. B. Revision des Erbrechts" : "Titel";
   titelInput.value = brief ? thema(current.titel) : current.titel;
@@ -1055,6 +1230,9 @@ async function openPage(rel: string): Promise<void> {
   datumInput.value = current.datum;
   nummerFeld.hidden = !brief;
   nummerInput.value = String(current.nummer ?? "");
+  // Selbst angelegte Seiten dürfen ins Menü. Die festen stehen dort schon oder im Fuss.
+  menueFeld.hidden = current.art !== "kapitel" || VORLAGE_VON[current.rel] != null;
+  menueInput.checked = current.menue === true;
   zeigeAdresse();
   fassungenGruppe.open = false;
   setSaved("");
@@ -1068,6 +1246,7 @@ async function openPage(rel: string): Promise<void> {
   void loadHistory(current.rel);
   void loadSeitenCheck();
   if (brief && current.entwurf && !titelInput.value) titelInput.focus();
+  void pruefeSetzen();
 }
 
 /** Wie der Server aus der Eingabe eine Adresse macht: klein, ä zu ae, Leerzeichen zu Bindestrichen. */
@@ -1156,6 +1335,7 @@ async function aendereAdresse(): Promise<void> {
  */
 async function adresseSetzen(rel: string, slug: string): Promise<string | null> {
   const offen = current?.rel === rel;
+  if (offen && liveUngespeichert) return "Die Seite hat noch nicht gespeicherte Änderungen. Bitte zuerst speichern oder verwerfen.";
   if (offen && !(await saveNow())) return "Die Seite liess sich vorher nicht speichern.";
   if (offen) setSaved("Ändert die Adresse …", "busy");
   const response = await post("/api/adresse", { rel, adresse: slug }).catch(() => null);
@@ -1165,8 +1345,8 @@ async function adresseSetzen(rel: string, slug: string): Promise<string | null> 
   }
   const neu = (await response.json()) as Doc & { angepasst?: number };
   if (current?.rel === rel) {
-    const textGeaendert = neu.body.trim() !== current.body.trim();
-    current = { ...current, adresse: neu.adresse, frueher: neu.frueher, href: neu.href, body: neu.body };
+    const textGeaendert = neu.body.trim() !== current.body.trim() || JSON.stringify(neu.felder ?? null) !== JSON.stringify(current.felder ?? null);
+    current = { ...current, adresse: neu.adresse, frueher: neu.frueher, href: neu.href, body: neu.body, felder: neu.felder, version: neu.version };
     zeigeAdresse();
     renderStand();
     if (textGeaendert) await mountEditor(current.body);
@@ -1183,43 +1363,84 @@ async function adresseSetzen(rel: string, slug: string): Promise<string | null> 
 
 function scheduleSave(): void {
   if (!armed) return;
+  // Online entscheidet der Knopf, was auf die Website kommt. Nur Entwürfe speichern sich von selbst.
+  if (current && !current.entwurf) {
+    pruefeLive();
+    return;
+  }
   setSaved("Ungespeichert …", "busy");
   if (saveTimer != null) window.clearTimeout(saveTimer);
   saveTimer = window.setTimeout(() => void save(), 600);
 }
 
+/** Es läuft immer nur ein Speichern. Ein zweites zugleich nennte einen Stand, den das erste gerade ablöst. */
+let speichernLaeuft: Promise<boolean> | null = null;
+
 async function save(): Promise<boolean> {
   saveTimer = null;
-  if (!current || !crepe) return true;
+  while (speichernLaeuft) await speichernLaeuft;
+  speichernLaeuft = speichere();
+  try {
+    return await speichernLaeuft;
+  } finally {
+    speichernLaeuft = null;
+  }
+}
+
+async function speichere(): Promise<boolean> {
+  if (!current || !editorBereit()) return true;
+  const fehlt = felder?.fehler();
+  if (fehlt) {
+    setSaved(fehlt, "fehler");
+    return false;
+  }
   const doc = collect();
+  const online = !current.entwurf;
   if (same(doc, current)) {
-    setSaved("Gespeichert ✓");
+    setSaved(online ? "" : "Gespeichert ✓");
     return true;
   }
   setSaved("Speichert …", "busy");
   const response = await fetch("/api/pages", {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(doc),
+    body: JSON.stringify({ ...doc, version: current.version }),
   }).catch(() => null);
   if (response?.status === 409) {
-    // Die Datei ist weg (veröffentlicht unter neuem Namen, Papierkorb, anderes Fenster). Nicht endlos neu versuchen.
-    setSaved("Nicht gespeichert: Diese Seite wurde inzwischen verschoben oder gelöscht. Bitte im Verzeichnis neu öffnen.", "fehler");
+    // Die Datei ist weg oder anderswo geändert. Nicht endlos neu versuchen, und nichts überschreiben.
+    setSaved(`Nicht gespeichert: ${await errorText(response, "Diese Seite wurde inzwischen geändert.")}`, "fehler");
     void loadList();
     return false;
   }
+  if (response?.status === 422) {
+    const json = (await response.json().catch(() => ({}))) as { error?: string; felder?: Record<string, string> };
+    if (felder && json.felder) felder.zeigeFehler(json.felder);
+    setSaved(`Nicht gespeichert: ${json.error ?? "Bitte die Felder prüfen."}`, "fehler");
+    return false;
+  }
   if (!response?.ok) {
+    if (online) {
+      setSaved("Nicht gespeichert: Die Verbindung fehlt. Bitte nochmals versuchen.", "fehler");
+      return false;
+    }
     setSaved("Nicht gespeichert. Die Verbindung fehlt, die Redaktion versucht es gleich wieder.", "fehler");
     // Der wartende Versuch hält auch die Warnung beim Schliessen des Fensters wach.
     saveTimer = window.setTimeout(() => void save(), 5000);
     return false;
   }
+  const { version } = (await response.json()) as { version: string };
   const neueNummer = current.rel === doc.rel && current.nummer !== doc.nummer;
-  if (current.rel === doc.rel) current = { ...current, ...doc };
-  setSaved("Gespeichert ✓");
+  if (current.rel === doc.rel) current = { ...current, ...doc, version };
+  if (online) {
+    liveUngespeichert = false;
+    if (speichernKnopf) speichernKnopf.disabled = true;
+    if (verwerfenKnopf) verwerfenKnopf.hidden = true;
+    beobachteSetzen();
+  }
+  setSaved(online ? "Veröffentlicht ✓" : "Gespeichert ✓");
   spaeterSeitenCheck();
-  // Das Verzeichnis zeigt die Nummer und sortiert danach.
-  if (neueNummer) void loadList().then(pruefeNummer);
+  // Das Verzeichnis zeigt die Nummer und sortiert danach; die übrigen Seiten ihren Titel.
+  if (neueNummer || !isBrief(current)) void loadList().then(pruefeNummer);
   return true;
 }
 
@@ -1234,6 +1455,25 @@ async function saveNow(): Promise<boolean> {
  * Geht das Speichern nicht, entscheidet Patrick, ob die Änderungen verloren gehen dürfen.
  */
 async function flushCommit(): Promise<boolean> {
+  // Online-Änderungen und unvollständige Felder lassen sich nicht einfach mitspeichern.
+  if (current && (liveUngespeichert || felder?.fehler())) {
+    const weg = await ask({
+      titel: "Nicht gespeichert",
+      text: liveUngespeichert
+        ? "Diese Seite hat Änderungen, die noch nicht auf der Website sind. Wer jetzt wechselt, verliert sie."
+        : "Einige Felder sind noch nicht ausgefüllt, darum ist die letzte Änderung nicht gespeichert. Wer jetzt wechselt, verliert sie.",
+      ja: "Trotzdem wechseln",
+      nein: "Hierbleiben",
+      gefahr: true,
+    });
+    if (!weg) {
+      merke(current.rel);
+      return false;
+    }
+    liveUngespeichert = false;
+    if (saveTimer != null) window.clearTimeout(saveTimer);
+    saveTimer = null;
+  }
   if (saveTimer != null && !(await saveNow())) {
     const weg = await ask({
       titel: "Nicht gespeichert",
@@ -1265,6 +1505,107 @@ async function post(url: string, payload: unknown): Promise<Response> {
 async function errorText(response: Response, fallback: string): Promise<string> {
   const json = (await response.json().catch(() => ({}))) as { error?: string };
   return json.error ?? fallback;
+}
+
+interface SetzStatus {
+  ok: boolean;
+  zeit: string;
+  fehler?: string;
+}
+
+let setzStand: SetzStatus | null = null;
+let setzBeobachtung = 0;
+
+function zeigeSetzen(wird: boolean): void {
+  const zeit = setzStand ? eingangFormat.format(new Date(setzStand.zeit)) : "";
+  setzStatus.textContent = wird ? "Website wird aktualisiert …" : !setzStand ? "" : setzStand.ok ? `Website aktuell · ${zeit}` : "Website nicht aktualisiert";
+  setzStatus.dataset.kind = wird ? "busy" : setzStand?.ok === false ? "fehler" : "ok";
+  setzWarnung.hidden = wird || setzStand?.ok !== false;
+  if (!setzWarnung.hidden) {
+    setzWarnung.replaceChildren(
+      h("strong", {}, "Die Website konnte nicht aktualisiert werden. "),
+      "Online ist noch der vorherige Stand. Wenn es nach dem nächsten Speichern noch dasteht, bitte an den Support schreiben.",
+      h("pre", {}, setzStand?.fehler ?? ""),
+    );
+  }
+}
+
+async function holeSetzen(): Promise<SetzStatus | null> {
+  const json = (await fetch("/api/status", { cache: "no-store" }).then((res) => res.json()).catch(() => null)) as { status: SetzStatus | null } | null;
+  return json?.status ?? null;
+}
+
+async function pruefeSetzen(): Promise<void> {
+  setzStand = await holeSetzen();
+  zeigeSetzen(setzBeobachtung !== 0 && aktiveBeobachtung);
+}
+
+let aktiveBeobachtung = false;
+
+/** Nach einem Speichern: wartet, bis die Seite neu gesetzt hat, höchstens eine Minute. */
+function beobachteSetzen(): void {
+  const meine = ++setzBeobachtung;
+  const vorher = setzStand?.zeit;
+  aktiveBeobachtung = true;
+  zeigeSetzen(true);
+  void (async () => {
+    for (let i = 0; i < 30 && meine === setzBeobachtung; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const neu = await holeSetzen();
+      if (neu && neu.zeit !== vorher) {
+        setzStand = neu;
+        break;
+      }
+    }
+    if (meine !== setzBeobachtung) return;
+    aktiveBeobachtung = false;
+    zeigeSetzen(false);
+  })();
+}
+
+/** Fragt nach dem Titel und legt eine neue Seite als Entwurf an. */
+async function neueSeiteAnlegen(): Promise<void> {
+  if (!(await flushCommit())) return;
+  const eingabe = h("input", { type: "text", placeholder: "z. B. Für Familien", "aria-label": "Titel der neuen Seite", required: true });
+  const hinweisText = h("p", { class: "leise", role: "alert" });
+  const titel = await new Promise<string | null>((resolve) => {
+    const dialog: HTMLDialogElement = h(
+      "dialog",
+      {},
+      h(
+        "form",
+        {
+          method: "dialog",
+          onsubmit: () => resolve(eingabe.value.trim() || null),
+        },
+        h("h2", {}, "Neue Seite anlegen"),
+        h("p", {}, `Sie bekommt die Vorlage «${vorlageName("abschnitte")}» und beginnt als Entwurf. Aus dem Titel entsteht die Adresse.`),
+        eingabe,
+        hinweisText,
+        h(
+          "div",
+          { class: "aktionen" },
+          h("button", { type: "button", onclick: () => { dialog.close(); resolve(null); } }, "Abbrechen"),
+          h("button", { type: "submit", class: "haupt" }, "Anlegen"),
+        ),
+      ),
+    );
+    dialog.addEventListener("cancel", () => resolve(null));
+    dialog.addEventListener("close", () => dialog.remove());
+    document.body.append(dialog);
+    dialog.showModal();
+    eingabe.focus();
+  });
+  if (!titel) return;
+  const response = await post("/api/seiten", { titel }).catch(() => null);
+  if (!response?.ok) {
+    await ask({ titel: "Das hat nicht geklappt", text: response ? await errorText(response, "Die Seite liess sich nicht anlegen.") : "Keine Verbindung zum Server.", ja: "OK" });
+    return;
+  }
+  const doc = (await response.json()) as Doc;
+  await loadList();
+  await openPage(doc.rel);
+  setSaved("Neue Seite angelegt ✓");
 }
 
 async function newBrief(): Promise<void> {
@@ -1342,6 +1683,7 @@ async function publish(rel = current?.rel, ohneFrage = false): Promise<boolean> 
     setSaved("Veröffentlicht ✓");
     void loadHistory(current.rel);
   }
+  beobachteSetzen();
   await loadList();
   return true;
 }
@@ -1349,7 +1691,7 @@ async function publish(rel = current?.rel, ohneFrage = false): Promise<boolean> 
 async function unpublish(rel = current?.rel, ohneFrage = false): Promise<boolean> {
   if (!rel) return false;
   const offen = current?.rel === rel;
-  if (offen && !(await saveNow())) return false;
+  if (offen && !(await erstSichern())) return false;
   const page = offen ? current : alleSeiten.find((item) => item.rel === rel);
   if (!page) return false;
   const ja = ohneFrage || await ask({
@@ -1371,13 +1713,14 @@ async function unpublish(rel = current?.rel, ohneFrage = false): Promise<boolean
     setSaved("Zurückgezogen. Jetzt nur noch als Entwurf hier.");
     void loadHistory(current.rel);
   }
+  beobachteSetzen();
   await loadList();
   return true;
 }
 
 /** Legt eine Kopie als Entwurf an und öffnet sie. Ein Newsletter bekommt die nächste Nummer. */
 async function copyPage(rel: string): Promise<boolean> {
-  if (current?.rel === rel && !(await saveNow())) return false;
+  if (current?.rel === rel && !(await erstSichern())) return false;
   const response = await post("/api/copy", { rel });
   if (!response.ok) {
     await melde(current?.rel === rel, await errorText(response, "Die Kopie liess sich nicht anlegen."));
@@ -1427,8 +1770,10 @@ async function deletePage(rel: string): Promise<boolean> {
     await melde(offen, await errorText(response, "Löschen fehlgeschlagen."));
     return false;
   }
+  const { papierkorb: ablage } = (await response.json().catch(() => ({}))) as { papierkorb?: string };
   if (current?.rel === rel) showStart();
   await loadList();
+  if (ablage) toast("In den Papierkorb gelegt.", { label: "Rückgängig", aus: () => void restoreFromTrash(ablage) });
   return true;
 }
 
@@ -1467,84 +1812,11 @@ async function loadHistory(rel: string): Promise<void> {
   }
 }
 
-/** Absätze, Zwischentitel und Listenpunkte, in der Fassung wie im Editor. */
-const BLOECKE = "p, h1, h2, h3, h4, li:not(:has(p)), blockquote:not(:has(p))";
-
-function norm(text: string): string {
-  return text.replace(/\s+/g, " ").trim();
-}
-
-function bloecke(host: Element): HTMLElement[] {
-  return [...host.querySelectorAll<HTMLElement>(BLOECKE)].filter((block) => norm(block.textContent ?? ""));
-}
-
-/** Welche Wörter aus `alt` auch in `neu` vorkommen, in derselben Reihenfolge (längste gemeinsame Folge). */
-function gemeinsam(alt: string[], neu: string[]): boolean[] {
-  const tabelle = Array.from({ length: alt.length + 1 }, () => new Uint16Array(neu.length + 1));
-  for (let i = alt.length - 1; i >= 0; i--) {
-    for (let j = neu.length - 1; j >= 0; j--) {
-      tabelle[i][j] = alt[i] === neu[j] ? tabelle[i + 1][j + 1] + 1 : Math.max(tabelle[i + 1][j], tabelle[i][j + 1]);
-    }
-  }
-  const bleibt = alt.map(() => false);
-  for (let i = 0, j = 0; i < alt.length && j < neu.length; ) {
-    if (alt[i] === neu[j]) {
-      bleibt[i] = true;
-      i++;
-      j++;
-    } else if (tabelle[i + 1][j] >= tabelle[i][j + 1]) i++;
-    else j++;
-  }
-  return bleibt;
-}
-
-/** Der Absatz von jetzt, der diesem alten am meisten gleicht, oder keiner. */
-function aehnlichster(text: string, jetzt: string[]): string | null {
-  const woerter = new Set(text.split(" "));
-  let bester: string | null = null;
-  let wert = 0.4;
-  for (const kandidat of jetzt) {
-    const andere = new Set(kandidat.split(" "));
-    const beide = [...woerter].filter((wort) => andere.has(wort)).length;
-    const anteil = beide / (woerter.size + andere.size - beide);
-    if (anteil > wert) [bester, wert] = [kandidat, anteil];
-  }
-  return bester;
-}
-
-/**
- * Markiert in der alten Fassung, was heute anders ist: ganze Absätze gelb,
- * darin die Wörter, die es so nicht mehr gibt. Gibt zurück, wie viel sich unterscheidet.
- */
-function markiereUnterschiede(alt: HTMLElement): { anders: number; neu: number } {
-  // Nur der Text selbst, nicht die Menüs von Crepe daneben.
-  const jetzt = bloecke(editorHost.querySelector(".ProseMirror") ?? editorHost).map((block) => norm(block.textContent ?? ""));
-  const jetztMenge = new Set(jetzt);
-  const altTexte = new Set<string>();
-  // Absätze von heute, die nur geändert sind, zählen nicht als neu dazugekommen.
-  const geaendert = new Set<string>();
-  let anders = 0;
-  // Den Titel vergleicht showRevision für sich.
-  for (const block of bloecke(alt).filter((block) => !block.classList.contains("fassung-titel"))) {
-    const text = norm(block.textContent ?? "");
-    altTexte.add(text);
-    if (jetztMenge.has(text)) continue;
-    anders++;
-    block.classList.add("anders");
-    const naechster = aehnlichster(text, jetzt);
-    if (naechster) geaendert.add(naechster);
-    // Wörter nur markieren, wo nichts verloren geht: keine Bilder, nicht zu lang.
-    if (!naechster || block.querySelector("img")) continue;
-    const woerter = text.split(" ");
-    const heute = naechster.split(" ");
-    if (woerter.length * heute.length > 250_000) continue;
-    const bleibt = gemeinsam(woerter, heute);
-    // Nebeneinander geänderte Wörter in einer Markierung, nicht jedes für sich.
-    block.innerHTML = woerter
-      .map((wort, i) => `${!bleibt[i] && (i === 0 || bleibt[i - 1]) ? "<mark>" : ""}${esc(wort)}${!bleibt[i] && (i === woerter.length - 1 || bleibt[i + 1]) ? "</mark>" : ""}`)
-      .join(" ");
-  }
-  return { anders, neu: jetzt.filter((text) => !altTexte.has(text) && !geaendert.has(text)).length };
+/** Was heute im Text steht, je Absatz, Titel oder Listenpunkt. */
+function jetzigeBloecke(): string[] {
+  return felder
+    ? klartextBloecke(felder.markdown())
+    : bloecke(editorHost.querySelector(".ProseMirror") ?? editorHost).map((block) => norm(block.textContent ?? ""));
 }
 
 let offeneFassung: HTMLElement | null = null;
@@ -1566,7 +1838,7 @@ async function showRevision(rel: string, revision: Revision, item: HTMLElement, 
   vorschau.innerHTML = `<p class="legende"></p><h3 class="fassung-titel">${esc(json.titel)}</h3>${json.html}`;
   const titel = vorschau.querySelector<HTMLElement>(".fassung-titel")!;
   if (json.titel !== collect().titel) titel.classList.add("anders");
-  const { anders, neu } = markiereUnterschiede(vorschau);
+  const { anders, neu } = markiereUnterschiede(vorschau, jetzigeBloecke());
   // Nur sagen, was wirklich anders ist.
   const teile = [
     titel.classList.contains("anders") ? "Der Titel war anders." : "",
@@ -1587,7 +1859,7 @@ async function restoreRevision(rel: string, revision: Revision): Promise<void> {
     nein: "Abbrechen",
   });
   if (!ja) return;
-  await saveNow();
+  if (!(await erstSichern())) return;
   const response = await post("/api/restore", { rel, rev: revision.rev, path: revision.path });
   if (!response.ok) {
     setSaved(await errorText(response, "Zurückholen fehlgeschlagen."), "fehler");
@@ -1598,8 +1870,6 @@ async function restoreRevision(rel: string, revision: Revision): Promise<void> {
   await loadList();
 }
 
-const eingangFormat = new Intl.DateTimeFormat("de-CH", { dateStyle: "medium", timeStyle: "short" });
-const tagFormat = new Intl.DateTimeFormat("de-CH", { dateStyle: "medium" });
 /** Monate bis zur Löschung, vom Server. 12, bis er etwas anderes sagt. */
 let aufbewahrungMonate = 12;
 const BALD_TAGE = 30;
@@ -1906,11 +2176,7 @@ async function showBriefe(): Promise<void> {
   current = null;
   gewaehlt = null;
   markCurrent();
-  start.hidden = true;
-  form.hidden = true;
-  anfragenSeite.hidden = true;
-  briefeSeite.hidden = false;
-  wuenscheSeite.hidden = true;
+  zeigeNur(briefeSeite);
   briefeGruppe.open = true;
   merke("newsletter");
   renderBriefUebersicht();
@@ -2074,11 +2340,7 @@ async function showWuensche(): Promise<boolean> {
   current = null;
   gewaehlt = null;
   markCurrent();
-  start.hidden = true;
-  form.hidden = true;
-  anfragenSeite.hidden = true;
-  briefeSeite.hidden = true;
-  wuenscheSeite.hidden = false;
+  zeigeNur(wuenscheSeite);
   wuenscheGruppe.open = true;
   merke("wuensche");
   try {
@@ -2112,11 +2374,7 @@ async function showAnfragen(): Promise<boolean> {
   current = null;
   gewaehlt = null;
   markCurrent();
-  start.hidden = true;
-  form.hidden = true;
-  anfragenSeite.hidden = false;
-  briefeSeite.hidden = true;
-  wuenscheSeite.hidden = true;
+  zeigeNur(anfragenSeite);
   anfragenGruppe.open = true;
   merke("anfragen");
   await loadAnfragen(true);
@@ -2175,7 +2433,7 @@ window.addEventListener("pagehide", () => {
   void fetch("/api/commit", { method: "POST", keepalive: true }).catch(() => null);
 });
 window.addEventListener("beforeunload", (event) => {
-  if (saveTimer != null) event.preventDefault();
+  if (saveTimer != null || liveUngespeichert) event.preventDefault();
 });
 // Ist die Verbindung zurück, gleich speichern statt auf den nächsten Versuch zu warten.
 window.addEventListener("online", () => {
@@ -2316,6 +2574,60 @@ mehr.addEventListener("click", () => {
   renderBriefe();
 });
 
+menueInput.addEventListener("change", () => scheduleSave());
+root.querySelector("#seite-neu")!.addEventListener("click", () => void neueSeiteAnlegen());
+// Ein vorhandenes Bild in den Newsletter setzen, an der Stelle, wo der Cursor steht.
+root.querySelector("#bild-aus-medien")!.addEventListener("click", async () => {
+  const name = await waehleMedium();
+  if (!name || !crepe) return;
+  // Ist Text markiert, kommt das Bild dahinter. Sonst ersetzte es die Markierung.
+  crepe.editor.action((ctx: { get(key: unknown): { state: EditorState; dispatch(tr: unknown): void } }) => {
+    const view = ctx.get(editorViewCtx);
+    const { doc, selection, tr } = view.state;
+    if (!selection.empty) view.dispatch(tr.setSelection(TextSelection.create(doc, selection.to)));
+  });
+  crepe.editor.action(insert(`\n\n![1](/media/${name})\n\n`));
+});
+
+const ladeMedien = medienAnsicht(medienSeite, (rel) => void openPage(rel), uploadImage);
+const ladeVerlauf = verlaufAnsicht(verlaufSeite, {
+  frage: ask,
+  oeffne: (rel) => void openPage(rel),
+  bereit: async () => flushCommit(),
+});
+
+async function showMedien(): Promise<void> {
+  if (!(await flushCommit())) return;
+  current = null;
+  gewaehlt = null;
+  markCurrent();
+  zeigeNur(medienSeite);
+  merke("medien");
+  await ladeMedien().catch((error: Error) => toast(error.message, undefined, true));
+  nachOben();
+}
+
+async function showVerlauf(): Promise<void> {
+  if (!(await flushCommit())) return;
+  current = null;
+  gewaehlt = null;
+  markCurrent();
+  zeigeNur(verlaufSeite);
+  merke("verlauf");
+  await ladeVerlauf().catch((error: Error) => toast(error.message, undefined, true));
+  nachOben();
+}
+
+// Medien und Verlauf klappen nichts auf: Sie öffnen nur ihre Ansicht.
+medienLink.addEventListener("click", () => {
+  void showMedien();
+  zeigeVerzeichnis(false);
+});
+verlaufLink.addEventListener("click", () => {
+  void showVerlauf();
+  zeigeVerzeichnis(false);
+});
+
 /** Unsichtbares Dateifeld für «Word importieren». */
 const wordInput = document.createElement("input");
 wordInput.type = "file";
@@ -2417,11 +2729,11 @@ function setzeThema(text: string): void {
 
 /** Was der Assistent sieht und wie er Text einsetzt. */
 function lage(): Lage {
-  if (!current || !crepe || form.hidden) {
+  if (!current || !editorBereit() || form.hidden) {
     return { ansicht: !anfragenSeite.hidden ? "anfragen" : !briefeSeite.hidden ? "briefe" : !wuenscheSeite.hidden ? "wuensche" : "start" };
   }
   const doc = collect();
-  return { ansicht: "blatt", rel: doc.rel, art: doc.art, titel: doc.titel, datum: doc.datum, entwurf: doc.entwurf, body: doc.body };
+  return { ansicht: "blatt", rel: doc.rel, art: doc.art, titel: doc.titel, datum: doc.datum, entwurf: doc.entwurf, body: aktuellerText(), vorlage: doc.vorlage ?? undefined };
 }
 
 const info = (await fetch("/api/info").then((response) => response.json()).catch(() => ({}))) as {
@@ -2433,10 +2745,15 @@ root.querySelector<HTMLAnchorElement>("#zur-website")!.href = `${publicOrigin}/`
 void mountAssistent(
   {
     lage,
-    offen: () => (current && crepe && !form.hidden ? { rel: current.rel, titel: collect().titel } : null),
-    markdown: () => (crepe && current ? forFile(crepe.getMarkdown()).trim() : null),
+    offen: () => (current && editorBereit() && !form.hidden ? { rel: current.rel, titel: collect().titel } : null),
+    markdown: () => (editorBereit() && current ? aktuellerText() : null),
     // Als normale Änderung im Editor: Ctrl+Z macht sie rückgängig, gespeichert wird wie beim Tippen.
-    setzeText: (markdown) => crepe?.editor.action(replaceAll(forEditor(markdown))),
+    // Felder nehmen nur, was in ihren Aufbau passt.
+    setzeText: (markdown) => {
+      if (felder) return felder.setze(markdown);
+      crepe?.editor.action(replaceAll(forEditor(markdown)));
+      return true;
+    },
     setzeThema,
     neuerNewsletter: async (text) => {
       // Ein leerer Entwurf, der schon offen ist, wird genommen statt einen zweiten anzulegen.
@@ -2449,7 +2766,10 @@ void mountAssistent(
       return current!.rel;
     },
     // Während des Schreibens den Zustand ersetzen, nicht ändern: keine hundert Rückgängig-Schritte.
-    schreibeLive: (markdown) => crepe?.editor.action(replaceAll(forEditor(markdown), true)),
+    schreibeLive: (markdown) => {
+      if (felder) felder.setze(markdown);
+      else crepe?.editor.action(replaceAll(forEditor(markdown), true));
+    },
     speichereEntwurf: async (rel, markdown) => {
       if (current?.rel === rel && crepe && !form.hidden) {
         crepe.editor.action(replaceAll(forEditor(markdown), true));
@@ -2544,6 +2864,8 @@ async function folge(): Promise<void> {
   if (wanted === "anfragen") await showAnfragen();
   else if (wanted === "newsletter") await showBriefe();
   else if (wanted === "wuensche") await showWuensche();
+  else if (wanted === "medien") await showMedien();
+  else if (wanted === "verlauf") await showVerlauf();
   else if (wanted) await openPage(wanted);
   else if (await flushCommit()) showStart();
 }
@@ -2553,3 +2875,4 @@ await loadList();
 await loadAnfragen();
 await loadWuensche();
 await folge();
+void pruefeSetzen();

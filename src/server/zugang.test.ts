@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import type http from "node:http";
 import { test } from "node:test";
-import { bildEndung, fremdeHerkunft, schluesselPasst } from "./zugang.ts";
+import { bildArt, verarbeiteBild } from "./bilder.ts";
+import { fremdeHerkunft, kanonischerHost, ohneEndSchraegstrich, schluesselPasst } from "./zugang.ts";
 
 function anfrage(method: string, headers: Record<string, string>): http.IncomingMessage {
   return { method, headers } as unknown as http.IncomingMessage;
@@ -38,12 +39,39 @@ test("Herkunft: ohne Origin entscheidet Sec-Fetch-Site", () => {
   assert.equal(fremdeHerkunft(anfrage("POST", { "sec-fetch-site": "same-origin" })), false);
 });
 
-test("Bilder: SVG und andere Dateien gehen nicht", () => {
-  assert.equal(bildEndung("foto.JPG"), ".jpg");
-  assert.equal(bildEndung("grafik.webp"), ".webp");
-  assert.equal(bildEndung("logo.svg"), null);
-  assert.equal(bildEndung("logo.SVG"), null);
-  assert.equal(bildEndung("seite.html"), null);
-  assert.equal(bildEndung("ohne-endung"), null);
-  assert.equal(bildEndung(".png"), null);
+test("Bild: Was es ist, entscheiden die Bytes, nicht der Name", async () => {
+  assert.equal(bildArt(Buffer.from("<html><script>alert(1)</script></html>")), null);
+  assert.equal(bildArt(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>')), "svg");
+  await assert.rejects(verarbeiteBild(Buffer.from("<html>kein Bild, auch wenn es .png heisst</html>")), /Nur Bilder/);
+});
+
+test("Bild: Ein SVG wird PNG, ohne sein Skript", async () => {
+  const fertig = await verarbeiteBild(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><script>alert(1)</script><rect width="10" height="10"/></svg>'));
+  assert.equal(fertig.endung, ".png");
+  assert.equal(bildArt(fertig.daten), "png");
+  assert.ok(!fertig.daten.includes("alert"));
+});
+
+test("Bild: Ein Foto verliert seine Metadaten", async () => {
+  const sharp = (await import("sharp")).default;
+  const foto = await sharp({ create: { width: 20, height: 20, channels: 3, background: "#884422" } }).withExif({ IFD0: { Copyright: "Geheimer Ort" } }).jpeg().toBuffer();
+  assert.ok(foto.includes("Geheimer Ort"));
+  const fertig = await verarbeiteBild(foto);
+  assert.equal(fertig.endung, ".jpg");
+  assert.ok(!fertig.daten.includes("Geheimer Ort"));
+});
+
+test("Schrägstrich am Ende: bleibt auf der eigenen Seite", () => {
+  assert.equal(ohneEndSchraegstrich("/angebot/"), "/angebot");
+  assert.equal(ohneEndSchraegstrich("//boese.example/"), "/boese.example");
+  assert.equal(ohneEndSchraegstrich("///boese.example//"), "/boese.example");
+  assert.equal(ohneEndSchraegstrich("/\\\\boese.example/"), "/boese.example");
+});
+
+test("Kanonischer Name: nur die Adresse, die Google führen soll", () => {
+  const url = "https://advocat-finanz.ch";
+  assert.equal(kanonischerHost(anfrage("GET", { host: "advocat-finanz.ch" }), url), true);
+  assert.equal(kanonischerHost(anfrage("GET", { host: "advocat:4321", "x-forwarded-host": "advocat-finanz.ch" }), url), true);
+  assert.equal(kanonischerHost(anfrage("GET", { host: "advocat.heim.example" }), url), false);
+  assert.equal(kanonischerHost(anfrage("GET", {}), url), false);
 });
