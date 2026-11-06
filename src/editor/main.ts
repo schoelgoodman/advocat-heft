@@ -165,12 +165,8 @@ root.innerHTML = `
         <nav id="wuensche-liste"></nav>
         <button type="button" class="leise mehr" id="wuensche-alle">Übersicht Support</button>
       </details>
-      <details id="medien-gruppe">
-        <summary><button type="button" class="gruppe-titel" id="medien-link">Medien</button></summary>
-      </details>
-      <details id="verlauf-gruppe">
-        <summary><button type="button" class="gruppe-titel" id="verlauf-link">Verlauf</button></summary>
-      </details>
+      <button type="button" class="zeile-link" id="medien-link">Medien</button>
+      <button type="button" class="zeile-link" id="verlauf-link">Verlauf</button>
       <details id="papierkorb-gruppe">
         <summary><span class="gruppe-titel">Papierkorb</span><span class="zahl" id="papierkorb-zahl"></span></summary>
         <p class="leise" id="papierkorb-hinweis"></p>
@@ -333,8 +329,8 @@ const menueFeld = root.querySelector<HTMLElement>("#menue-feld")!;
 const menueInput = root.querySelector<HTMLInputElement>("#menue")!;
 const medienSeite = root.querySelector<HTMLElement>("#medien-seite")!;
 const verlaufSeite = root.querySelector<HTMLElement>("#verlauf-seite")!;
-const medienGruppe = root.querySelector<HTMLDetailsElement>("#medien-gruppe")!;
-const verlaufGruppe = root.querySelector<HTMLDetailsElement>("#verlauf-gruppe")!;
+const medienLink = root.querySelector<HTMLButtonElement>("#medien-link")!;
+const verlaufLink = root.querySelector<HTMLButtonElement>("#verlauf-link")!;
 const setzStatus = root.querySelector<HTMLElement>("#setz-status")!;
 const setzWarnung = root.querySelector<HTMLElement>("#setz-warnung")!;
 const adresseFeld = root.querySelector<HTMLElement>("#adresse-feld")!;
@@ -1198,6 +1194,8 @@ function gruss(): string {
 /** Von den Ansichten rechts ist immer nur eine sichtbar. */
 function zeigeNur(ansicht: HTMLElement): void {
   for (const el of [start, form, anfragenSeite, briefeSeite, wuenscheSeite, medienSeite, verlaufSeite]) el.hidden = el !== ansicht;
+  medienLink.toggleAttribute("aria-current", ansicht === medienSeite);
+  verlaufLink.toggleAttribute("aria-current", ansicht === verlaufSeite);
 }
 
 function showStart(): void {
@@ -2551,8 +2549,6 @@ for (const [gruppe, seite, zeige] of [
   [briefeGruppe, briefeSeite, showBriefe],
   [anfragenGruppe, anfragenSeite, showAnfragen],
   [wuenscheGruppe, wuenscheSeite, showWuensche],
-  [medienGruppe, medienSeite, () => showMedien()],
-  [verlaufGruppe, verlaufSeite, () => showVerlauf()],
 ] as const) {
   gruppe.querySelector(":scope > summary")!.addEventListener("click", (event) => {
     event.preventDefault();
@@ -2606,7 +2602,6 @@ async function showMedien(): Promise<void> {
   gewaehlt = null;
   markCurrent();
   zeigeNur(medienSeite);
-  medienGruppe.open = true;
   merke("medien");
   await ladeMedien().catch((error: Error) => toast(error.message, undefined, true));
   nachOben();
@@ -2618,11 +2613,20 @@ async function showVerlauf(): Promise<void> {
   gewaehlt = null;
   markCurrent();
   zeigeNur(verlaufSeite);
-  verlaufGruppe.open = true;
   merke("verlauf");
   await ladeVerlauf().catch((error: Error) => toast(error.message, undefined, true));
   nachOben();
 }
+
+// Medien und Verlauf klappen nichts auf: Sie öffnen nur ihre Ansicht.
+medienLink.addEventListener("click", () => {
+  void showMedien();
+  zeigeVerzeichnis(false);
+});
+verlaufLink.addEventListener("click", () => {
+  void showVerlauf();
+  zeigeVerzeichnis(false);
+});
 
 /** Unsichtbares Dateifeld für «Word importieren». */
 const wordInput = document.createElement("input");

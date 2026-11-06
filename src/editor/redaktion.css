@@ -1147,3 +1147,18 @@ dialog.medien-wahl[open] { display: flex; flex-direction: column; }
 
 /* Einträge ohne Pfeil beginnen dort, wo bei den anderen der Text beginnt. */
 aside > #seiten, aside > #seite-neu { margin-left: 1.05rem; }
+
+/* Zeilen ohne Aufklappen: Der Text steht dort, wo er bei den anderen nach dem Pfeil beginnt. */
+aside .zeile-link {
+  display: block;
+  width: 100%;
+  margin: 0.1rem 0;
+  padding: 0.4rem 0.4rem 0.4rem calc(0.4rem + 0.85rem + 0.4rem);
+  border: 0;
+  border-radius: var(--rund-klein);
+  font-size: 0.95rem;
+  text-align: left;
+  color: var(--ink);
+}
+aside .zeile-link:hover { background: var(--hover); border-color: transparent; }
+aside .zeile-link[aria-current] { background: var(--olive-hauch); color: var(--olive); font-weight: 600; }

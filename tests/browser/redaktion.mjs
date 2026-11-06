@@ -44,13 +44,18 @@ const speichern=async()=>{ await klick("Speichern & veröffentlichen"); await sl
 await p.goto(`${base}/redaktion`,{waitUntil:"networkidle2"}); await sleep(900);
 ok("Verzeichnis: drei Bereiche", JSON.stringify(await p.$$eval("aside .kategorie",l=>l.map(x=>x.textContent)))===JSON.stringify(["Täglich","Seiten","Verwaltung"]));
 ok("Verzeichnis: Zur Website neben Redaktion", await p.$eval(".verzeichnis-kopf",e=>!!e.querySelector("#heim")&&!!e.querySelector("#zur-website")&&e.querySelector("#heim").getBoundingClientRect().top<e.querySelector("#zur-website").getBoundingClientRect().bottom));
-const reihe=await p.evaluate(()=>{let k="";const out={};for(const el of document.querySelectorAll("aside > *")){if(el.classList.contains("kategorie")){k=el.textContent;out[k]=[];continue;}if(!k)continue;const n=el.querySelector?.(":scope > summary .gruppe-titel")?.textContent;if(n)out[k].push(n);}return out;});
+const reihe=await p.evaluate(()=>{let k="";const out={};for(const el of document.querySelectorAll("aside > *")){if(el.classList.contains("kategorie")){k=el.textContent;out[k]=[];continue;}if(!k)continue;const n=el.classList.contains("zeile-link")?el.textContent:el.querySelector?.(":scope > summary .gruppe-titel")?.textContent;if(n)out[k].push(n);}return out;});
 ok("Verzeichnis: Täglich", JSON.stringify(reihe["Täglich"])===JSON.stringify(["Newsletter","Kontaktaufnahme"]));
 ok("Verzeichnis: Verwaltung", JSON.stringify(reihe["Verwaltung"])===JSON.stringify(["Support","Medien","Verlauf","Papierkorb"]));
 const haupt=await p.$$eval("#seiten > .eintrag .thema",l=>l.map(x=>x.textContent));
 ok("Verzeichnis: wie das Menü der Website", JSON.stringify(haupt)===JSON.stringify(["Home","Unser Angebot","Über uns","Neuigkeiten","Kontakt"]));
 ok("Verzeichnis: Angebote unter Unser Angebot", JSON.stringify(await p.$$eval("#seiten .unterseiten .thema",l=>l.map(x=>x.textContent)))===JSON.stringify(["Für Privatpersonen","Für Unternehmen","Für Stiftungen"]));
 ok("Verzeichnis: Rechtliches", JSON.stringify(await p.$$eval("#rechtliches .thema",l=>l.map(x=>x.textContent)))===JSON.stringify(["Impressum","Disclaimer","Datenschutz"]));
+const vorDemKlick=await p.$eval("#verlauf-link",e=>e.getBoundingClientRect().top);
+await p.click("#medien-link"); await sleep(900);
+ok("Verzeichnis: Medien öffnet ohne Sprung", await p.$eval("#medien-seite",e=>!e.hidden) && await p.$eval("#medien-link",e=>e.hasAttribute("aria-current")) && Math.abs(await p.$eval("#verlauf-link",e=>e.getBoundingClientRect().top)-vorDemKlick)<1);
+ok("Verzeichnis: Medien und Verlauf ohne Pfeil", await p.evaluate(()=>!document.querySelector("#medien-link").closest("details")&&!document.querySelector("#verlauf-link").closest("details")));
+await p.screenshot({path:`${shots}/verwaltung.png`});
 await open("recht/impressum.md"); ok("Verzeichnis: Rechtliches klappt bei offener Seite auf", await p.$eval("#rechtliches-gruppe",d=>d.open));
 await p.screenshot({path:`${shots}/verzeichnis.png`});
 // Assistent: eigene Stile, keine Übergriffe aus Verlauf und Feldern
