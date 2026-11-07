@@ -29,7 +29,7 @@ import { commitIfChanged, ensureContentGit, gibtEsInFassung, holeDateiZurueck, l
 import { anfragenDir, contentDir, repoRoot, siteDir } from "../paths.ts";
 import { buildSite, previewPage, rebuildDocuments, textHtml } from "../render/build.ts";
 import { publishMedia, pruneVariants } from "../render/media.ts";
-import { AUFBEWAHRUNG_MONATE, handleAnfrage, listAnfragen, loescheAlteAnfragen, setAnfrageStatus } from "./anfrage.ts";
+import { AUFBEWAHRUNG_MONATE, erinnereAnOffene, handleAnfrage, listAnfragen, loescheAlteAnfragen, meldeNachtraeglich, setAnfrageStatus } from "./anfrage.ts";
 import { verarbeiteBild } from "./bilder.ts";
 import { bilderIn, listeMedien, medienName, pruefeLoeschbar, sendeVorschau } from "./medien.ts";
 import { leseStatus, schreibeStatus } from "./status.ts";
@@ -340,6 +340,7 @@ const MIME: Record<string, string> = {
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
   ".webp": "image/webp",
+  ".avif": "image/avif",
   ".gif": "image/gif",
   ".svg": "image/svg+xml",
   ".pdf": "application/pdf",
@@ -1142,6 +1143,10 @@ async function main(): Promise<void> {
     const aufraeumen = () => void loescheAlteAnfragen().catch((error) => console.error("Anfragen löschen:", error instanceof Error ? error.message : error));
     aufraeumen();
     setInterval(aufraeumen, 24 * 60 * 60 * 1000).unref();
+    // Keine Anfrage bleibt unbemerkt: Telegram-Meldungen nachholen, an Offene erinnern.
+    const nachfassen = () => void meldeNachtraeglich().then(() => erinnereAnOffene()).catch((error) => console.error("Anfragen nachfassen:", error instanceof Error ? error.message : error));
+    nachfassen();
+    setInterval(nachfassen, 5 * 60 * 1000).unref();
   }
 
   const vite: ViteDevServer | null = productionEditor

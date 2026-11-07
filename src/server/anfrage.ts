@@ -224,6 +224,57 @@ export async function loescheAlteAnfragen(jetzt = new Date()): Promise<number> {
   return geloescht;
 }
 
+/**
+ * Telegram war nicht erreichbar: nochmals versuchen, bis die Meldung durch ist. Eine Nachricht für alle,
+ * damit ein längerer Ausfall nicht in einer Salve endet. Was Patrick inzwischen gelesen hat, zählt nicht mehr.
+ */
+export async function meldeNachtraeglich(senden = sendTelegram): Promise<number> {
+  const offen = (await listAnfragen()).filter((anfrage) => anfrage.telegram === "fehler" && anfrage.status === "neu");
+  if (!offen.length) return 0;
+  const text = offen.length === 1
+    ? telegramText()
+    : `${offen.length} neue Anfragen über advocat-finanz.ch. Bitte in der Redaktion unter «Kontaktaufnahme» lesen.`;
+  if ((await senden(text)) !== "gesendet") return 0;
+  for (const { id } of offen) {
+    const file = path.join(anfragenDir(), `${id}.json`);
+    const anfrage = JSON.parse(await fs.readFile(file, "utf8")) as Anfrage;
+    await store({ ...anfrage, telegram: "gesendet" }, file);
+  }
+  console.log(`Anfragen: ${offen.length} Meldung(en) nachgeholt.`);
+  return offen.length;
+}
+
+const ERINNERUNG_FILE = "_erinnerung.json";
+const EIN_TAG_MS = 24 * 60 * 60 * 1000;
+
+function ortsTag(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * Montag bis Freitag zwischen 8 und 18 Uhr höchstens eine Erinnerung am Tag, solange eine Anfrage
+ * seit über 24 Stunden nicht erledigt ist. Nur die Zahl: Name und Nachricht bleiben auf dem Server.
+ * Der Tag steht in einer Datei, damit ein Neustart nicht zweimal erinnert.
+ */
+export async function erinnereAnOffene(jetzt = new Date(), senden = sendTelegram): Promise<boolean> {
+  const stunde = jetzt.getHours();
+  if (jetzt.getDay() === 0 || jetzt.getDay() === 6 || stunde < 8 || stunde >= 18) return false;
+  const file = path.join(anfragenDir(), ERINNERUNG_FILE);
+  const tag = ortsTag(jetzt);
+  const zuletzt = await fs.readFile(file, "utf8").then((raw) => (JSON.parse(raw) as { tag?: string }).tag, () => undefined);
+  if (zuletzt === tag) return false;
+  const offen = (await listAnfragen()).filter(
+    (anfrage) => anfrage.status !== "erledigt" && jetzt.getTime() - Date.parse(anfrage.eingang) > EIN_TAG_MS,
+  );
+  if (!offen.length) return false;
+  const ungelesen = offen.filter((anfrage) => anfrage.status === "neu").length;
+  const zahl = offen.length === 1 ? "1 Anfrage ist" : `${offen.length} Anfragen sind`;
+  const text = `Erinnerung: ${zahl} seit über einem Tag offen, davon ${ungelesen} ungelesen. Bitte in der Redaktion unter «Kontaktaufnahme» ansehen und Beantwortetes mit «Erledigt» abschliessen.`;
+  if ((await senden(text)) !== "gesendet") return false;
+  await fs.writeFile(file, `${JSON.stringify({ tag })}\n`, "utf8");
+  return true;
+}
+
 /** Alle gespeicherten Anfragen, die neueste zuerst. Für die Redaktion. */
 export async function listAnfragen(): Promise<(Omit<Anfrage, "ip"> & { id: string; status: AnfrageStatus; seit?: string; loeschtAm: string })[]> {
   const names = await fs.readdir(anfragenDir()).catch(() => [] as string[]);

@@ -84,6 +84,8 @@ body {
 main { flex: 1 0 auto; }
 
 img { max-width: 100%; height: auto; }
+/* Nur die Wahl des Formats: Das <img> darin liegt im Layout, als stünde es allein. */
+picture { display: contents; }
 
 h1, h2, h3, h4 {
   font-family: var(--serif);
@@ -1064,42 +1066,6 @@ h2[id] { scroll-margin-top: 96px; }
 }
 
 .leer { color: var(--muted); }
-
-/* FAQ */
-
-.frage { margin: 0; border-bottom: 1px solid var(--line); }
-
-.frage:first-of-type { border-top: 1px solid var(--line); }
-
-.frage summary {
-  position: relative;
-  padding: 1.1rem 2.5rem 1.1rem 0;
-  color: var(--ink);
-  font-family: var(--serif);
-  font-size: 1.2rem;
-  line-height: 1.4;
-  list-style: none;
-  cursor: pointer;
-}
-
-.frage summary::-webkit-details-marker { display: none; }
-
-.frage summary::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  right: 4px;
-  width: 9px;
-  height: 9px;
-  border-right: 1.5px solid var(--muted);
-  border-bottom: 1.5px solid var(--muted);
-  transform: translateY(-70%) rotate(45deg);
-  transition: transform 0.2s ease;
-}
-
-.frage[open] summary::after { transform: translateY(-30%) rotate(-135deg); }
-
-.frage .antwort { padding: 0 0 1.2rem; }
 
 /* Kontaktformular */
 

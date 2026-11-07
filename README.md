@@ -8,7 +8,7 @@ Lokal liegt der Inhalt in `dev-content/` (gitignoriert, eigenes Git). Der Server
 npm install
 npm run dev
 npm run typecheck
-npm test   # Zugang, Herkunft, Bilder, Vorlagen, Verzeichnis
+npm test   # Zugang, Herkunft, Bilder, Vorlagen, Verzeichnis, Anfragen, Sitemap-Daten
 npm run test:browser   # die Redaktion in Chrome, mit einer Kopie von dev-content
 ```
 
@@ -16,21 +16,21 @@ Die Seite ist dann auf `http://127.0.0.1:4321`, die Redaktion auf `http://127.0.
 
 ## Neu aufsetzen auf dem Mac
 
-Der Code liegt hier auf GitHub, der Inhalt nicht. Wer den Projektordner gelöscht hat, braucht zusätzlich den Inhalt: entweder das Inhalts-Bundle oder einen frischen Stand vom Server.
+Der Code liegt hier auf GitHub, der Inhalt nicht. Wer den Projektordner gelöscht hat, braucht zusätzlich den Inhalt: einen frischen Stand vom Server.
 
 Was wo liegt:
 
 | Was | Wo | Wie zurück |
 |---|---|---|
 | Code | GitHub `schoelgoodman/advocat-heft` | `git clone` |
-| Inhalt (Texte, Bilder, Fassungen) | Server `<appdata>/advocat/content`, Sicherung `advocat-content-full-2026-11-01.bundle` (Stand `9c7e932`, 1.11.2026) | Schritt 3 |
+| Inhalt (Texte, Bilder, Fassungen) | Server `<appdata>/advocat/content` | Schritt 3 |
 | `XAI_API_KEY` | nur beim Betreiber | `.env` von Hand |
 | `site/`, `dist/`, `node_modules/` | wird erzeugt | `npm install`, `npm run dev` |
 | `dev-chat/`, `dev-anfragen/` | nur lokale Testdaten | legt der Server leer neu an |
 
 Die Releases `content-<Datum>` auf GitHub taugen nicht zum Neuaufsetzen: Die Bundles dort sind inkrementell und brauchen einen vorhandenen Inhalt.
 
-1. **Node 24.** Mit Node 26 bricht `tsx` ohne Meldung ab (Exit 134). Auf dem Mac: `brew install node@24`, dann in jeder Shell `export PATH="/opt/homebrew/opt/node@24/bin:$PATH"`. Prüfen mit `node -v` (v24.x).
+1. **Node 24.** Mit Node 26 bricht `tsx` ohne Meldung ab (Exit 134); `package.json` erlaubt darum nur `>=22 <26`. Auf dem Mac: `brew install node@24`, dann in jeder Shell `export PATH="/opt/homebrew/opt/node@24/bin:$PATH"`. Prüfen mit `node -v` (v24.x).
 
 2. **Code holen.**
    ```sh
@@ -38,24 +38,16 @@ Die Releases `content-<Datum>` auf GitHub taugen nicht zum Neuaufsetzen: Die Bun
    cd advocat-heft
    ```
 
-3. **Inhalt nach `dev-content/`.** Eine der beiden Arten:
-
-   - *Aus der Sicherung* (Stand 1.11.2026, ohne spätere Änderungen von Patrick):
-     ```sh
-     git clone /Pfad/zu/advocat-content-full-2026-11-01.bundle dev-content
-     git -C dev-content branch backup-vor-live-2026-11-01 origin/backup-vor-live-2026-11-01
-     git -C dev-content remote remove origin
-     ```
-     Die zweite Zeile behält den Zweig `backup-vor-live-2026-11-01` (drei Fassungen, die nur in diesem Zweig liegen), sonst verschwindet er mit `origin`.
-   - *Frisch vom Server* (empfohlen, wenn Patrick seither etwas gespeichert hat). Auf dem Server, nur lesend, nichts wird angehalten:
-     ```sh
-     git -C <appdata>/advocat/content bundle create /tmp/advocat-live.bundle --all
-     ```
-     Die Datei auf den Mac kopieren (z. B. `scp server:/tmp/advocat-live.bundle ~/`), dann:
-     ```sh
-     git clone ~/advocat-live.bundle dev-content
-     git -C dev-content remote remove origin
-     ```
+3. **Inhalt nach `dev-content/`**, frisch vom Server. Auf dem Server, nur lesend, nichts wird angehalten:
+   ```sh
+   git -C <appdata>/advocat/content bundle create /tmp/advocat-live.bundle --all
+   ```
+   Die Datei auf den Mac kopieren (z. B. `scp server:/tmp/advocat-live.bundle ~/`), dann:
+   ```sh
+   git clone ~/advocat-live.bundle dev-content
+   git -C dev-content remote remove origin
+   ```
+   Ältere Sicherungen nicht verwenden: Ihr Verlauf passt nicht mehr zu dem auf dem Server.
 
    Prüfen: `git -C dev-content log --oneline -3` zeigt die neuesten Fassungen, `ls dev-content` zeigt `briefe kapitel media papierkorb recht`.
 
@@ -76,19 +68,28 @@ Danach den Inhalt wie gewohnt pflegen und neue Fassungen als Bundle an den Serve
 
 ## Suchmaschinen
 
-Jede Seite bekommt Beschreibung, canonical, Open Graph und auf der Startseite bzw. bei Newslettern strukturierte Daten (`src/design/seo.ts`). Die Beschreibung sind die ersten Absätze der Seite; wer sie ändern will, ändert den Anfang des Textes. Der Setzer schreibt `sitemap.xml` und `robots.txt` mit. Die Adresse darin kommt aus `SITE_URL` (Standard `https://advocat-finanz.ch`, auf Neo die Option `siteUrl`). Der Server leitet `/angebot/` auf `/angebot` und alte WordPress-Bilder unter `/wp-content/uploads/…` auf `/media/…` um. Die Redaktion und `/api` tragen `X-Robots-Tag: noindex`.
+Jede Seite bekommt Beschreibung, canonical, Open Graph und auf der Startseite bzw. bei Newslettern strukturierte Daten (`src/design/seo.ts`). Die Beschreibung sind die ersten Absätze der Seite; wer sie ändern will, ändert den Anfang des Textes. Der Setzer schreibt `sitemap.xml` und `robots.txt` mit. Das Datum in der Sitemap kommt aus dem Inhalts-Git: die letzte Fassung, die den Text einer Seite geändert hat. Fassungen über mehr als fünf Seiten sind Umstellungen und zählen nicht; eine feste Seite ohne echte Änderung hat kein Datum. Die Adresse darin kommt aus `SITE_URL` (Standard `https://advocat-finanz.ch`, auf Neo die Option `siteUrl`). Der Server leitet `/angebot/` auf `/angebot` und alte WordPress-Bilder unter `/wp-content/uploads/…` auf `/media/…` um. Die Redaktion und `/api` tragen `X-Robots-Tag: noindex`.
 
 Bilder gehen verkleinert und ohne Metadaten auf die Seite (`src/render/media.ts`, mit sharp): höchstens 2000 px breit, neu komprimiert, unter demselben Namen. Das Original im Inhalt bleibt unverändert. Lädt sharp nicht, gehen die Originale raus und das Log sagt es.
+
+Fotos (JPEG, WebP) bekommen zusätzlich Fassungen in mehreren Breiten unter `media/_klein/`, je als AVIF und als Ersatz WebP oder JPEG, was kleiner ist. Die Seite setzt sie als `<picture>`: Wer AVIF kann, lädt das, alle anderen den Ersatz. `picture { display: contents }` in `heft.css` lässt das `<img>` im Layout stehen, als wäre es allein. Die Fassungen bleiben zwischen den Starts liegen. Der erste Start nach der Umstellung rechnet alle einmal neu, die Seite bleibt dabei online.
 
 ## Kontaktformular
 
 `POST /kontakt` legt jede Anfrage als JSON-Datei in `ANFRAGEN_DIR` ab (lokal `dev-anfragen/`, gitignoriert; auf Neo `<appdata>/advocat/anfragen`). Der Dateiname ist die Eingangszeit in UTC. Die Anfragen stehen absichtlich nicht im Inhalts-Git.
 
-Sind `TELEGRAM_BOT_TOKEN` und `TELEGRAM_CHAT_ID` gesetzt, schickt der Server jede Anfrage zusätzlich als Telegram-Nachricht. Auf Neo sind das die Optionen `telegram.botToken` und `telegram.chatId` von Advocat Finanz. Scheitert Telegram, bleibt die Datei trotzdem liegen; das Feld `telegram` in der Datei sagt `gesendet`, `fehler` oder `aus`.
+Sind `TELEGRAM_BOT_TOKEN` und `TELEGRAM_CHAT_ID` gesetzt, meldet der Server jede Anfrage über Telegram, nur den Eingang, ohne Name und Nachricht. Auf Neo sind das die Optionen `telegram.botToken` und `telegram.chatId` von Advocat Finanz. Scheitert Telegram, bleibt die Datei trotzdem liegen; das Feld `telegram` in der Datei sagt `gesendet`, `fehler` oder `aus`.
+
+Damit keine Anfrage unbemerkt bleibt, schaut die Seite alle fünf Minuten nach (`meldeNachtraeglich`, `erinnereAnOffene`):
+
+- **Nachholen:** Steht bei einer ungelesenen Anfrage `fehler`, versucht sie die Meldung erneut, eine Nachricht für alle.
+- **Erinnern:** Ist eine Anfrage seit über 24 Stunden nicht erledigt, kommt Montag bis Freitag zwischen 8 und 18 Uhr (Zeitzone des Containers) höchstens eine Erinnerung am Tag, nur mit der Zahl. Sie hört auf, wenn die Anfrage in der Redaktion auf «Erledigt» steht. Den letzten Tag merkt sich `_erinnerung.json` im selben Ordner.
+
+Ohne Telegram (`aus`) fällt beides weg. Ist der Bot dauerhaft kaputt, steht es nur im Log (`Telegram: …`).
 
 Die Chat-ID findet man so: dem Bot eine Nachricht schreiben, dann `https://api.telegram.org/bot<TOKEN>/getUpdates` öffnen und `message.chat.id` ablesen. Für eine Gruppe den Bot hinzufügen, dort etwas schreiben, gleiche Abfrage (die ID beginnt mit `-`).
 
-Die Redaktion zeigt alle Anfragen unter „Kontaktaufnahme“ (`GET /api/anfragen`, neueste zuerst). Auf Neo bindet der Container `advocat-redaktion` den Ordner dafür nur lesend ein.
+Die Redaktion zeigt alle Anfragen unter „Kontaktaufnahme“ (`GET /api/anfragen`, neueste zuerst). Auf Neo bindet der Container `advocat-redaktion` den Ordner beschreibbar ein: Den Stand der Anfragen schreibt er selbst nach `_status.json`, die Anfragen selbst schreibt nur die Seite.
 
 ## Assistent
 
@@ -124,9 +125,7 @@ Die öffentliche Seite heisst `advocat.<domain>`. Die Redaktion ist ein eigener 
 
 Der eigene Dienst ist nötig, weil SWAG Zertifikate nur für die Subdomains der Dienste holt. `redaktion.<domain>` nie als Custom Domain eintragen: Neo leitet Custom Domains auf die öffentliche Seite, dort ist `/redaktion` 404. Eine eigene Domain wie `advocat-finanz.ch` kommt in die Custom Domains von `advocat`.
 
-Eine gespeicherte Änderung erscheint ohne `neo activate`. Ein neuer Newsletter beginnt als Entwurf (`entwurf: true` im Frontmatter); der Setzer lässt ihn aus, bis er in der Redaktion veröffentlicht wird. Beim Veröffentlichen bekommt die Datei das Thema in den Namen, damit die Adresse wie bei den bisherigen Newslettern lautet. Zurücksetzen schreibt die alte Datei zurück und macht einen neuen Commit `Wiederhergestellt: …`.
-
-Die Flake läuft auf Neo (zuletzt `b5552f1`, 4.11.2026).
+Eine gespeicherte Änderung erscheint ohne `neo activate`. Ein neuer Newsletter beginnt als Entwurf (`entwurf: true` im Frontmatter); der Setzer lässt ihn aus, bis er in der Redaktion veröffentlicht wird. Beim Veröffentlichen bekommt die Datei das Thema in den Namen; die Adresse bleibt `/newsletter-<Nummer>`, frühere Adressen mit Thema leiten dorthin weiter. Zurücksetzen schreibt die alte Datei zurück und macht einen neuen Commit `Wiederhergestellt: …`.
 
 ## Sicherheit
 

@@ -63,8 +63,8 @@ export interface Anschluss {
   /** Öffnet den Newsletter mit diesem Thema, falls es ihn gibt. */
   oeffneNewsletter(thema: string): boolean;
   /**
-   * Die Seite zu einem Verweis des Assistenten: Dateipfad («kapitel/faq.md»), «newsletter-36»,
-   * Adresse («/faq») oder «offen». Ein String ist der Grund, warum es keine eindeutige gibt.
+   * Die Seite zu einem Verweis des Assistenten: Dateipfad («kapitel/ueber-uns.md»), «newsletter-36»,
+   * Adresse («/ueber-uns») oder «offen». Ein String ist der Grund, warum es keine eindeutige gibt.
    */
   seite(verweis: string): SeiteKurz | string;
   /** Wie die Redaktion aus einer Eingabe eine Adresse macht, ohne Schrägstrich. */

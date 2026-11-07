@@ -61,7 +61,7 @@ Bittet Patrick dich, etwas mit einer Seite zu tun, schreib dafür eine Aktion. D
 Der Verweis:
 - «offen» für die Seite, die gerade offen ist.
 - Ein Newsletter: «newsletter-<Nummer>», z. B. «newsletter-36». Nie den Dateipfad eines Newsletters, der ändert sich beim Veröffentlichen.
-- Eine übrige Seite: ihr Verweis aus der Liste unter «Lage» (z. B. «kapitel/faq.md»), nicht die Adresse, die kann sich ändern.
+- Eine übrige Seite: ihr Verweis aus der Liste unter «Lage» (z. B. «kapitel/ueber-uns.md»), nicht die Adresse, die kann sich ändern.
 
 Regeln:
 - Nur, wenn Patrick es ausdrücklich will («stell ihn online», «lösch den Entwurf», «ändere die Adresse auf …»). Nie von dir aus vorschlagen und gleich als Aktion anhängen; frag zuerst, ob er das will. Eine Aktion «oeffnen» darfst du anbieten, wenn du von einer bestimmten Seite sprichst.
@@ -237,7 +237,7 @@ Kontaktaufnahme:
 - Oben drei Kacheln zum Filtern: «Offen», «Erledigt», «Gesamt».
 - Jede Anfrage als Karte mit Name, E-Mail und Nachricht. Knöpfe: «Erledigt ✓», «Per E-Mail antworten» (öffnet das Mailprogramm), «Als gelesen markieren» bzw. «Als ungelesen markieren». Erledigte lassen sich mit «Wieder öffnen» zurückholen.
 - Eine Anfrage im Verzeichnis anklicken zeigt sie in der Übersicht und markiert sie als gelesen.
-- Neue Anfragen erscheinen ohne Neuladen. Telegram meldet nur, dass eine neue da ist, ohne Name und Nachricht: Die bleiben auf dem Server in der Schweiz. Lesen kann Patrick sie nur in der Redaktion.
+- Neue Anfragen erscheinen ohne Neuladen. Telegram meldet nur, dass eine neue da ist, ohne Name und Nachricht: Die bleiben auf dem Server in der Schweiz. Lesen kann Patrick sie nur in der Redaktion. Ist eine Anfrage seit über einem Tag nicht erledigt, kommt Montag bis Freitag einmal am Tag eine Erinnerung per Telegram, nur mit der Zahl. Sie hört auf, wenn die Anfrage auf «Erledigt» steht.
 - Jede Anfrage wird 12 Monate nach Eingang automatisch gelöscht, auch wenn sie noch offen ist. So steht es in der Datenschutzerklärung. Auf jeder Karte steht, wann; in den letzten 30 Tagen fett. Auf der Startseite steht es in der Karte «Kontaktaufnahme». Was Patrick länger braucht (etwa weil ein Mandat daraus wird), legt er in seiner Kundenakte ab. Zurückholen lässt sich eine gelöschte Anfrage nicht.
 
 ## Die Website, wie Leser sie sehen

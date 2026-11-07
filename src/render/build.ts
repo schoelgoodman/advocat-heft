@@ -5,7 +5,8 @@ import { briefsNewestFirst, loadDocuments } from "../content/load.ts";
 import { excerptFromMarkdown, minutesFromMarkdown, renderDocument, type PageView, type Teaser } from "../design/layout.ts";
 import { pageShell } from "../design/page.ts";
 import { renderSeite } from "../design/seiten.ts";
-import { robotsTxt, sitemapXml, type SitemapEntry } from "../design/seo.ts";
+import { robotsTxt, sitemapDatum, sitemapXml, type SitemapEntry } from "../design/seo.ts";
+import { letzteAenderungen } from "../git/history.ts";
 import { schreibeAtomar } from "../content/atomar.ts";
 import { repoRoot, siteDir, contentDir } from "../paths.ts";
 import { markdownToHtml } from "./crepe.ts";
@@ -117,12 +118,15 @@ async function writeDocument(site: string, doc: ContentDocument, teasers: Teaser
 async function writeIndexFiles(site: string, docs: ContentDocument[]): Promise<void> {
   const briefs = briefsNewestFirst(docs);
   const newest = briefs[0]?.datum ?? "";
+  // Ohne Inhalts-Git (Tests, ein frischer Ordner) bleibt das, was sich ohne Git sagen lässt.
+  const geaendert = await letzteAenderungen().catch((error: unknown) => {
+    console.error("Sitemap ohne Änderungsdaten:", error instanceof Error ? error.message : error);
+    return new Map<string, string>();
+  });
   const entries: SitemapEntry[] = [];
   for (const doc of docs) {
     const href = publicPath(doc.rel);
-    // Start und Archiv ändern sich mit jedem neuen Newsletter.
-    const lastmod = doc.rel === "kapitel/willkommen.md" || doc.rel === "kapitel/neuigkeiten.md" ? newest : doc.datum;
-    entries.push({ href, lastmod });
+    entries.push({ href, lastmod: sitemapDatum(doc, geaendert.get(doc.rel) ?? "", newest) });
     if (doc.rel === "kapitel/neuigkeiten.md") {
       const pages = Math.ceil(briefs.length / 10);
       for (let page = 2; page <= pages; page += 1) entries.push({ href: `${href}/page/${page}`, lastmod: "" });

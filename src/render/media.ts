@@ -46,12 +46,13 @@ async function shrink(data: Buffer, ext: string): Promise<Buffer | null> {
 }
 
 /**
- * Fotos bekommen Fassungen in mehreren Breiten; der Browser nimmt die passende. Je Breite
- * WebP oder JPEG, was kleiner ist: bei feiner Rinde gewinnt oft JPEG.
+ * Fotos bekommen Fassungen in mehreren Breiten; der Browser nimmt die passende. Je Breite AVIF
+ * (rund ein Drittel kleiner) und als Ersatz für ältere Browser WebP oder JPEG, was kleiner ist:
+ * bei feiner Rinde gewinnt oft JPEG.
  */
 const VARIANT_WIDTHS = [480, 800, 1200, 1600, 2000];
 const VARIANT_SOURCES = new Set([".jpg", ".jpeg", ".webp"]);
-/** Unter `media/`, getrennt vom Inhalt: `<Name>@<Breite>.webp` bzw. `.jpg`. */
+/** Unter `media/`, getrennt vom Inhalt: `<Name>@<Breite>.avif` und `.webp` bzw. `.jpg`. */
 export const VARIANT_DIR = "_klein";
 
 /** Die Fassungen bleiben zwischen den Starts liegen; neu nur, wenn das Bild neuer ist. */
@@ -60,6 +61,8 @@ async function variantsCurrent(from: string, to: string): Promise<boolean> {
   const prefix = `${path.basename(to)}@`;
   const names = (await fs.readdir(dir).catch(() => [] as string[])).filter((name) => name.startsWith(prefix));
   if (!names.length) return false;
+  // Fassungen von vor AVIF: einmal neu rechnen.
+  if (!names.some((name) => name.endsWith(".avif"))) return false;
   const source = (await fs.stat(from)).mtimeMs;
   for (const name of names) {
     if ((await fs.stat(path.join(dir, name))).mtimeMs < source) return false;
@@ -79,10 +82,7 @@ async function writeVariants(data: Buffer, ext: string, to: string): Promise<voi
   if (width <= MAX_WIDTH) widths.push(width);
   const dir = path.join(path.dirname(to), VARIANT_DIR);
   await fs.mkdir(dir, { recursive: true });
-  // Alte Breiten weg, falls das Bild jetzt schmaler ist.
-  for (const name of await fs.readdir(dir)) {
-    if (name.startsWith(`${path.basename(to)}@`)) await fs.rm(path.join(dir, name), { force: true });
-  }
+  const neu = new Set<string>();
   for (const w of widths) {
     const resized = sharp(data, { failOn: "none" }).rotate().resize({ width: w });
     const [webp, jpeg] = await Promise.all([
@@ -90,7 +90,21 @@ async function writeVariants(data: Buffer, ext: string, to: string): Promise<voi
       resized.clone().jpeg({ quality: 70, progressive: true, mozjpeg: true }).toBuffer(),
     ]);
     const [out, ext] = webp.length <= jpeg.length ? [webp, "webp"] : [jpeg, "jpg"];
-    await fs.writeFile(path.join(dir, `${path.basename(to)}@${w}.${ext}`), out);
+    const stamm = `${path.basename(to)}@${w}`;
+    await fs.writeFile(path.join(dir, `${stamm}.${ext}`), out);
+    neu.add(`${stamm}.${ext}`);
+    // Scheitert AVIF, bleibt der Ersatz: Die Seite zeigt das Bild trotzdem.
+    try {
+      await fs.writeFile(path.join(dir, `${stamm}.avif`), await resized.clone().avif({ quality: 50, effort: 4 }).toBuffer());
+      neu.add(`${stamm}.avif`);
+    } catch (error) {
+      console.error(`Bild ${stamm} ohne AVIF:`, error instanceof Error ? error.message : error);
+    }
+  }
+  // Erst jetzt weg, was nicht mehr gilt (alte Breiten, das andere Format). Die Seite von vorhin zeigt
+  // auf diese Dateien; sie fehlen also nie, während ein Bild neu gerechnet wird.
+  for (const name of await fs.readdir(dir)) {
+    if (name.startsWith(`${path.basename(to)}@`) && !neu.has(name)) await fs.rm(path.join(dir, name), { force: true });
   }
 }
 
@@ -108,13 +122,22 @@ export interface Variant {
   width: number;
 }
 
-let manifest: { stamp: number; byName: Map<string, Variant[]> } | null = null;
+let manifest: { stamp: number; byName: Map<string, Variant[]>; avifByName: Map<string, Variant[]> } | null = null;
 
 /**
  * Die Fassungen zu einem Bild unter /media/, schmalste zuerst. Leer, wenn es keine gibt
  * (kein Foto, sharp fehlt, oder noch nicht geschrieben); dann bleibt das Original allein.
  */
 export function mediaVariants(src: string): Variant[] {
+  return leseFassungen(src, "byName");
+}
+
+/** Dasselbe in AVIF. Nur für `<source type="image/avif">`: Ältere Browser können es nicht. */
+export function mediaVariantsAvif(src: string): Variant[] {
+  return leseFassungen(src, "avifByName");
+}
+
+function leseFassungen(src: string, art: "byName" | "avifByName"): Variant[] {
   const match = /^\/media\/([^/?#]+)$/.exec(src);
   if (!match) return [];
   const dir = path.join(siteDir(), "media", VARIANT_DIR);
@@ -126,19 +149,21 @@ export function mediaVariants(src: string): Variant[] {
   }
   if (!manifest || manifest.stamp !== stamp) {
     const byName = new Map<string, Variant[]>();
+    const avifByName = new Map<string, Variant[]>();
     for (const file of readdirSync(dir)) {
       const at = file.lastIndexOf("@");
-      const width = Number(file.slice(at + 1).replace(/\.(webp|jpg)$/, ""));
+      const width = Number(file.slice(at + 1).replace(/\.(avif|webp|jpg)$/, ""));
       if (at < 1 || !width) continue;
       const name = file.slice(0, at);
-      const list = byName.get(name) ?? [];
+      const ziel = file.endsWith(".avif") ? avifByName : byName;
+      const list = ziel.get(name) ?? [];
       list.push({ url: `/media/${VARIANT_DIR}/${encodeURIComponent(file).replaceAll("%40", "@")}`, width });
-      byName.set(name, list);
+      ziel.set(name, list);
     }
-    for (const list of byName.values()) list.sort((a, b) => a.width - b.width);
-    manifest = { stamp, byName };
+    for (const list of [...byName.values(), ...avifByName.values()]) list.sort((a, b) => a.width - b.width);
+    manifest = { stamp, byName, avifByName };
   }
-  return manifest.byName.get(decodeURIComponent(match[1])) ?? [];
+  return manifest[art].get(decodeURIComponent(match[1])) ?? [];
 }
 
 /** Schreibt das Bild verkleinert nach `to`, oder unverändert, wenn das nichts bringt. */

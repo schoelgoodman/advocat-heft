@@ -61,6 +61,19 @@ export function organization(): Record<string, unknown> {
   };
 }
 
+/**
+ * Das Datum einer Seite in der Sitemap. Google traut ihm nur, wenn es stimmt. Das `datum` im Kopf
+ * sagt bei Newslettern, wann sie erschienen sind; bei festen Seiten sagt es nichts und ändert sich
+ * nie. Darum dort nur eine belegte Änderung, sonst gar kein Datum. Startseite und Neuigkeiten
+ * zeigen die neuesten Newsletter und ändern sich auch mit ihnen.
+ */
+export function sitemapDatum(doc: { rel: string; art: string; datum: string }, geaendert: string, neuesterBrief: string): string {
+  const kandidaten = [geaendert];
+  if (doc.art === "brief") kandidaten.push(doc.datum);
+  if (doc.rel === "kapitel/willkommen.md" || doc.rel === "kapitel/neuigkeiten.md") kandidaten.push(neuesterBrief);
+  return kandidaten.filter((tag) => /^\d{4}-\d{2}-\d{2}$/.test(tag)).sort().at(-1) ?? "";
+}
+
 export interface SitemapEntry {
   href: string;
   /** ISO-Datum oder leer. */
