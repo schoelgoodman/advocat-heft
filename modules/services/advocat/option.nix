@@ -1,4 +1,4 @@
-# Advocat-Heft: öffentliche Seite und Redaktion, ein Container.
+# Advocat-Heft: die öffentliche Seite. Die Redaktion ist der eigene Dienst advocat-redaktion.
 {withSystem, ...}: {
   flake.modules.nixos.advocat-option = {
     config,

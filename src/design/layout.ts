@@ -1,6 +1,6 @@
 import { Window } from "happy-dom";
 import { publicPath, type Art } from "../content/document.ts";
-import { mediaSize, mediaVariants } from "../render/media.ts";
+import { mediaSize, mediaVariants, mediaVariantsAvif } from "../render/media.ts";
 import { clip, DEFAULT_DESCRIPTION, DEFAULT_IMAGE } from "./seo.ts";
 
 export interface Teaser {
@@ -215,12 +215,19 @@ function srcset(src: string): string {
   return mediaVariants(src).map((variant) => `${variant.url} ${variant.width}w`).join(", ");
 }
 
+/** Dasselbe in AVIF, für `<source>`. Wer AVIF nicht kann, nimmt das `srcset` am <img>. */
+function avifSrcset(src: string): string {
+  return mediaVariantsAvif(src).map((variant) => `${variant.url} ${variant.width}w`).join(", ");
+}
+
 /** Ein Hintergrundbild als echtes <img>, damit der Browser die passende Grösse wählt. */
 export function coverImage(className: string, src: string, sizes: string, eager: boolean): string {
   const set = srcset(src);
   const responsive = set ? ` srcset="${esc(set)}" sizes="${sizes}"` : "";
   const loading = eager ? ` fetchpriority="high"` : ` loading="lazy" decoding="async"`;
-  return `<img class="${className}" src="${esc(src)}"${responsive} alt=""${loading}>`;
+  const bild = `<img class="${className}" src="${esc(src)}"${responsive} alt=""${loading}>`;
+  const avif = avifSrcset(src);
+  return avif ? `<picture><source type="image/avif" srcset="${esc(avif)}" sizes="${sizes}">${bild}</picture>` : bild;
 }
 
 /** Ein Eintrag im Archiv. site.js baut Suchtreffer gleich auf; wer hier etwas ändert, ändert dort mit. */
@@ -436,6 +443,17 @@ export function bilderAufbereiten(root: HTMLElement): void {
     if (set) {
       image.setAttribute("srcset", set);
       image.setAttribute("sizes", SIZES_PROSA);
+    }
+    const avif = avifSrcset(image.getAttribute("src") ?? "");
+    if (avif) {
+      const doc = image.ownerDocument;
+      const picture = doc.createElement("picture");
+      const source = doc.createElement("source");
+      source.setAttribute("type", "image/avif");
+      source.setAttribute("srcset", avif);
+      source.setAttribute("sizes", SIZES_PROSA);
+      image.replaceWith(picture);
+      picture.append(source, image);
     }
   }
 }

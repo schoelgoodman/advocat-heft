@@ -82,6 +82,36 @@ export async function logFile(rel: string): Promise<Revision[]> {
     .filter((item) => item.rev);
 }
 
+/** Ab so vielen Seiten in einer Fassung ist es eine Umstellung (Übernahme, Felder), keine Änderung am Text. */
+const SEITEN_EINER_UMSTELLUNG = 5;
+
+/** Aus `git log --format=%x1e%as --name-only`, die neueste Fassung zuerst: der letzte Tag je Seite. */
+export function letzteTage(log: string): Map<string, string> {
+  const tage = new Map<string, string>();
+  for (const eintrag of log.split("\x1e")) {
+    const [tag = "", ...zeilen] = eintrag.split("\n").map((zeile) => zeile.trim()).filter(Boolean);
+    const seiten = zeilen.filter((zeile) => zeile.endsWith(".md"));
+    if (seiten.length > SEITEN_EINER_UMSTELLUNG) continue;
+    for (const seite of seiten) if (!tage.has(seite)) tage.set(seite, tag);
+  }
+  return tage;
+}
+
+/**
+ * Wann der Text jeder Seite zuletzt geändert wurde, für die Sitemap. Ohne Umstellungen: Eine neue
+ * Bildbeschreibung in 31 Newslettern macht sie nicht neu. Noch nicht als Fassung Gespeichertes zählt
+ * als heute (die Fassung kommt erst nach 20 Sekunden). Nur lesen: Die Seite sieht den Inhalt read-only.
+ */
+export async function letzteAenderungen(heute = new Date().toISOString().slice(0, 10)): Promise<Map<string, string>> {
+  const tage = letzteTage(await git().raw(["log", "--format=%x1e%as", "--name-only"]));
+  const stand = await git().raw(["--no-optional-locks", "status", "--porcelain", "--no-renames", "--", "briefe", "kapitel", "recht"]);
+  for (const zeile of stand.split("\n")) {
+    const pfad = zeile.slice(3).trim();
+    if (pfad.endsWith(".md")) tage.set(pfad, heute);
+  }
+  return tage;
+}
+
 export async function showFile(rel: string, rev: string): Promise<string> {
   if (!/^[0-9a-f]{7,40}$/i.test(rev)) throw new Error("Ungültige Fassung");
   if (rel.includes("..") || path.isAbsolute(rel)) throw new Error("Ungültiger Pfad");

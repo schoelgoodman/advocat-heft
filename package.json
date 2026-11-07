@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Setzer und Redaktion für Advocat Finanz. Markdown liegt ausserhalb dieses Repos.",
   "engines": {
-    "node": ">=22"
+    "node": ">=22 <26"
   },
   "scripts": {
     "import": "tsx scripts/import-wordpress.ts",

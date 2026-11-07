@@ -146,8 +146,9 @@
     button.type = "button";
     button.className = "bild-zoom";
     button.setAttribute("aria-label", "Bild vergrössern" + (image.alt ? ": " + image.alt : ""));
-    image.replaceWith(button);
-    button.appendChild(image);
+    var bild = image.closest("picture") || image;
+    bild.replaceWith(button);
+    button.appendChild(bild);
     button.addEventListener("click", function () {
       openZoom(image);
     });
