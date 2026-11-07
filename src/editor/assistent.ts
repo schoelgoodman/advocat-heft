@@ -22,7 +22,7 @@ export interface SeiteKurz {
 }
 
 export interface Lage {
-  ansicht: "start" | "anfragen" | "briefe" | "wuensche" | "medien" | "verlauf" | "blatt";
+  ansicht: "start" | "anfragen" | "briefe" | "wuensche" | "allgemein" | "medien" | "verlauf" | "blatt";
   rel?: string;
   art?: string;
   titel?: string;

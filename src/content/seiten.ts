@@ -62,13 +62,14 @@ export interface UeberUnsFelder {
   partner: { titel: string; firmen: { name: string; untertitel: string; text: string; logo: Bild; link: string }[] };
   band: Band;
 }
+/** Adresse, E-Mail und Telefon selbst kommen aus den allgemeinen Angaben (allgemein.ts). */
 export interface KontaktFelder {
   bild: Bild;
   einstieg: { titel: string; text: string };
   standort: { titel: string; text: string };
-  adresse: { titel: string; zeilen: string };
-  email: { titel: string; wert: string };
-  telefon: { titel: string; wert: string };
+  adresse: { titel: string };
+  email: { titel: string };
+  telefon: { titel: string };
   karte: string;
 }
 export interface NeuigkeitenFelder {
@@ -428,11 +429,8 @@ const kontakt = {
       titelZeile(a.standort.titel),
       a.standort.text,
       titelZeile(a.adresse.titel),
-      a.adresse.zeilen,
       titelZeile(a.email.titel),
-      a.email.wert,
       titelZeile(a.telefon.titel),
-      a.telefon.wert,
       `[Karte](${a.karte})`,
     ]);
   },
@@ -447,20 +445,12 @@ const kontakt = {
     };
     const einstieg = paar();
     const standort = paar();
-    const adresse = paar();
-    const email = paar();
-    const telefon = paar();
+    const adresse = l.titel();
+    const email = l.titel();
+    const telefon = l.titel();
     const karte = l.knopf();
     if (!einstieg || !standort || !adresse || !email || !telefon || !karte || l.rest) return null;
-    return {
-      bild,
-      einstieg,
-      standort,
-      adresse: { titel: adresse.titel, zeilen: adresse.text },
-      email: { titel: email.titel, wert: email.text },
-      telefon: { titel: telefon.titel, wert: telefon.text },
-      karte: karte.ziel,
-    };
+    return { bild, einstieg, standort, adresse: { titel: adresse }, email: { titel: email }, telefon: { titel: telefon }, karte: karte.ziel };
   },
   pruefe(a: KontaktFelder, fehler: Fehler): void {
     pflicht(fehler, "einstieg.titel", a.einstieg.titel, "Bitte eine Überschrift eingeben.");
@@ -469,11 +459,8 @@ const kontakt = {
     pflicht(fehler, "standort.titel", a.standort.titel, "Bitte einen Titel eingeben.");
     pflicht(fehler, "standort.text", a.standort.text, "Bitte einen Text eingeben.");
     pflicht(fehler, "adresse.titel", a.adresse.titel, "Bitte einen Titel eingeben.");
-    pflicht(fehler, "adresse.zeilen", a.adresse.zeilen, "Bitte die Adresse eingeben.");
     pflicht(fehler, "email.titel", a.email.titel, "Bitte einen Titel eingeben.");
-    if (!/^\S+@\S+\.\S+$/.test(a.email.wert.trim())) fehler["email.wert"] = "Bitte eine gültige E-Mail-Adresse eingeben.";
     pflicht(fehler, "telefon.titel", a.telefon.titel, "Bitte einen Titel eingeben.");
-    pflicht(fehler, "telefon.wert", a.telefon.wert, "Bitte eine Telefonnummer eingeben.");
   },
 };
 
@@ -589,14 +576,28 @@ export function pruefeFelder(vorlage: Vorlage, seitenTitel: string, felder: Feld
   return fehler;
 }
 
-/** Eine neue Seite: alles, was es zum Veröffentlichen braucht, mit dem Bild, das schon da ist. */
-export function neueSeite(bild: string): AbschnitteFelder {
+/**
+ * Eine neue Seite: alles, was es zum Veröffentlichen braucht, mit dem Bild, das schon da ist.
+ * `band`: Titel und Satz des Kontakts am Schluss aus den allgemeinen Angaben.
+ */
+export function neueSeite(bild: string, band: { titel: string; text: string } = STANDARD_BAND): AbschnitteFelder {
   return {
     bild: { src: bild, alt: "" },
     einstieg: { titel: "Worum es geht", text: "", knopf: { text: "Kontaktieren Sie uns", ziel: "/kontakt" } },
     abschnitte: [],
-    band: structuredClone(STANDARD_BAND),
+    band: { titel: band.titel, text: band.text, knopf: structuredClone(STANDARD_BAND.knopf) },
   };
+}
+
+/**
+ * Felder aus einer Datei, wie die Vorlage sie heute hat. Die Kontaktseite hatte früher Adresse,
+ * E-Mail und Telefon selbst; die stehen jetzt in den allgemeinen Angaben, übrig bleiben die Titel.
+ */
+export function bereinigeFelder(vorlage: Vorlage, felder: Felder): Felder {
+  if (vorlage !== "kontakt") return felder;
+  const k = felder as KontaktFelder;
+  const titel = (teil: { titel?: unknown } | undefined) => ({ titel: typeof teil?.titel === "string" ? teil.titel : "" });
+  return { ...k, adresse: titel(k.adresse), email: titel(k.email), telefon: titel(k.telefon) };
 }
 
 /** Die Textstücke einer Seite ohne Markdown, wie der Fassungsvergleich sie braucht. */

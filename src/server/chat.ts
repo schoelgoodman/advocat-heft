@@ -1,7 +1,8 @@
 import fs from "node:fs/promises";
 import type http from "node:http";
 import path from "node:path";
-import { briefsNewestFirst, loadDocuments } from "../content/load.ts";
+import { adressZeilen } from "../content/allgemein.ts";
+import { briefsNewestFirst, leseAllgemein, loadDocuments } from "../content/load.ts";
 import { mitFeldern, publicPath, textVon, type ContentDocument } from "../content/document.ts";
 import { ausText, istVorlage, type Vorlage } from "../content/seiten.ts";
 import { absoluteUrl, DEFAULT_DESCRIPTION } from "../design/seo.ts";
@@ -53,7 +54,7 @@ export interface Nachricht {
 
 /** Was Patrick gerade vor sich hat. Kommt vom Browser, weil ungespeicherte Änderungen zählen. */
 export interface Lage {
-  ansicht: "start" | "anfragen" | "briefe" | "wuensche" | "medien" | "verlauf" | "blatt";
+  ansicht: "start" | "anfragen" | "briefe" | "wuensche" | "allgemein" | "medien" | "verlauf" | "blatt";
   rel?: string;
   art?: ContentDocument["art"];
   titel?: string;
@@ -103,7 +104,7 @@ function text(value: unknown, max: number): string {
 
 function cleanLage(value: unknown): Lage {
   const raw = (value ?? {}) as Record<string, unknown>;
-  const ansicht = ["blatt", "anfragen", "briefe", "wuensche", "medien", "verlauf"].includes(String(raw.ansicht)) ? (raw.ansicht as Lage["ansicht"]) : "start";
+  const ansicht = ["blatt", "anfragen", "briefe", "wuensche", "allgemein", "medien", "verlauf"].includes(String(raw.ansicht)) ? (raw.ansicht as Lage["ansicht"]) : "start";
   if (ansicht !== "blatt") return { ansicht };
   return {
     ansicht,
@@ -173,6 +174,7 @@ async function lageText(lage: Lage, frage: string): Promise<string> {
   if (lage.ansicht === "anfragen") teile.push("Patrick ist in der Kontaktaufnahme. Keine Seite ist offen.");
   if (lage.ansicht === "briefe") teile.push("Patrick ist in der Übersicht aller Newsletter. Keine Seite ist offen.");
   if (lage.ansicht === "wuensche") teile.push("Patrick ist auf der Seite «Support». Keine Seite ist offen.");
+  if (lage.ansicht === "allgemein") teile.push("Patrick ist unter «Allgemein». Keine Seite ist offen.");
   if (lage.ansicht === "medien") teile.push("Patrick ist unter «Medien». Keine Seite ist offen.");
   if (lage.ansicht === "verlauf") teile.push("Patrick ist im «Verlauf». Keine Seite ist offen.");
   if (lage.ansicht === "blatt") {
@@ -207,6 +209,18 @@ async function lageText(lage: Lage, frage: string): Promise<string> {
         .join("\n")}`,
     );
   }
+
+  // Fuss, Kontaktseite und Band zeigen sie, im Text der Kontaktseite stehen sie nicht mehr.
+  const a = await leseAllgemein();
+  teile.push([
+    "# Die allgemeinen Angaben heute (Verwaltung, Allgemein)",
+    `- Adresse: ${adressZeilen(a).join(", ")}`,
+    `- Telefon: ${a.telefon}`,
+    `- E-Mail: ${a.email}`,
+    `- Link zu Google Maps: ${a.karte || "keiner"}`,
+    `- UID: ${a.uid || "leer"}; Handelsregister-Nr.: ${a.handelsregister || "leer"}; MWST-Nr.: ${a.mwst || "leer"}; Gerichtsstand: ${a.gerichtsstand || "leer"}; Vertreten durch: ${a.vertreten || "leer"}`,
+    `- Kontakt am Schluss der Newsletter: «${a.band.titel}» / «${a.band.text}»`,
+  ].join("\n"));
 
   teile.push(`# Was Patrick an den Support geschickt hat, das neueste zuerst\n${await wuenscheText()}`);
 

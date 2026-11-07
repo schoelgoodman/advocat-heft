@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { ALLGEMEIN_DATEI, ALLGEMEIN_GRUND, allgemeinAus, merkeAllgemein, type Allgemein } from "./allgemein.ts";
 import { merkeAdressen, parseDocument, publicPath, type ContentDocument } from "./document.ts";
 import { schreibeAtomar } from "./atomar.ts";
 import { MENUE_DATEI } from "./menue.ts";
@@ -67,10 +68,24 @@ export async function schreibeMenueReihe(reihenfolge: readonly string[]): Promis
   await schreibeAtomar(path.join(contentDir(), MENUE_DATEI), `${JSON.stringify({ reihenfolge }, null, 2)}\n`);
 }
 
-/** Alle Seiten, auch Entwürfe. Frischt nebenbei die Adressen und das Menü auf (siehe merkeAdressen). */
+/** Die allgemeinen Angaben. Fehlt die Datei oder ist sie kaputt: die Vorgabe. */
+export async function leseAllgemein(): Promise<Allgemein> {
+  try {
+    return allgemeinAus(JSON.parse(await fs.readFile(path.join(contentDir(), ALLGEMEIN_DATEI), "utf8")));
+  } catch {
+    return ALLGEMEIN_GRUND;
+  }
+}
+
+export async function schreibeAllgemein(angaben: Allgemein): Promise<void> {
+  await schreibeAtomar(path.join(contentDir(), ALLGEMEIN_DATEI), `${JSON.stringify(angaben, null, 2)}\n`);
+}
+
+/** Alle Seiten, auch Entwürfe. Frischt nebenbei Adressen, Menü und allgemeine Angaben auf (siehe merkeAdressen). */
 export async function loadDocuments(): Promise<ContentDocument[]> {
   const docs = await loadFrom("");
   merkeAdressen(docs, await leseMenueReihe());
+  merkeAllgemein(await leseAllgemein());
   return docs;
 }
 

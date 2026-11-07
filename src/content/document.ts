@@ -1,7 +1,7 @@
 import path from "node:path";
 import YAML from "yaml";
 import { ANGEBOT, FESTE_ANGEBOTE, FESTE_NAMEN, istFesteMenueSeite, KONTAKT, menueBezeichnung, menueOrt, menueReihe, type MenueOrt } from "./menue.ts";
-import { alsText, ausText, istVorlage, VORLAGE_VON, type Felder, type Vorlage } from "./seiten.ts";
+import { alsText, ausText, bereinigeFelder, istVorlage, VORLAGE_VON, type Felder, type Vorlage } from "./seiten.ts";
 
 export type Art = "brief" | "kapitel" | "recht";
 
@@ -86,7 +86,7 @@ export function parseDocument(raw: string, rel: string): ContentDocument {
   const nummerRaw = fields.get("nummer");
   const nummer = nummerRaw && nummerRaw !== '""' ? Number(nummerRaw) : null;
   const vorlage = unquote(fields.get("vorlage") ?? "");
-  const felder = kopf.length > 1 && istVorlage(vorlage) ? ((YAML.parse(`felder:${kopf.slice(1).join("felder:")}`) as { felder: Felder }).felder) : null;
+  const felder = kopf.length > 1 && istVorlage(vorlage) ? bereinigeFelder(vorlage, (YAML.parse(`felder:${kopf.slice(1).join("felder:")}`) as { felder: Felder }).felder) : null;
   return mitFeldern({
     rel: rel.replaceAll("\\", "/"),
     datum: unquote(fields.get("datum") ?? ""),

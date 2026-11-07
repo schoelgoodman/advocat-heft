@@ -1,3 +1,4 @@
+import { adressZeilen, allgemein, telefonLink } from "../content/allgemein.ts";
 import { publicPath, type ContentDocument } from "../content/document.ts";
 import type { AbschnitteFelder, Band, Felder, Karte, Knopf, KontaktFelder, NeuigkeitenFelder, StartFelder, UeberUnsFelder, UebersichtFelder, Vorlage } from "../content/seiten.ts";
 import { angebote, istAngebot } from "./angebote.ts";
@@ -161,14 +162,14 @@ async function setzeKontakt(input: SeitenInput, a: KontaktFelder, html: Html): P
   const anker = ankerGeber([input.titel]);
   const einstieg = titelMitAnker(anker, a.einstieg.titel) + await text(a.einstieg.text);
   const standortText = await text(a.standort.text);
-  const zeilen = a.adresse.zeilen.split("\n").map((zeile) => zeile.trim()).filter(Boolean).map(esc).join("<br>");
-  const mail = a.email.wert.trim();
-  const telefon = a.telefon.wert.trim();
+  // Adresse, E-Mail und Telefon stehen in den allgemeinen Angaben, hier nur ihre Titel.
+  const angaben = allgemein();
+  const zeilen = adressZeilen(angaben).map(esc).join("<br>");
   const adresse = [
     titelMitAnker(anker, a.standort.titel), standortText,
     titelMitAnker(anker, a.adresse.titel), `<p>${zeilen}</p>`,
-    titelMitAnker(anker, a.email.titel), `<p><a href="mailto:${esc(mail)}">${esc(mail)}</a></p>`,
-    titelMitAnker(anker, a.telefon.titel), `<p><a href="tel:+${telefon.replace(/\D/g, "")}">${esc(telefon)}</a></p>`,
+    titelMitAnker(anker, a.email.titel), `<p><a href="mailto:${esc(angaben.email)}">${esc(angaben.email)}</a></p>`,
+    titelMitAnker(anker, a.telefon.titel), `<p><a href="tel:${esc(telefonLink(angaben.telefon))}">${esc(angaben.telefon)}</a></p>`,
   ].join("");
   const karte = a.karte ? `<div class="karte-voll">${kartePlatzhalter(a.karte)}</div>` : "";
   return {

@@ -8,6 +8,7 @@ import "./redaktion.css";
 import { EINMALIG, klartextBloecke, VORLAGE_VON, vorlageName } from "../content/seiten.ts";
 import type { Art, ContentDocument } from "../content/document.ts";
 import { mountAssistent, type AktionArt, type Lage, type SeiteKurz } from "./assistent.ts";
+import { allgemeinAnsicht } from "./ansichten/allgemein.ts";
 import { medienAnsicht, waehleMedium } from "./ansichten/medien.ts";
 import { bloecke, markiereUnterschiede, norm } from "./ansichten/vergleich.ts";
 import { verlaufAnsicht } from "./ansichten/verlauf.ts";
@@ -175,6 +176,7 @@ root.innerHTML = `
       </details>
       <button type="button" class="leise mehr" id="seite-neu">Neue Seite anlegen</button>
       <p class="kategorie">Verwaltung</p>
+      <button type="button" class="zeile-link" id="allgemein-link">Allgemein</button>
       <details id="wuensche-gruppe">
         <summary><button type="button" class="gruppe-titel" id="wuensche-link">Support</button><span class="zahl" id="wuensche-zahl"></span><span class="marke neu" id="wuensche-neu" hidden>Neu</span></summary>
         <nav id="wuensche-liste"></nav>
@@ -191,6 +193,7 @@ root.innerHTML = `
     </aside>
     <main>
       <div class="setz-warnung" id="setz-warnung" role="alert" hidden></div>
+      <section id="allgemein-seite" hidden></section>
       <section id="medien-seite" hidden></section>
       <section id="verlauf-seite" hidden></section>
       <section id="start">
@@ -348,6 +351,8 @@ const menueNameInput = root.querySelector<HTMLInputElement>("#menue-name")!;
 const menueHinweis = root.querySelector<HTMLElement>("#menue-hinweis")!;
 const menueOrdnen = root.querySelector<HTMLButtonElement>("#menue-ordnen")!;
 const ordnenLeiste = root.querySelector<HTMLElement>("#ordnen-leiste")!;
+const allgemeinSeite = root.querySelector<HTMLElement>("#allgemein-seite")!;
+const allgemeinLink = root.querySelector<HTMLButtonElement>("#allgemein-link")!;
 const medienSeite = root.querySelector<HTMLElement>("#medien-seite")!;
 const verlaufSeite = root.querySelector<HTMLElement>("#verlauf-seite")!;
 const medienLink = root.querySelector<HTMLButtonElement>("#medien-link")!;
@@ -1303,7 +1308,8 @@ function gruss(): string {
 
 /** Von den Ansichten rechts ist immer nur eine sichtbar. */
 function zeigeNur(ansicht: HTMLElement): void {
-  for (const el of [start, form, anfragenSeite, briefeSeite, wuenscheSeite, medienSeite, verlaufSeite]) el.hidden = el !== ansicht;
+  for (const el of [start, form, anfragenSeite, briefeSeite, wuenscheSeite, allgemeinSeite, medienSeite, verlaufSeite]) el.hidden = el !== ansicht;
+  allgemeinLink.toggleAttribute("aria-current", ansicht === allgemeinSeite);
   medienLink.toggleAttribute("aria-current", ansicht === medienSeite);
   verlaufLink.toggleAttribute("aria-current", ansicht === verlaufSeite);
 }
@@ -1567,6 +1573,21 @@ async function saveNow(): Promise<boolean> {
  * Geht das Speichern nicht, entscheidet Patrick, ob die Änderungen verloren gehen dürfen.
  */
 async function flushCommit(): Promise<boolean> {
+  // Die allgemeinen Angaben speichern nur mit «Speichern»: Wer wechselt, entscheidet.
+  if (!allgemeinSeite.hidden && allgemeinVerwaltung.ungespeichert()) {
+    const weg = await ask({
+      titel: "Nicht gespeichert",
+      text: "Die allgemeinen Angaben haben Änderungen, die noch nicht gespeichert sind. Wer jetzt wechselt, verliert sie.",
+      ja: "Trotzdem wechseln",
+      nein: "Hierbleiben",
+      gefahr: true,
+    });
+    if (!weg) {
+      merke("allgemein");
+      return false;
+    }
+    allgemeinVerwaltung.verwirf();
+  }
   // Online-Änderungen und unvollständige Felder lassen sich nicht einfach mitspeichern.
   if (current && (liveUngespeichert || felder?.fehler())) {
     const weg = await ask({
@@ -2555,7 +2576,7 @@ window.addEventListener("pagehide", () => {
   void fetch("/api/commit", { method: "POST", keepalive: true }).catch(() => null);
 });
 window.addEventListener("beforeunload", (event) => {
-  if (saveTimer != null || liveUngespeichert) event.preventDefault();
+  if (saveTimer != null || liveUngespeichert || (!allgemeinSeite.hidden && allgemeinVerwaltung.ungespeichert())) event.preventDefault();
 });
 // Ist die Verbindung zurück, gleich speichern statt auf den nächsten Versuch zu warten.
 window.addEventListener("online", () => {
@@ -2719,12 +2740,26 @@ root.querySelector("#bild-aus-medien")!.addEventListener("click", async () => {
   crepe.editor.action(insert(`\n\n![1](/media/${name})\n\n`));
 });
 
+const allgemeinVerwaltung = allgemeinAnsicht(allgemeinSeite);
 const ladeMedien = medienAnsicht(medienSeite, (rel) => void openPage(rel), uploadImage);
 const ladeVerlauf = verlaufAnsicht(verlaufSeite, {
   frage: ask,
   oeffne: (rel) => void openPage(rel),
   bereit: async () => flushCommit(),
 });
+
+async function showAllgemein(): Promise<void> {
+  // Schon offen: nichts neu laden, sonst wären Änderungen weg.
+  if (!allgemeinSeite.hidden) return;
+  if (!(await flushCommit())) return;
+  current = null;
+  gewaehlt = null;
+  markCurrent();
+  zeigeNur(allgemeinSeite);
+  merke("allgemein");
+  await allgemeinVerwaltung.lade().catch((error: Error) => toast(error.message, undefined, true));
+  nachOben();
+}
 
 async function showMedien(): Promise<void> {
   if (!(await flushCommit())) return;
@@ -2748,7 +2783,11 @@ async function showVerlauf(): Promise<void> {
   nachOben();
 }
 
-// Medien und Verlauf klappen nichts auf: Sie öffnen nur ihre Ansicht.
+// Allgemein, Medien und Verlauf klappen nichts auf: Sie öffnen nur ihre Ansicht.
+allgemeinLink.addEventListener("click", () => {
+  void showAllgemein();
+  zeigeVerzeichnis(false);
+});
 medienLink.addEventListener("click", () => {
   void showMedien();
   zeigeVerzeichnis(false);
@@ -2864,6 +2903,7 @@ function lage(): Lage {
       ansicht: !anfragenSeite.hidden ? "anfragen"
         : !briefeSeite.hidden ? "briefe"
         : !wuenscheSeite.hidden ? "wuensche"
+        : !allgemeinSeite.hidden ? "allgemein"
         : !medienSeite.hidden ? "medien"
         : !verlaufSeite.hidden ? "verlauf"
         : "start",
@@ -3001,6 +3041,7 @@ async function folge(): Promise<void> {
   if (wanted === "anfragen") await showAnfragen();
   else if (wanted === "newsletter") await showBriefe();
   else if (wanted === "wuensche") await showWuensche();
+  else if (wanted === "allgemein") await showAllgemein();
   else if (wanted === "medien") await showMedien();
   else if (wanted === "verlauf") await showVerlauf();
   else if (wanted) await openPage(wanted);

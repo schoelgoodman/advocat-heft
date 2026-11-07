@@ -366,7 +366,7 @@ export function mountSeite(host: HTMLElement, vorlage: Vorlage, start: Felder, a
     zeile("band.titel", "Titel"),
     text("band.text", "Text über dem Knopf", { einfach: true }),
     knopf("band.knopf", "Knopf"),
-    notiz("Telefon und E-Mail neben dem Knopf stehen auf allen Seiten gleich."),
+    notiz("Telefon und E-Mail neben dem Knopf stehen auf allen Seiten gleich. Sie kommen aus «Verwaltung», «Allgemein»."),
   );
   const karten = (pfad: string) => liste(pfad, (p) => [
     zeile(`${p}.titel`, "Titel"),
@@ -448,13 +448,10 @@ export function mountSeite(host: HTMLElement, vorlage: Vorlage, start: Felder, a
       gruppe("Standort", zeile("standort.titel", "Titel"), text("standort.text", "Text", { einfach: true })),
       gruppe(
         "Adresse",
-        zeile("adresse.titel", "Titel"),
-        text("adresse.zeilen", "Adresse, eine Angabe je Zeile", { einfach: true }),
+        notiz("Adresse, E-Mail und Telefon selbst stehen unter «Verwaltung», «Allgemein» und gelten dort für die ganze Website. Hier nur die Titel darüber."),
+        zeile("adresse.titel", "Titel Adresse"),
         zeile("email.titel", "Titel E-Mail"),
-        zeile("email.wert", "E-Mail-Adresse"),
         zeile("telefon.titel", "Titel Telefon"),
-        zeile("telefon.wert", "Telefonnummer", { platzhalter: "+41 71 000 00 00" }),
-        notiz("Der Fuss und der Kontakt am Schluss der anderen Seiten zeigen fest die heutige Adresse, Telefonnummer und E-Mail. Ändern sie sich, bitte an den Support schreiben."),
       ),
       gruppe("Karte", zeile("karte", "Einbettungs-Link von Google Maps", { platzhalter: "https://www.google.com/maps/embed?…" })),
     ],
