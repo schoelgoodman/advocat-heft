@@ -124,18 +124,104 @@ ok("Neue Seite: Felder im Editor", !(await p.$(".milkdown .ProseMirror")) && awa
 const et=await p.$('[data-pfad="einstieg.text"] textarea'); await et.click(); await p.keyboard.type("Wir beraten Familien in allen Fragen rund um Vermögen und Recht, von Anfang an und unabhängig."); await sleep(1300);
 ok("Neue Seite: speichert sich selbst", read(nrel).includes("Wir beraten Familien"));
 await klick("+ Abschnitt"); await sleep(250); const at=await p.$('[data-pfad="abschnitte.0.titel"] input'); await at.type("Beratung"); await klick("+ Punkt"); await sleep(250); await p.keyboard.type("Eine Leistung"); await sleep(1300);
-await p.click("#menue"); await sleep(1200); ok("Menü-Haken gespeichert", read(nrel).includes("menue: true"));
+ok("Neue Seite: von Anfang an fürs Hauptmenü", read(nrel).includes("menue: true"));
+ok("Entwurf steht im Verzeichnis an seinem Platz", (await p.$$eval("#seiten > .eintrag .thema",l=>l.map(x=>x.textContent))).join()==="Home,Unser Angebot,Über uns,Für Familien,Neuigkeiten,Kontakt");
+ok("Entwurf nicht im Menü der Website", !fs.readFileSync(`${site}/kontakt/index.html`,"utf8").includes('href="/fuer-familien"'));
+const mn=await p.$("#menue-name"); await mn.type("Familien"); await sleep(1400); ok("Name im Menü gespeichert", read(nrel).includes('menuename: "Familien"'));
 await p.screenshot({path:`${shots}/neue-seite.png`,fullPage:true});
 await klick("Veröffentlichen"); await sleep(300); await p.click("#frage-ja"); await sleep(3000);
 ok("Neue Seite online", fs.existsSync(`${site}/fuer-familien/index.html`)); const nh=fs.readFileSync(`${site}/fuer-familien/index.html`,"utf8"); ok("Neue Seite: Inhalt, Spalten, Band", nh.includes("Wir beraten Familien")&&nh.includes("spalten-2-1")&&nh.includes('class="band"')&&nh.includes("<h1>Für Familien</h1>"));
-await sleep(1500); ok("Neue Seite im Menü auf anderen Seiten", fs.readFileSync(`${site}/kontakt/index.html`,"utf8").includes('href="/fuer-familien"'));
+await sleep(1500); ok("Neue Seite im Menü auf anderen Seiten", fs.readFileSync(`${site}/kontakt/index.html`,"utf8").includes('<a href="/fuer-familien">Familien</a>'));
 ok("Neue Seite in Sitemap", fs.readFileSync(`${site}/sitemap.xml`,"utf8").includes("/fuer-familien"));
-ok("Verzeichnis: neue Seite im Menü vor Neuigkeiten", (await p.$$eval("#seiten > .eintrag .thema",l=>l.map(x=>x.textContent))).join()==="Home,Unser Angebot,Über uns,Für Familien,Neuigkeiten,Kontakt");
+const namenImMenue=()=>p.$$eval("#seiten > .eintrag .thema",l=>l.map(x=>x.textContent).join());
+ok("Verzeichnis: neue Seite im Menü vor Neuigkeiten, mit ihrem Namen", await namenImMenue()==="Home,Unser Angebot,Über uns,Familien,Neuigkeiten,Kontakt");
+// Menü ordnen
+const webMenue=()=>{const html=fs.readFileSync(`${site}/kontakt/index.html`,"utf8");const nav=html.slice(html.indexOf('id="menu"'),html.indexOf("</nav>",html.indexOf('id="menu"')));return [...nav.matchAll(/<a [^>]*>([^<]+)<\/a>/g)].map(m=>m[1]).filter(n=>!n.startsWith("Für ")&&n!=="Kontakt").join();};
+const ordnenNamen=()=>p.$$eval("#seiten .ordnen-punkt > .ordnen-zeile .thema",l=>l.map(x=>x.textContent).join());
+await p.click("#menue-ordnen"); await sleep(200);
+ok("Ordnen: alle Zeilen in Menü-Reihenfolge", await ordnenNamen()==="Home,Unser Angebot,Über uns,Familien,Neuigkeiten,Kontakt");
+ok("Ordnen: Home und Kontakt ohne Griff, die andern mit", (await p.$$("#seiten .griff")).length===4 && (await p.$$("#seiten .ordnen-punkt.fest")).length===2);
+ok("Ordnen: Angebote hängen an Unser Angebot", await p.$eval('[data-ordnen="kapitel/angebot.md"]',e=>e.querySelectorAll(".ordnen-unter").length===3));
+await p.screenshot({path:`${shots}/menue-ordnen.png`});
+const zieheAuf=async(von,auf)=>{const g=await (await p.$(`[data-ordnen="${von}"] .griff`)).boundingBox();const z=await (await p.$(`[data-ordnen="${auf}"]`)).boundingBox();await p.mouse.move(g.x+g.width/2,g.y+g.height/2);await p.mouse.down();await p.mouse.move(g.x+g.width/2,g.y-8,{steps:3});await p.mouse.move(g.x+g.width/2,z.y-2,{steps:12});await sleep(150);await p.mouse.up();await sleep(250);};
+await zieheAuf("kapitel/neuigkeiten.md","kapitel/angebot.md");
+ok("Ordnen: Ziehen verschiebt", await ordnenNamen()==="Home,Neuigkeiten,Unser Angebot,Über uns,Familien,Kontakt");
+await p.click("#ordnen-abbrechen"); await sleep(200);
+ok("Ordnen: Abbrechen ändert nichts", await namenImMenue()==="Home,Unser Angebot,Über uns,Familien,Neuigkeiten,Kontakt" && !fs.existsSync(`${content}/menue.json`));
+await p.click("#menue-ordnen"); await sleep(200);
+await zieheAuf("kapitel/neuigkeiten.md","kapitel/angebot.md");
+await p.click('[data-ordnen="kapitel/fuer-familien.md"] .hoch'); await sleep(200);
+ok("Ordnen: Pfeil verschiebt", await ordnenNamen()==="Home,Neuigkeiten,Unser Angebot,Familien,Über uns,Kontakt");
+await p.click("#ordnen-speichern"); await sleep(3500);
+ok("Ordnen: Datei geschrieben", JSON.parse(read("menue.json")).reihenfolge.join()==="kapitel/neuigkeiten.md,kapitel/angebot.md,kapitel/fuer-familien.md,kapitel/ueber-uns.md");
+ok("Ordnen: Verzeichnis zeigt die neue Reihenfolge", await namenImMenue()==="Home,Neuigkeiten,Unser Angebot,Familien,Über uns,Kontakt");
+ok("Ordnen: Website auf allen Seiten", webMenue()==="Home,Neuigkeiten,Unser Angebot,Familien,Über uns");
+ok("Ordnen: Offene Seite bleibt offen", await p.$eval("#blatt",e=>!e.hidden));
 await klick("Kopie anlegen"); await sleep(1500); const krel=await p.evaluate(()=>decodeURIComponent(location.hash.slice(1))); ok("Kopie behält Felder", read(krel).includes("vorlage: abschnitte") && !(await p.$(".milkdown .ProseMirror")));
 ok("Verzeichnis: Kopie unter Weitere Seiten", await p.$eval("#weitere-gruppe",d=>!d.hidden&&d.open&&d.textContent.includes("(Kopie)")));
 await klick("Löschen"); await sleep(300); await p.click("#frage-ja"); await sleep(1000); ok("Kopie im Papierkorb, Rückgängig", !!(await p.$(".toast.sichtbar button")));
 await p.screenshot({path:`${shots}/rueckgaengig.png`});
 await p.click(".toast.sichtbar button"); await sleep(1200); ok("Rückgängig holt zurück", fs.existsSync(`${content}/${krel}`));
+// Neue Seite unter «Unser Angebot»
+await open("kapitel/kontakt.md"); await klick("Neue Seite anlegen"); await sleep(300);
+await p.keyboard.type("Für Paare"); await p.select("dialog select","angebot"); await p.focus("dialog input"); await p.keyboard.press("Enter"); await sleep(1600);
+const prel="kapitel/fuer-paare.md"; ok("Unter Angebot: gespeichert", read(prel).includes("menue: angebot"));
+ok("Unter Angebot: im Verzeichnis darunter", (await p.$$eval("#seiten .unterseiten .thema",l=>l.map(x=>x.textContent))).at(-1)==="Für Paare");
+const pt=await p.$('[data-pfad="einstieg.text"] textarea'); await pt.click(); await p.keyboard.type("Wir beraten Paare in allen Fragen rund um Vermögen und Recht, von Anfang an und unabhängig."); await sleep(1300);
+await klick("+ Abschnitt"); await sleep(250); const pa=await p.$('[data-pfad="abschnitte.0.titel"] input'); await pa.type("Beratung"); await klick("+ Punkt"); await sleep(250); await p.keyboard.type("Eine Leistung"); await sleep(1300);
+await klick("Veröffentlichen"); await sleep(300); await p.click("#frage-ja"); await sleep(4500);
+const kh=fs.readFileSync(`${site}/kontakt/index.html`,"utf8");
+ok("Unter Angebot: in der Zeile unter dem Menü", /class="nav-unter">.*<a href="\/fuer-paare">Für Paare<\/a>/.test(kh));
+ok("Unter Angebot: bei den Weiteren Angeboten", fs.readFileSync(`${site}/privatpersonen/index.html`,"utf8").includes('<li><a href="/fuer-paare">Für Paare'));
+ok("Unter Angebot: hat selbst die Weiteren Angebote", fs.readFileSync(`${site}/fuer-paare/index.html`,"utf8").includes('<li><a href="/privatpersonen">Für Privatpersonen'));
+// Kopf der Website: viele und lange Punkte dürfen nicht über den Rand
+for (const t of ["Vermögensverwaltung im Alter","Nachlass","Steuern"]) {
+  const r=await p.evaluate(async(t)=>{const a=await fetch("/api/seiten",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({titel:t,menue:true})});return (await a.json()).rel},t);
+  fs.writeFileSync(`${content}/${r}`,read(r).replace("entwurf: true\n",""));
+}
+await sleep(5000);
+for (const breite of [1600,1280,1100,1024,981,390]) {
+  const w=await b.newPage(); await w.setViewport({width:breite,height:700,isMobile:breite<500,hasTouch:breite<500}); await w.goto(`${base}/kontakt`,{waitUntil:"networkidle2"}); await sleep(300);
+  const m=await w.evaluate(()=>({quer:document.documentElement.scrollWidth>innerWidth,kopf:Math.round(document.querySelector(".kopf").getBoundingClientRect().height)}));
+  ok(`Kopf ${breite}: kein Überlauf (Höhe ${m.kopf})`, !m.quer);
+  await w.screenshot({path:`${shots}/kopf-${breite}.png`}); await w.close();
+}
+// Zwei Zeilen im Kopf: Die Maus muss die Angebote trotzdem erreichen.
+const wh=await b.newPage(); await wh.setViewport({width:1600,height:700}); await wh.goto(`${base}/kontakt`,{waitUntil:"networkidle2"}); await sleep(300);
+const an=await (await wh.$(".nav-gruppe > a")).boundingBox(); await wh.mouse.move(an.x+20,an.y+8); await sleep(350);
+const zi=await (await wh.$('.nav-unter a[href="/fuer-paare"]')).boundingBox(); await wh.mouse.move(zi.x+10,zi.y+8,{steps:25}); await sleep(450);
+ok("Kopf: Angebote mit der Maus erreichbar, auch bei zwei Zeilen", await wh.evaluate(()=>{const u=document.querySelector(".nav-unter");return getComputedStyle(u).visibility==="visible"&&u.matches(":hover")}));
+await wh.screenshot({path:`${shots}/kopf-angebote.png`}); await wh.close();
+// Menü ordnen auf dem Telefon, mit dem Finger
+const to=await b.newPage(); await to.setViewport({width:390,height:844,isMobile:true,hasTouch:true,deviceScaleFactor:2}); await to.goto(`${base}/redaktion`,{waitUntil:"networkidle2"}); await sleep(900);
+await to.tap("#verzeichnis-auf"); await sleep(400); await to.tap("#menue-ordnen"); await sleep(300);
+const toNamen=()=>to.$$eval("#seiten .ordnen-punkt.ziehbar > .ordnen-zeile .thema",l=>l.map(x=>x.textContent).join());
+const toVor=await toNamen();
+const tg=await (await to.$$("#seiten .ziehbar .griff")).at(-1).boundingBox(); const tz=await (await to.$("#seiten .ziehbar")).boundingBox();
+await to.touchscreen.touchStart(tg.x+tg.width/2,tg.y+tg.height/2); for(let i=1;i<=12;i++){await to.touchscreen.touchMove(tg.x+tg.width/2,tg.y+tg.height/2+(tz.y-2-tg.y-tg.height/2)*i/12);await sleep(30);} await sleep(150); await to.touchscreen.touchEnd(); await sleep(300);
+const toNach=await toNamen(); ok("Telefon: Menü ordnen mit dem Finger", toNach!==toVor&&toNach.split(",")[0]===toVor.split(",").at(-1)); console.log("  ",toVor,"→",toNach);
+await to.screenshot({path:`${shots}/tel-ordnen.png`});
+await (await to.$$("#seiten .ziehbar .runter")).at(0).tap(); await sleep(250);
+ok("Telefon: Schublade bleibt beim Ordnen offen, Pfeil verschiebt", await to.evaluate(()=>document.body.classList.contains("verzeichnis-offen")) && await toNamen()!==toNach);
+await to.tap("#ordnen-abbrechen"); await sleep(200); await to.close();
+// Zurückgezogene Seiten: weg von der Website und aus dem Menü, im Verzeichnis noch da
+const auf=(seite)=>fs.readFileSync(`${site}/${seite}/index.html`,"utf8");
+const zurueckziehen=async(rel)=>{await open(rel);await klick("Zurückziehen");await sleep(300);await p.click("#frage-ja");await sleep(3500);};
+const wiederOnline=async()=>{await klick("Veröffentlichen");await sleep(300);await p.click("#frage-ja");await sleep(3500);};
+await zurueckziehen("kapitel/ueber-uns.md");
+ok("Zurückgezogen: Über uns nicht mehr erreichbar", (await fetch(`${base}/ueber-uns`)).status===404);
+ok("Zurückgezogen: Über uns nicht im Menü", !auf("kontakt").includes('href="/ueber-uns"'));
+ok("Zurückgezogen: Über uns im Verzeichnis als Entwurf", await p.$eval('#seiten button[data-rel="kapitel/ueber-uns.md"]',e=>e.textContent.includes("Entwurf")));
+await wiederOnline(); ok("Zurückgezogen: Über uns wieder im Menü, am selben Platz", webMenue().split(",").indexOf("Über uns")===webMenue().split(",").length-1 && (await fetch(`${base}/ueber-uns`)).status===200);
+await zurueckziehen("kapitel/fuer-familien.md");
+ok("Zurückgezogen: eigene Seite nicht mehr erreichbar", (await fetch(`${base}/fuer-familien`)).status===404 && !auf("kontakt").includes('href="/fuer-familien"'));
+await wiederOnline();
+await zurueckziehen("kapitel/stiftungen.md");
+ok("Zurückgezogen: Angebot nicht in der Zeile und nicht bei den Weiteren", !auf("kontakt").includes('href="/stiftungen"') && !auf("privatpersonen").includes('<li><a href="/stiftungen"'));
+await wiederOnline(); ok("Zurückgezogen: Angebot wieder in der Zeile", auf("kontakt").includes('href="/stiftungen"'));
+await zurueckziehen("kapitel/kontakt.md");
+ok("Zurückgezogen: Kontakt-Knopf weg", !auf("ueber-uns").includes('kontakt-desktop') && !auf("ueber-uns").includes('kontakt-mobil'));
+await wiederOnline(); ok("Zurückgezogen: Kontakt-Knopf wieder da", auf("ueber-uns").includes('kontakt-desktop'));
 // Startseite nicht kopierbar
 await open("kapitel/willkommen.md"); ok("Startseite ohne Kopie", !(await p.evaluate(()=>[...document.querySelectorAll("#aktionen button")].some(x=>x.textContent==="Kopie anlegen"))));
 // Medien
@@ -155,6 +241,7 @@ const r=await p.evaluate(async()=>{const a=await fetch("/api/medien?name=Start-s
 await p.goto(`${base}/redaktion#verlauf`,{waitUntil:"networkidle2"}); await sleep(1400);
 ok("Verlauf: Einträge", (await p.$$(".aenderungen > li")).length>=10); await p.screenshot({path:`${shots}/verlauf.png`});
 ok("Verlauf: aktueller Stand markiert", await p.evaluate(()=>document.querySelector(".aenderungen").textContent.includes("aktueller Stand")));
+ok("Verlauf: Menü neu geordnet, ohne Zurückholen", await p.evaluate(()=>{const li=[...document.querySelectorAll(".aenderungen > li")].find(x=>x.textContent.includes("Menü neu geordnet"));return !!li&&!li.querySelector("button")}));
 // alte Fassung (Markdown) zurückholen
 await open("kapitel/unternehmen.md"); await p.evaluate(()=>{document.querySelector("#fassungen-gruppe").open=true}); await sleep(1200);
 const anz=await p.$$eval("#fassungen li",l=>l.length); ok("Fassungen da",anz>=2);

@@ -1,4 +1,5 @@
-import { aktuell, aktuelleLinks, menueSeiten } from "../content/document.ts";
+import { aktuell, aktuelleLinks, istOnline, menueSeiten } from "../content/document.ts";
+import { ANGEBOT, KONTAKT } from "../content/menue.ts";
 import { angebote, istAngebot } from "./angebote.ts";
 import type { PageView } from "./layout.ts";
 import { absoluteUrl, DEFAULT_DESCRIPTION, DEFAULT_IMAGE, jsonLd, organization, SITE_NAME, siteUrl } from "./seo.ts";
@@ -10,13 +11,6 @@ function esc(value: string): string {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
 }
-
-const NAV: Array<[string, string]> = [
-  ["/", "Home"],
-  ["/angebot", "Unser Angebot"],
-  ["/ueber-uns", "Über uns"],
-  ["/neuigkeiten", "Neuigkeiten"],
-];
 
 function current(href: string, here: string): boolean {
   if (href === "/") return here === "/";
@@ -30,9 +24,9 @@ function current(href: string, here: string): boolean {
 function angebotNav(here: string): string {
   const angebot = aktuell("/angebot");
   const oben = current(angebot, here) || istAngebot(here) ? ' aria-current="page"' : "";
-  const unter = angebote().map(({ href, name }) => {
+  const unter = angebote().map(({ href, label }) => {
     const mark = here === href ? ' aria-current="page"' : "";
-    return `<a href="${href}"${mark}>Für ${name}</a>`;
+    return `<a href="${href}"${mark}>${esc(label)}</a>`;
   }).join("");
   return `<div class="nav-gruppe"><a href="${angebot}"${oben}>Unser Angebot</a><div class="nav-unter">${unter}</div></div>`;
 }
@@ -85,14 +79,17 @@ function headMeta(view: PageView): string {
 
 export function pageShell(view: PageView): string {
   const year = new Date().getFullYear();
-  // Selbst angelegte Seiten stehen vor «Neuigkeiten», in alphabetischer Reihenfolge.
-  const menue: Array<[string, string]> = menueSeiten().map(({ href, label }) => [href, label]);
-  const links = [...NAV.slice(0, 3), ...menue, ...NAV.slice(3)].map(([href, label]) => {
-    if (href === "/angebot") return angebotNav(view.here);
+  // Home steht immer zuerst, «Kontakt» ist ein eigener Knopf. Dazwischen die Reihenfolge aus der Redaktion.
+  const link = (href: string, label: string) => {
     const ziel = aktuell(href);
     const mark = current(ziel, view.here) ? ' aria-current="page"' : "";
     return `<a href="${ziel}"${mark}>${esc(label)}</a>`;
-  }).join("");
+  };
+  const links = [
+    link("/", "Home"),
+    ...menueSeiten().map(({ rel, href, label }) => (rel === ANGEBOT ? angebotNav(view.here) : link(href, label))),
+  ].join("");
+  const kontakt = (klasse: string) => (istOnline(KONTAKT) ? `<a class="btn btn-solid ${klasse}" href="/kontakt">Kontakt</a>` : "");
   // Links im Text und im Layout auf alte Adressen zeigen auf die heutigen (umbenannte Seiten, alte Newsletter-Adressen).
   return aktuelleLinks(`<!DOCTYPE html>
 <html lang="de-CH">
@@ -114,9 +111,9 @@ export function pageShell(view: PageView): string {
       <a class="logo" href="/"><img src="/brand/logo.svg" alt="Advocat Finanz" width="231" height="50"></a>
       <nav id="menu" class="nav" aria-label="Hauptnavigation">
         ${links}
-        <a class="btn btn-solid kontakt-mobil" href="/kontakt">Kontakt</a>
+        ${kontakt("kontakt-mobil")}
       </nav>
-      <a class="btn btn-solid kontakt-desktop" href="/kontakt">Kontakt</a>
+      ${kontakt("kontakt-desktop")}
       <button class="burger" type="button" aria-expanded="false" aria-controls="menu" aria-label="Menü"><span></span><span></span><span></span></button>
     </div>
   </header>

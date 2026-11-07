@@ -1,6 +1,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { merkeAdressen, parseDocument, publicPath, type ContentDocument } from "./document.ts";
+import { schreibeAtomar } from "./atomar.ts";
+import { MENUE_DATEI } from "./menue.ts";
 import { contentDir } from "../paths.ts";
 
 const FOLDERS = ["briefe", "kapitel", "recht"] as const;
@@ -51,10 +53,24 @@ async function loadFrom(prefix: string): Promise<ContentDocument[]> {
   return docs;
 }
 
-/** Alle Seiten, auch Entwürfe. Frischt nebenbei die Adressen auf (siehe merkeAdressen). */
+/** Die gespeicherte Reihenfolge des Menüs. Fehlt die Datei oder ist sie kaputt: die Grundordnung. */
+export async function leseMenueReihe(): Promise<string[]> {
+  try {
+    const { reihenfolge } = JSON.parse(await fs.readFile(path.join(contentDir(), MENUE_DATEI), "utf8")) as { reihenfolge?: unknown };
+    return Array.isArray(reihenfolge) ? reihenfolge.filter((rel): rel is string => typeof rel === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function schreibeMenueReihe(reihenfolge: readonly string[]): Promise<void> {
+  await schreibeAtomar(path.join(contentDir(), MENUE_DATEI), `${JSON.stringify({ reihenfolge }, null, 2)}\n`);
+}
+
+/** Alle Seiten, auch Entwürfe. Frischt nebenbei die Adressen und das Menü auf (siehe merkeAdressen). */
 export async function loadDocuments(): Promise<ContentDocument[]> {
   const docs = await loadFrom("");
-  merkeAdressen(docs);
+  merkeAdressen(docs, await leseMenueReihe());
   return docs;
 }
 

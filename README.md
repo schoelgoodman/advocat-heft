@@ -104,7 +104,7 @@ Feste und selbst angelegte Seiten haben Felder statt Markdown. Die Datei bleibt 
 
 Keine Überschrift entscheidet mehr über die Gestaltung. Die Textform gibt es für den Assistenten, den Fassungsvergleich und alte Fassungen: Eine Datei ohne `vorlage:` bekommt beim Lesen ihre Felder (`mitFeldern`), und die Redaktion schreibt beim Start einmal alle um (`src/content/migration.ts`, eine Fassung «Feste Seiten auf Felder umgestellt»). Was in keine Vorlage passt, bleibt Text und bleibt bei Milkdown; das Log sagt es.
 
-Neue Seiten: «Neue Seite anlegen» in der Redaktion (`POST /api/seiten`) gibt der Seite die Vorlage `abschnitte`. «Im Hauptmenü zeigen» setzt `menue: true`. «Kopie anlegen» behält die Vorlage; Startseite, Kontakt und Neuigkeiten gibt es nur einmal (`EINMALIG`).
+Neue Seiten: «Neue Seite anlegen» in der Redaktion (`POST /api/seiten`) gibt der Seite die Vorlage `abschnitte`. Das Feld «Menü» setzt `menue: true` (Hauptmenü) oder `menue: angebot` (unter «Unser Angebot»), «Name im Menü» setzt `menuename`. Die Reihenfolge aus «Menü ordnen» (`POST /api/menue`) steht in `content/menue.json`; fehlt die Datei, gilt die Grundordnung. Website und Verzeichnis rechnen beide mit `src/content/menue.ts`. «Kopie anlegen» behält die Vorlage; Startseite, Kontakt und Neuigkeiten gibt es nur einmal (`EINMALIG`).
 
 Online-Seiten gehen erst mit «Speichern & veröffentlichen» auf die Website, Entwürfe speichern sich von selbst. Jedes Speichern nennt den Stand der Datei (`version`); passt er nicht mehr, antwortet der Server 409, statt still zu überschreiben. Der Server prüft Felder und Bilder erneut (422 mit den Feldern). `site/status.json` sagt der Redaktion, ob das Setzen geklappt hat.
 

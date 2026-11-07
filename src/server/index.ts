@@ -19,10 +19,11 @@ import {
   type ContentDocument,
 } from "../content/document.ts";
 import { schreibeAtomar } from "../content/atomar.ts";
-import { editorOrder, loadDocuments, loadPapierkorb, PAPIERKORB } from "../content/load.ts";
+import { editorOrder, leseMenueReihe, loadDocuments, loadPapierkorb, PAPIERKORB, schreibeMenueReihe } from "../content/load.ts";
 import { notFoundPage } from "../design/page.ts";
 import { siteUrl } from "../design/seo.ts";
 import { stelleSeitenUm } from "../content/migration.ts";
+import { istFesteMenueSeite, MENUE_DATEI, MENUE_NAME_MAX, menueOrt, menueReihe } from "../content/menue.ts";
 import { EINMALIG, neueSeite, pruefeFelder, VORLAGE_VON, type Felder } from "../content/seiten.ts";
 import { commitIfChanged, ensureContentGit, gibtEsInFassung, holeDateiZurueck, logAlles, logFile, restoreFile, showFile } from "../git/history.ts";
 import { anfragenDir, contentDir, repoRoot, siteDir } from "../paths.ts";
@@ -222,6 +223,7 @@ function summary(doc: ContentDocument) {
     auszug: doc.art === "brief" ? auszug(doc.body) : "",
     vorlage: doc.vorlage ?? null,
     menue: doc.menue ?? false,
+    menueName: doc.menueName ?? null,
     rel: doc.rel,
     titel: doc.titel,
     art: doc.art,
@@ -474,7 +476,7 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     const rel = url.searchParams.get("rel");
     if (!rel) {
       const docs = await loadDocuments();
-      sendJson(res, 200, { pages: editorOrder(docs).map(summary) });
+      sendJson(res, 200, { pages: editorOrder(docs).map(summary), menueReihe: await leseMenueReihe() });
       return;
     }
     sendJson(res, 200, await fuerBrowser(await readDoc(safeRel(rel))));
@@ -584,7 +586,7 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
 
   // Eine neue feste Seite. Sie beginnt als Entwurf und hat von Anfang an Felder.
   if (req.method === "POST" && url.pathname === "/api/seiten") {
-    const payload = JSON.parse((await readBody(req)).toString("utf8")) as { titel?: string };
+    const payload = JSON.parse((await readBody(req)).toString("utf8")) as { titel?: string; menue?: unknown };
     const titel = String(payload.titel ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
     const fehlt = (text: string) => new FeldFehler({ neu: text });
     if (!titel) throw fehlt("Bitte einen Titel eingeben.");
@@ -606,6 +608,7 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
         datum: new Date().toISOString().slice(0, 10),
         nummer: null,
         entwurf: true,
+        menue: menueOrt(payload.menue),
         vorlage: "abschnitte",
         felder: neueSeite(bild),
         body: "",
@@ -613,6 +616,26 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
       await writeDoc(doc);
       await commitIfChanged(`Neue Seite: ${titel}`, [rel]);
       sendJson(res, 200, await fuerBrowser(doc));
+    });
+    return;
+  }
+
+  // Die Reihenfolge des Menüs. Patrick drückt «Speichern», darum gilt sie sofort auf der Website.
+  if (req.method === "POST" && url.pathname === "/api/menue") {
+    const payload = JSON.parse((await readBody(req)).toString("utf8")) as { reihenfolge?: unknown };
+    if (!Array.isArray(payload.reihenfolge)) throw new Error("Die Reihenfolge fehlt.");
+    const gewuenscht = payload.reihenfolge.filter((rel): rel is string => typeof rel === "string");
+    await flushPending();
+    await einzeln(async () => {
+      const docs = await loadDocuments();
+      const eigene = docs.filter((doc) => doc.art === "kapitel" && doc.menue === true && !istFesteMenueSeite(doc.rel)).map((doc) => doc.rel);
+      const reihenfolge = menueReihe(eigene, gewuenscht);
+      await schreibeMenueReihe(reihenfolge);
+      await loadDocuments();
+      // Die Reihenfolge steht im Stempel der Adressen: Das Setzen merkt es und setzt alle Seiten neu.
+      await updateSite([STARTSEITE]);
+      await commitIfChanged("Menü neu geordnet", [MENUE_DATEI]);
+      sendJson(res, 200, { reihenfolge });
     });
     return;
   }
@@ -735,7 +758,8 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
         adresse: before.adresse ?? null,
         frueher: before.frueher ?? [],
         // Eigene Seiten dürfen ins Menü. Die festen stehen dort schon oder gehören in den Fuss.
-        menue: before.art === "kapitel" && !VORLAGE_VON[rel] ? payload.menue === true : false,
+        menue: before.art === "kapitel" && !VORLAGE_VON[rel] ? menueOrt(payload.menue) : false,
+        menueName: String(payload.menueName ?? "").replace(/\s+/g, " ").trim().slice(0, MENUE_NAME_MAX) || null,
         vorlage: before.vorlage ?? null,
         felder: before.vorlage ? payload.felder ?? null : null,
         body: before.vorlage ? "" : payload.body,
@@ -804,6 +828,7 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
           adresse: null,
           frueher: [],
           menue: false,
+          menueName: null,
         };
       }
       await writeDoc(doc);
@@ -975,7 +1000,7 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     await restoreFile(rel, rev, from);
     // Nur der Text kommt zurück. Ob die Seite online ist, bleibt, wie es war.
     // Auch die Adresse bleibt: andere Seiten verlinken schon auf die heutige.
-    const doc: ContentDocument = { ...(await readDoc(rel)), rel, entwurf: before.entwurf, adresse: before.adresse ?? null, frueher: before.frueher ?? [], menue: before.menue };
+    const doc: ContentDocument = { ...(await readDoc(rel)), rel, entwurf: before.entwurf, adresse: before.adresse ?? null, frueher: before.frueher ?? [], menue: before.menue, menueName: before.menueName ?? null };
     // Bilder dieser Fassung, die inzwischen gelöscht sind, kommen mit. Sonst fehlten sie auf der Website.
     const bilder: string[] = [];
     for (const name of bilderIn(`${textVon(doc)}\n${JSON.stringify(doc.felder ?? null)}`)) {
@@ -1072,6 +1097,12 @@ function watchContent(): void {
           console.error(error instanceof Error ? error.message : error);
         });
       }
+      return;
+    }
+    // Die Reihenfolge des Menüs steht im Stempel der Adressen: Das Setzen merkt es und setzt alle Seiten neu.
+    if (rel === MENUE_DATEI) {
+      console.log(`setzt ${rel}`);
+      setzeNeu([STARTSEITE]);
       return;
     }
     if (!rel.endsWith(".md") || rel.includes("..")) return;

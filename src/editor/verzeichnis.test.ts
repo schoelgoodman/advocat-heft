@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { seitenBaum, seitenName, type SeiteImBaum } from "./verzeichnis.ts";
+import { seitenBaum, seitenName, verschiebbar, type SeiteImBaum } from "./verzeichnis.ts";
 
 const seite = (rel: string, titel: string, mehr: Partial<SeiteImBaum> = {}): SeiteImBaum => ({
   rel,
@@ -40,7 +40,7 @@ test("Verzeichnis: Das Rechtliche wie im Fuss, Newsletter gehören nicht hierher
   assert.ok(!JSON.stringify(baum).includes("briefe/"));
 });
 
-test("Verzeichnis: Neue Seiten stehen im Menü nur mit Haken und online, sonst unter «Weitere»", () => {
+test("Verzeichnis: Neue Seiten stehen dort, wo sie im Menü stehen werden, auch als Entwurf", () => {
   const baum = seitenBaum([
     ...ALLE,
     seite("kapitel/fuer-familien.md", "Für Familien", { menue: true }),
@@ -48,8 +48,29 @@ test("Verzeichnis: Neue Seiten stehen im Menü nur mit Haken und online, sonst u
     seite("kapitel/ohne-menue.md", "Ohne Menü"),
     seite("kapitel/angebot-kopie.md", "Unser Angebot (Kopie)", { entwurf: true }),
   ]);
-  assert.deepEqual(baum.menue.map((p) => p.seite.rel), ["kapitel/willkommen.md", "kapitel/angebot.md", "kapitel/ueber-uns.md", "kapitel/fuer-familien.md", "kapitel/neuigkeiten.md", "kapitel/kontakt.md"]);
-  assert.deepEqual(rels(baum.weitere), ["kapitel/entwurf.md", "kapitel/ohne-menue.md", "kapitel/angebot-kopie.md"]);
+  assert.deepEqual(baum.menue.map((p) => p.seite.rel), ["kapitel/willkommen.md", "kapitel/angebot.md", "kapitel/ueber-uns.md", "kapitel/fuer-familien.md", "kapitel/entwurf.md", "kapitel/neuigkeiten.md", "kapitel/kontakt.md"]);
+  assert.deepEqual(rels(baum.weitere), ["kapitel/ohne-menue.md", "kapitel/angebot-kopie.md"]);
+});
+
+test("Verzeichnis: Die gespeicherte Reihenfolge gilt, Home und Kontakt bleiben am Rand", () => {
+  const familien = seite("kapitel/fuer-familien.md", "Für Familien", { menue: true });
+  const baum = seitenBaum([...ALLE, familien], ["kapitel/neuigkeiten.md", "kapitel/fuer-familien.md", "kapitel/ueber-uns.md", "kapitel/angebot.md"]);
+  assert.deepEqual(baum.menue.map((p) => p.seite.rel), ["kapitel/willkommen.md", "kapitel/neuigkeiten.md", "kapitel/fuer-familien.md", "kapitel/ueber-uns.md", "kapitel/angebot.md", "kapitel/kontakt.md"]);
+  assert.deepEqual(verschiebbar(baum), ["kapitel/neuigkeiten.md", "kapitel/fuer-familien.md", "kapitel/ueber-uns.md", "kapitel/angebot.md"]);
+  // Die Angebote wandern mit «Unser Angebot».
+  assert.equal(baum.menue[4].unter.length, 3);
+});
+
+test("Verzeichnis: Eigene Seiten unter «Unser Angebot» stehen hinter den dreien", () => {
+  const baum = seitenBaum([...ALLE, seite("kapitel/fuer-familien.md", "Für Familien", { menue: "angebot" })]);
+  assert.deepEqual(rels(baum.menue[1].unter), ["kapitel/privatpersonen.md", "kapitel/unternehmen.md", "kapitel/stiftungen.md", "kapitel/fuer-familien.md"]);
+  assert.ok(!baum.menue.some((p) => p.seite.rel === "kapitel/fuer-familien.md"));
+  assert.deepEqual(baum.weitere, []);
+});
+
+test("Verzeichnis: Ohne «Unser Angebot» geht eine Seite darunter nicht verloren", () => {
+  const baum = seitenBaum([...ALLE.filter((s) => s.rel !== "kapitel/angebot.md"), seite("kapitel/fuer-familien.md", "Für Familien", { menue: "angebot" })]);
+  assert.ok(rels(baum.weitere).includes("kapitel/fuer-familien.md"));
 });
 
 test("Verzeichnis: Keine Seite fehlt und keine steht doppelt", () => {
@@ -68,4 +89,9 @@ test("Verzeichnis: Fehlt eine feste Seite, bleibt der Rest", () => {
 test("Verzeichnis: Die Startseite heisst wie im Menü der Website", () => {
   assert.equal(seitenName(seite("kapitel/willkommen.md", "Willkommen")), "Home");
   assert.equal(seitenName(seite("kapitel/angebot.md", "Unser Angebot")), "Unser Angebot");
+});
+
+test("Verzeichnis: Eine Seite im Menü zeigt ihren Namen fürs Menü, sonst den Titel", () => {
+  assert.equal(seitenName(seite("kapitel/x.md", "Langer Titel", { menue: true, menueName: "Kurz" })), "Kurz");
+  assert.equal(seitenName(seite("kapitel/x.md", "Langer Titel", { menue: false, menueName: "Kurz" })), "Langer Titel");
 });

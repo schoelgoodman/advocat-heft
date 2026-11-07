@@ -2,13 +2,15 @@
  * Die Seiten im Verzeichnis, so aufgebaut wie das Menü der Website: Hauptseiten, darunter was zu ihnen
  * gehört. Ohne DOM, damit es sich testen lässt (verzeichnis.test.ts).
  */
+import { ANGEBOT, FESTE_ANGEBOTE, HOME, istFesteMenueSeite, KONTAKT, menueBezeichnung, menueReihe, type MenueOrt } from "../content/menue.ts";
 
 export interface SeiteImBaum {
   rel: string;
   art: string;
   titel: string;
   entwurf: boolean;
-  menue?: boolean;
+  menue?: MenueOrt;
+  menueName?: string | null;
 }
 
 export interface BaumPunkt<T> {
@@ -21,20 +23,16 @@ export interface SeitenBaum<T> {
   menue: BaumPunkt<T>[];
   /** Wie im Fuss der Website. */
   rechtliches: T[];
-  /** Was im Menü nicht vorkommt: Kopien, Entwürfe, Seiten ohne «Im Hauptmenü zeigen». */
+  /** Was im Menü nicht vorkommt: Kopien und Seiten mit «Nicht im Menü». */
   weitere: T[];
 }
 
-const VOR_DEN_EIGENEN = ["kapitel/willkommen.md", "kapitel/angebot.md", "kapitel/ueber-uns.md"];
-const NACH_DEN_EIGENEN = ["kapitel/neuigkeiten.md", "kapitel/kontakt.md"];
-const UNTER: Record<string, string[]> = {
-  "kapitel/angebot.md": ["kapitel/privatpersonen.md", "kapitel/unternehmen.md", "kapitel/stiftungen.md"],
-};
 const RECHT = ["recht/impressum.md", "recht/disclaimer.md", "recht/datenschutz.md"];
 
 const nachTitel = <T extends SeiteImBaum>(a: T, b: T) => a.titel.localeCompare(b.titel, "de");
 
-export function seitenBaum<T extends SeiteImBaum>(seiten: readonly T[]): SeitenBaum<T> {
+/** `reihenfolge`: die gespeicherte des Menüs (content/menue.json). Entwürfe stehen dort, wo sie online stehen werden. */
+export function seitenBaum<T extends SeiteImBaum>(seiten: readonly T[], reihenfolge: readonly string[] = []): SeitenBaum<T> {
   const nachRel = new Map(seiten.map((seite) => [seite.rel, seite]));
   const vergeben = new Set<string>();
   const nimm = (rel: string): T[] => {
@@ -43,18 +41,16 @@ export function seitenBaum<T extends SeiteImBaum>(seiten: readonly T[]): SeitenB
     vergeben.add(rel);
     return [seite];
   };
-  const punkt = (rel: string): BaumPunkt<T>[] => nimm(rel).map((seite) => ({ seite, unter: (UNTER[rel] ?? []).flatMap(nimm) }));
+  const eigene = (ort: MenueOrt) => seiten
+    .filter((seite) => seite.art === "kapitel" && seite.menue === ort && !istFesteMenueSeite(seite.rel))
+    .sort((a, b) => menueBezeichnung(a).localeCompare(menueBezeichnung(b), "de"))
+    .map((seite) => seite.rel);
+  const punkt = (rel: string): BaumPunkt<T>[] => nimm(rel).map((seite) => ({
+    seite,
+    unter: rel === ANGEBOT ? [...FESTE_ANGEBOTE, ...eigene("angebot")].flatMap(nimm) : [],
+  }));
 
-  const fest = [...VOR_DEN_EIGENEN, ...NACH_DEN_EIGENEN, ...Object.values(UNTER).flat(), ...RECHT];
-  // Selbst angelegte Seiten stehen auf der Website vor «Neuigkeiten», sobald sie online sind.
-  const eigene = seiten
-    .filter((seite) => seite.art === "kapitel" && seite.menue && !seite.entwurf && !fest.includes(seite.rel))
-    .sort(nachTitel);
-  const menue: BaumPunkt<T>[] = [
-    ...VOR_DEN_EIGENEN.flatMap(punkt),
-    ...eigene.flatMap((seite) => punkt(seite.rel)),
-    ...NACH_DEN_EIGENEN.flatMap(punkt),
-  ];
+  const menue: BaumPunkt<T>[] = [HOME, ...menueReihe(eigene(true), reihenfolge), KONTAKT].flatMap(punkt);
   const rechtFest = RECHT.flatMap(nimm);
   const rechtAndere = seiten.filter((seite) => seite.art === "recht" && !vergeben.has(seite.rel)).sort(nachTitel);
   for (const seite of rechtAndere) vergeben.add(seite.rel);
@@ -66,6 +62,12 @@ export function seitenBaum<T extends SeiteImBaum>(seiten: readonly T[]): SeitenB
 }
 
 /** Wie die Seite im Verzeichnis heisst. Die Startseite wie im Menü der Website. */
-export function seitenName(seite: Pick<SeiteImBaum, "rel" | "titel">): string {
-  return seite.rel === "kapitel/willkommen.md" ? "Home" : seite.titel;
+export function seitenName(seite: Pick<SeiteImBaum, "rel" | "titel" | "menue" | "menueName">): string {
+  if (seite.rel === HOME) return "Home";
+  return seite.menue ? menueBezeichnung(seite) : seite.titel;
+}
+
+/** Was «Menü ordnen» verschieben darf: alles im Hauptmenü ausser Home und Kontakt. */
+export function verschiebbar<T extends SeiteImBaum>(baum: SeitenBaum<T>): string[] {
+  return baum.menue.map((punkt) => punkt.seite.rel).filter((rel) => rel !== HOME && rel !== KONTAKT);
 }

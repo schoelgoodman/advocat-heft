@@ -199,6 +199,12 @@ function briefReihe(teasers: Teaser[]): string {
 /** Die Adressen beim letzten Setzen. Ändert sich eine, stimmen Menü und Links auf allen Seiten nicht mehr. */
 let gesetzteAdressen: string | null = null;
 
+/** Eine Seite, die nicht mehr online ist, von der Website nehmen. Die Startseite bleibt immer. */
+async function entferne(site: string, rel: string): Promise<void> {
+  const href = publicPath(rel);
+  if (href !== "/") await fs.rm(path.join(site, href.replace(/^\//, "")), { recursive: true, force: true });
+}
+
 /**
  * Baut nur die geänderten Seiten neu. Ein Brief erneuert auch Startseite und Archiv.
  * Hat eine Seite eine neue Adresse, werden alle neu gesetzt und die Ordner unter den alten Adressen gelöscht.
@@ -215,6 +221,8 @@ export async function rebuildDocuments(rels: string[]): Promise<void> {
     for (const alt of alteAdressen()) {
       if (alt !== "/" && !adresseReserviert(alt)) await fs.rm(path.join(site, alt.replace(/^\//, "")), { recursive: true, force: true });
     }
+    // Zieht Patrick eine Seite im Menü zurück, kommt sie nur hier vorbei: Sie muss trotzdem weg.
+    for (const rel of rels) if (!docs.some((doc) => doc.rel === rel)) await entferne(site, rel);
     for (const doc of docs) await writeDocument(site, doc, teasers);
     await writeIndexFiles(site, docs);
     return;
@@ -236,8 +244,7 @@ export async function rebuildDocuments(rels: string[]): Promise<void> {
   for (const rel of wanted) {
     const doc = docs.find((item) => item.rel === rel);
     if (!doc) {
-      const href = publicPath(rel);
-      if (href !== "/") await fs.rm(path.join(site, href.replace(/^\//, "")), { recursive: true, force: true });
+      await entferne(site, rel);
       continue;
     }
     await writeDocument(site, doc, teasers);

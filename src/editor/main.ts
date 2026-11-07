@@ -12,7 +12,9 @@ import { medienAnsicht, waehleMedium } from "./ansichten/medien.ts";
 import { bloecke, markiereUnterschiede, norm } from "./ansichten/vergleich.ts";
 import { verlaufAnsicht } from "./ansichten/verlauf.ts";
 import { h, toast } from "./dom.ts";
-import { seitenBaum, seitenName } from "./verzeichnis.ts";
+import { HOME, KONTAKT, MENUE_NAME_MAX, menueBezeichnung, menueOrt, type MenueOrt } from "../content/menue.ts";
+import { verschiebe, zieheStart } from "./felder/ziehen.ts";
+import { seitenBaum, seitenName, verschiebbar, type BaumPunkt } from "./verzeichnis.ts";
 import { mountSeite, type FelderEditor } from "./felder/seite.ts";
 
 interface CrepeApi {
@@ -61,7 +63,8 @@ interface PageSummary {
   href: string;
   auszug: string;
   vorlage: ContentDocument["vorlage"];
-  menue?: boolean;
+  menue?: MenueOrt;
+  menueName?: string | null;
   geloeschtAm?: string;
 }
 
@@ -118,6 +121,12 @@ interface Wunsch {
 }
 let alleWuensche: Wunsch[] = [];
 let gewaehlt: string | null = null;
+/** Die gespeicherte Reihenfolge des Menüs. */
+let menueReihe: string[] = [];
+/** Während «Menü ordnen»: die Reihenfolge in Arbeit. Sonst null. */
+let ordnung: string[] | null = null;
+/** Ab hier wird es im Kopf der Website eng. */
+const MENUE_NAME_LANG = 24;
 
 root.innerHTML = `
   <button type="button" class="verzeichnis-auf" id="verzeichnis-auf" title="Verzeichnis zeigen" aria-label="Verzeichnis zeigen" aria-expanded="false">
@@ -148,6 +157,14 @@ root.innerHTML = `
       </details>
       <p class="kategorie">Seiten</p>
       <nav id="seiten"></nav>
+      <button type="button" class="leise mehr" id="menue-ordnen">Menü ordnen</button>
+      <div class="ordnen-leiste" id="ordnen-leiste" hidden>
+        <p class="leise">Ziehen oder mit den Pfeilen verschieben. Home und Kontakt bleiben fest. «Speichern» ändert das Menü sofort auf der Website.</p>
+        <div class="aktionen">
+          <button type="button" class="haupt" id="ordnen-speichern">Speichern</button>
+          <button type="button" id="ordnen-abbrechen">Abbrechen</button>
+        </div>
+      </div>
       <details id="rechtliches-gruppe">
         <summary><span class="gruppe-titel">Rechtliches</span></summary>
         <nav id="rechtliches"></nav>
@@ -235,9 +252,11 @@ root.innerHTML = `
         <div class="angaben" id="angaben">
           <label class="datum" id="nummer-feld">Nummer <input type="number" id="nummer" min="1" max="9999" step="1" inputmode="numeric"></label>
           <label class="datum" id="datum-feld">Datum <input type="date" id="datum"></label>
-          <label class="datum" id="menue-feld"><input type="checkbox" id="menue"> Im Hauptmenü zeigen</label>
+          <label class="datum" id="menue-feld">Menü <select id="menue"><option value="true">Hauptmenü</option><option value="angebot">Unter «Unser Angebot»</option><option value="">Nicht im Menü</option></select></label>
+          <label class="datum" id="menue-name-feld">Name im Menü <input type="text" id="menue-name" maxlength="${MENUE_NAME_MAX}" autocomplete="off"></label>
           <label class="datum adresse-feld" id="adresse-feld">Adresse <span class="adresse-eingabe"><span class="adresse-vor" id="adresse-vor"></span><input type="text" id="adresse" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done"></span></label>
         </div>
+        <p class="nummer-hinweis" id="menue-hinweis" hidden>Dieser Name ist lang für das Menü. Am besten «Name im Menü» kürzer wählen.</p>
         <p class="nummer-hinweis" id="adresse-hinweis" hidden></p>
         <p class="nummer-hinweis" id="nummer-hinweis" hidden></p>
         <aside class="google-hinweise" id="google-hinweise" hidden aria-live="polite"></aside>
@@ -323,7 +342,12 @@ const nummerFeld = root.querySelector<HTMLElement>("#nummer-feld")!;
 const nummerInput = root.querySelector<HTMLInputElement>("#nummer")!;
 const nummerHinweis = root.querySelector<HTMLElement>("#nummer-hinweis")!;
 const menueFeld = root.querySelector<HTMLElement>("#menue-feld")!;
-const menueInput = root.querySelector<HTMLInputElement>("#menue")!;
+const menueInput = root.querySelector<HTMLSelectElement>("#menue")!;
+const menueNameFeld = root.querySelector<HTMLElement>("#menue-name-feld")!;
+const menueNameInput = root.querySelector<HTMLInputElement>("#menue-name")!;
+const menueHinweis = root.querySelector<HTMLElement>("#menue-hinweis")!;
+const menueOrdnen = root.querySelector<HTMLButtonElement>("#menue-ordnen")!;
+const ordnenLeiste = root.querySelector<HTMLElement>("#ordnen-leiste")!;
 const medienSeite = root.querySelector<HTMLElement>("#medien-seite")!;
 const verlaufSeite = root.querySelector<HTMLElement>("#verlauf-seite")!;
 const medienLink = root.querySelector<HTMLButtonElement>("#medien-link")!;
@@ -736,17 +760,11 @@ async function deleteFromTrash(rel: string | null, titel: string): Promise<void>
 
 async function loadList(): Promise<void> {
   const response = await fetch("/api/pages");
-  const json = (await response.json()) as { pages: PageSummary[] };
+  const json = (await response.json()) as { pages: PageSummary[]; menueReihe: string[] };
   alleSeiten = json.pages;
   alleBriefe = json.pages.filter((page) => page.art === "brief");
-  const baum = seitenBaum(json.pages.filter((page) => page.art !== "brief"));
-  seiten.replaceChildren(...baum.menue.flatMap(({ seite, unter }) => [
-    listItem(seite),
-    ...(unter.length ? [h("div", { class: "unterseiten" }, ...unter.map(listItem))] : []),
-  ]));
-  rechtliches.replaceChildren(...baum.rechtliches.map(listItem));
-  weitere.replaceChildren(...baum.weitere.map(listItem));
-  weitereGruppe.hidden = baum.weitere.length === 0;
+  menueReihe = json.menueReihe;
+  zeichneSeiten();
   renderBriefe();
   const geloescht = (await fetch("/api/papierkorb")
     .then((res) => res.json())
@@ -756,6 +774,91 @@ async function loadList(): Promise<void> {
   papierkorbZahl.textContent = papierkorbAnzahl ? String(papierkorbAnzahl) : "";
   papierkorbLeeren.hidden = papierkorbAnzahl === 0;
   papierkorbHinweis.textContent = papierkorbAnzahl ? "Gelöschte Entwürfe. Zurückgeholt sind sie wieder Entwürfe." : "Der Papierkorb ist leer.";
+}
+
+const seitenOhneBriefe = () => alleSeiten.filter((page) => page.art !== "brief");
+
+/** Das Verzeichnis, gleich aufgebaut wie das Menü. Während «Menü ordnen» gilt die Reihenfolge in Arbeit. */
+function zeichneSeiten(): void {
+  const baum = seitenBaum(seitenOhneBriefe(), ordnung ?? menueReihe);
+  if (ordnung) {
+    // Kam inzwischen eine Seite dazu oder fiel eine weg, stimmt die Liste so wieder.
+    ordnung = verschiebbar(baum);
+    seiten.replaceChildren(...baum.menue.map(ordnenPunkt));
+  } else {
+    seiten.replaceChildren(...baum.menue.flatMap(({ seite, unter }) => [
+      listItem(seite),
+      ...(unter.length ? [h("div", { class: "unterseiten" }, ...unter.map(listItem))] : []),
+    ]));
+  }
+  menueOrdnen.hidden = ordnung != null;
+  ordnenLeiste.hidden = ordnung == null;
+  rechtliches.replaceChildren(...baum.rechtliches.map(listItem));
+  weitere.replaceChildren(...baum.weitere.map(listItem));
+  weitereGruppe.hidden = baum.weitere.length === 0;
+  markCurrent();
+}
+
+/** Eine Zeile in «Menü ordnen». Sie öffnet keine Seite: In diesem Modus geht es nur um den Platz. */
+function ordnenPunkt({ seite, unter }: BaumPunkt<PageSummary>): HTMLElement {
+  const name = h("span", { class: "thema" }, seitenName(seite));
+  const entwurf = seite.entwurf ? h("span", { class: "marke" }, "Entwurf") : null;
+  const unterseiten = unter.length ? h("div", { class: "unterseiten" }, ...unter.map((u) => h("span", { class: "ordnen-unter" }, seitenName(u)))) : null;
+  if (seite.rel === HOME || seite.rel === KONTAKT) {
+    return h("div", { class: "ordnen-punkt fest" }, h("div", { class: "ordnen-zeile" }, name));
+  }
+  const platz = ordnung!.indexOf(seite.rel);
+  const griff = h("span", { class: "griff", title: "Ziehen zum Verschieben", "aria-hidden": "true" }, "⋮⋮");
+  griff.addEventListener("pointerdown", (event) => zieheStart(event, griff, verschiebeImMenue));
+  const pfeil = (zeichen: string, klasse: string, wort: string, nach: number) => h("button", {
+    type: "button",
+    class: `werkzeug-klein ${klasse}`,
+    title: `${wort} schieben`,
+    "aria-label": `${seitenName(seite)} ${wort} schieben`,
+    disabled: nach < 0 || nach >= ordnung!.length,
+    onclick: () => {
+      verschiebeImMenue(platz, nach);
+      seiten.querySelector<HTMLButtonElement>(`[data-ordnen="${CSS.escape(seite.rel)}"] .${klasse}:not(:disabled)`)?.focus();
+    },
+  }, zeichen);
+  return h(
+    "div",
+    { class: "ordnen-punkt ziehbar", "data-ordnen": seite.rel },
+    h("div", { class: "ordnen-zeile" }, griff, name, entwurf, pfeil("↑", "hoch", "nach oben", platz - 1), pfeil("↓", "runter", "nach unten", platz + 1)),
+    unterseiten,
+  );
+}
+
+function verschiebeImMenue(von: number, nach: number): void {
+  verschiebe(ordnung!, von, nach);
+  zeichneSeiten();
+}
+
+function menueOrdnenBeginnen(): void {
+  ordnung = verschiebbar(seitenBaum(seitenOhneBriefe(), menueReihe));
+  zeichneSeiten();
+}
+
+function menueOrdnenBeenden(): void {
+  ordnung = null;
+  zeichneSeiten();
+}
+
+async function menueOrdnenSpeichern(): Promise<void> {
+  const unveraendert = JSON.stringify(ordnung) === JSON.stringify(verschiebbar(seitenBaum(seitenOhneBriefe(), menueReihe)));
+  if (unveraendert) {
+    menueOrdnenBeenden();
+    return;
+  }
+  const response = await post("/api/menue", { reihenfolge: ordnung }).catch(() => null);
+  if (!response?.ok) {
+    await ask({ titel: "Das hat nicht geklappt", text: response ? await errorText(response, "Das Menü liess sich nicht speichern.") : "Keine Verbindung zum Server.", ja: "OK" });
+    return;
+  }
+  menueReihe = ((await response.json()) as { reihenfolge: string[] }).reihenfolge;
+  menueOrdnenBeenden();
+  toast("Menü gespeichert. Die Website wird neu gesetzt.");
+  beobachteSetzen();
 }
 
 /** Zeigt die neuesten Newsletter, ältere erst auf Wunsch. */
@@ -1047,6 +1150,15 @@ function markCurrent(): void {
   }
 }
 
+/** Der Name fürs Menü zählt nur, wenn die Seite im Menü steht. Leer gilt der Titel. */
+function zeigeMenueName(): void {
+  const imMenue = !menueFeld.hidden && menueInput.value !== "";
+  menueNameFeld.hidden = !imMenue;
+  menueNameInput.placeholder = titelInput.value.trim();
+  const name = menueBezeichnung({ titel: titelInput.value.trim(), menueName: menueNameInput.value });
+  menueHinweis.hidden = !imMenue || name.length <= MENUE_NAME_LANG;
+}
+
 /** Hält das Thema im Verzeichnis gleich, während getippt wird. */
 function updateListLabel(): void {
   if (!current || !isBrief(current)) return;
@@ -1084,7 +1196,8 @@ function collect(): ContentDocument {
     entwurf: current.entwurf,
     titel: brief ? briefTitel(nummer, titelInput.value) : titelInput.value.trim() || current.titel,
     datum: brief ? datumInput.value || current.datum : current.datum,
-    menue: !menueFeld.hidden && menueInput.checked,
+    menue: menueFeld.hidden ? false : menueOrt(menueInput.value),
+    menueName: menueFeld.hidden || !menueInput.value ? null : menueNameInput.value.trim() || null,
     vorlage: felder ? current.vorlage : null,
     felder: felder ? felder.werte() : null,
     // Hat die Seite Felder, ist der Text leer: Sie sind das, was gespeichert wird.
@@ -1094,7 +1207,7 @@ function collect(): ContentDocument {
 
 function same(a: ContentDocument, b: ContentDocument): boolean {
   return a.titel === b.titel && a.datum === b.datum && a.nummer === b.nummer && a.body.trim() === b.body.trim()
-    && Boolean(a.menue) === Boolean(b.menue) && JSON.stringify(a.felder ?? null) === JSON.stringify(b.felder ?? null);
+    && (a.menue || false) === (b.menue || false) && (a.menueName || null) === (b.menueName || null) && JSON.stringify(a.felder ?? null) === JSON.stringify(b.felder ?? null);
 }
 
 function viewHref(doc: Doc): string {
@@ -1229,7 +1342,9 @@ async function openPage(rel: string): Promise<void> {
   nummerInput.value = String(current.nummer ?? "");
   // Selbst angelegte Seiten dürfen ins Menü. Die festen stehen dort schon oder im Fuss.
   menueFeld.hidden = current.art !== "kapitel" || VORLAGE_VON[current.rel] != null;
-  menueInput.checked = current.menue === true;
+  menueInput.value = current.menue === true ? "true" : current.menue === "angebot" ? "angebot" : "";
+  menueNameInput.value = current.menueName ?? "";
+  zeigeMenueName();
   zeigeAdresse();
   fassungenGruppe.open = false;
   setSaved("");
@@ -1565,6 +1680,13 @@ async function neueSeiteAnlegen(): Promise<void> {
   if (!(await flushCommit())) return;
   const eingabe = h("input", { type: "text", placeholder: "z. B. Für Familien", "aria-label": "Titel der neuen Seite", required: true });
   const hinweisText = h("p", { class: "leise", role: "alert" });
+  const ortWahl = h(
+    "select",
+    { "aria-label": "Platz im Menü" },
+    h("option", { value: "true" }, "Hauptmenü"),
+    h("option", { value: "angebot" }, "Unter «Unser Angebot»"),
+    h("option", { value: "" }, "Nicht im Menü"),
+  );
   const titel = await new Promise<string | null>((resolve) => {
     const dialog: HTMLDialogElement = h(
       "dialog",
@@ -1578,6 +1700,8 @@ async function neueSeiteAnlegen(): Promise<void> {
         h("h2", {}, "Neue Seite anlegen"),
         h("p", {}, `Sie bekommt die Vorlage «${vorlageName("abschnitte")}» und beginnt als Entwurf. Aus dem Titel entsteht die Adresse.`),
         eingabe,
+        h("label", { class: "datum" }, "Menü", ortWahl),
+        h("p", { class: "leise" }, "Auf der Website erscheint sie im Menü erst, wenn sie veröffentlicht ist."),
         hinweisText,
         h(
           "div",
@@ -1594,7 +1718,7 @@ async function neueSeiteAnlegen(): Promise<void> {
     eingabe.focus();
   });
   if (!titel) return;
-  const response = await post("/api/seiten", { titel }).catch(() => null);
+  const response = await post("/api/seiten", { titel, menue: menueOrt(ortWahl.value) }).catch(() => null);
   if (!response?.ok) {
     await ask({ titel: "Das hat nicht geklappt", text: response ? await errorText(response, "Die Seite liess sich nicht anlegen.") : "Keine Verbindung zum Server.", ja: "OK" });
     return;
@@ -1660,7 +1784,7 @@ async function publish(rel = current?.rel, ohneFrage = false): Promise<boolean> 
     titel: "Jetzt veröffentlichen?",
     text: isBrief(page)
       ? `„${page.titel}“ erscheint sofort auf der Website und auf der Startseite.`
-      : `„${page.titel}“ erscheint sofort auf der Website.`,
+      : `„${page.titel}“ erscheint sofort auf der Website${page.menue ? " und im Menü" : ""}.`,
     ja: "Veröffentlichen",
     nein: "Noch nicht",
   });
@@ -2404,6 +2528,7 @@ titelInput.addEventListener("input", () => {
   titelInput.value = titelInput.value.replace(/\s*\n\s*/g, " ");
   fitTitel();
   updateListLabel();
+  zeigeMenueName();
   scheduleSave();
 });
 datumInput.addEventListener("input", () => scheduleSave());
@@ -2476,7 +2601,8 @@ verzeichnisAuf.addEventListener("click", (event) => {
 document.addEventListener("click", (event) => {
   if (!document.body.classList.contains("verzeichnis-offen")) return;
   const ziel = event.target as Element;
-  if (!verzeichnis.contains(ziel) || ziel.closest("nav button[data-rel], nav button[data-anfrage], nav button[data-wunsch], button.mehr:not(#mehr), :not(summary) > button.gruppe-titel, #heim, #zur-website")) {
+  // composedPath: Die Pfeile in «Menü ordnen» zeichnen ihre Zeile neu, das Ziel hängt dann nicht mehr im Verzeichnis.
+  if (!event.composedPath().includes(verzeichnis) || ziel.closest("nav button[data-rel], nav button[data-anfrage], nav button[data-wunsch], button.mehr:not(#mehr, #menue-ordnen), :not(summary) > button.gruppe-titel, #heim, #zur-website")) {
     zeigeVerzeichnis(false);
   }
 });
@@ -2568,7 +2694,17 @@ mehr.addEventListener("click", () => {
   renderBriefe();
 });
 
-menueInput.addEventListener("change", () => scheduleSave());
+menueInput.addEventListener("change", () => {
+  zeigeMenueName();
+  scheduleSave();
+});
+menueNameInput.addEventListener("input", () => {
+  zeigeMenueName();
+  scheduleSave();
+});
+menueOrdnen.addEventListener("click", menueOrdnenBeginnen);
+root.querySelector("#ordnen-speichern")!.addEventListener("click", () => void menueOrdnenSpeichern());
+root.querySelector("#ordnen-abbrechen")!.addEventListener("click", menueOrdnenBeenden);
 root.querySelector("#seite-neu")!.addEventListener("click", () => void neueSeiteAnlegen());
 // Ein vorhandenes Bild in den Newsletter setzen, an der Stelle, wo der Cursor steht.
 root.querySelector("#bild-aus-medien")!.addEventListener("click", async () => {

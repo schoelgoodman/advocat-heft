@@ -93,7 +93,7 @@ async function setzeAbschnitte(input: SeitenInput, a: AbschnitteFelder, html: Ht
   const here = publicPath(input.rel);
   if (istAngebot(here)) {
     const links = angebote().filter((angebot) => angebot.href !== here)
-      .map(({ href, name }) => `<li><a href="${href}">Für ${esc(name)}<span class="weitere-pfeil" aria-hidden="true">→</span></a></li>`)
+      .map(({ href, label }) => `<li><a href="${href}">${esc(label)}<span class="weitere-pfeil" aria-hidden="true">→</span></a></li>`)
       .join("");
     teile.push(`<nav class="weitere" aria-labelledby="weitere-titel"><p class="sprung-titel" id="weitere-titel">Weitere Angebote</p><ul class="sprung-liste">${links}</ul></nav>`);
   }

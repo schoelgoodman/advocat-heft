@@ -1,5 +1,6 @@
 import path from "node:path";
 import YAML from "yaml";
+import { ANGEBOT, FESTE_ANGEBOTE, FESTE_NAMEN, istFesteMenueSeite, KONTAKT, menueBezeichnung, menueOrt, menueReihe, type MenueOrt } from "./menue.ts";
 import { alsText, ausText, istVorlage, VORLAGE_VON, type Felder, type Vorlage } from "./seiten.ts";
 
 export type Art = "brief" | "kapitel" | "recht";
@@ -15,8 +16,10 @@ export interface DocumentMeta {
   adresse?: string | null;
   /** Nur übrige Seiten: frühere Adressen. Sie leiten auf die heutige weiter. */
   frueher?: string[];
-  /** Nur feste Seiten: Sie steht zusätzlich im Hauptmenü. */
-  menue?: boolean;
+  /** Nur selbst angelegte Seiten: Wo sie im Menü steht. */
+  menue?: MenueOrt;
+  /** Kürzerer Name fürs Menü. Leer: der Titel. */
+  menueName?: string | null;
   /** Feste Seiten: ihr Aufbau. Die Felder stehen dann in `felder`, der Text bleibt leer. */
   vorlage?: Vorlage | null;
   felder?: Felder | null;
@@ -53,7 +56,8 @@ export function serializeDocument(doc: ContentDocument): string {
   if (doc.entwurf) lines.push("entwurf: true");
   if (doc.adresse) lines.push(`adresse: ${doc.adresse}`);
   if (doc.frueher?.length) lines.push(`frueher: ${doc.frueher.join(" ")}`);
-  if (doc.menue) lines.push("menue: true");
+  if (doc.menue) lines.push(`menue: ${doc.menue}`);
+  if (doc.menue && doc.menueName) lines.push(`menuename: ${yamlQuote(doc.menueName)}`);
   if (doc.vorlage && doc.felder) {
     lines.push(`vorlage: ${doc.vorlage}`, YAML.stringify({ felder: doc.felder }, { lineWidth: 0 }).trimEnd(), "---", "");
     return lines.join("\n");
@@ -92,7 +96,8 @@ export function parseDocument(raw: string, rel: string): ContentDocument {
     entwurf: unquote(fields.get("entwurf") ?? "") === "true",
     adresse: istAdresse(unquote(fields.get("adresse") ?? "")) ? unquote(fields.get("adresse") ?? "") : null,
     frueher: unquote(fields.get("frueher") ?? "").split(/\s+/).filter(istAdresse),
-    menue: unquote(fields.get("menue") ?? "") === "true",
+    menue: menueOrt(unquote(fields.get("menue") ?? "")),
+    menueName: unquote(fields.get("menuename") ?? "") || null,
     vorlage: felder && istVorlage(vorlage) ? vorlage : null,
     felder,
     body: felder ? "" : match[2].trim(),
@@ -173,14 +178,36 @@ let eigene = new Map<string, string>();
 let umleitungen = new Map<string, string>();
 let belegt = new Set<string>();
 
-let imMenue: Array<{ href: string; label: string }> = [];
+interface MenuePunkt {
+  rel: string;
+  href: string;
+  label: string;
+}
 
-/** Selbst angelegte Seiten, die ins Hauptmenü sollen. Ändert sich das, werden alle Seiten neu gesetzt. */
-export function menueSeiten(): ReadonlyArray<{ href: string; label: string }> {
+/** Bevor der Inhalt geladen ist: die Grundordnung. */
+let imMenue: MenuePunkt[] = menueReihe([]).map((rel) => ({ rel, href: standardPfad(rel), label: FESTE_NAMEN[rel] ?? rel }));
+let unterAngebot: MenuePunkt[] = [];
+let online: Set<string> | null = null;
+
+/** Steht die Seite auf der Website? Zurückgezogene gehören nicht ins Menü. Bevor der Inhalt geladen ist: ja. */
+export function istOnline(rel: string): boolean {
+  return online?.has(rel) ?? true;
+}
+
+/** Was im Hauptmenü zwischen Home und Kontakt steht, in seiner Reihenfolge. Ändert es sich, werden alle Seiten neu gesetzt. */
+export function menueSeiten(): ReadonlyArray<MenuePunkt> {
   return imMenue;
 }
 
-export function merkeAdressen(docs: ReadonlyArray<Pick<DocumentMeta, "rel" | "art" | "adresse" | "frueher" | "menue" | "entwurf" | "titel">>): void {
+/** Selbst angelegte Seiten, die unter «Unser Angebot» stehen. */
+export function angebotSeiten(): ReadonlyArray<MenuePunkt> {
+  return unterAngebot;
+}
+
+export function merkeAdressen(
+  docs: ReadonlyArray<Pick<DocumentMeta, "rel" | "art" | "adresse" | "frueher" | "menue" | "menueName" | "entwurf" | "titel">>,
+  reihenfolge: readonly string[] = [],
+): void {
   const nextEigene = new Map<string, string>();
   for (const doc of docs) {
     if (doc.art !== "brief" && doc.rel !== STARTSEITE && doc.adresse) nextEigene.set(doc.rel, doc.adresse);
@@ -196,15 +223,22 @@ export function merkeAdressen(docs: ReadonlyArray<Pick<DocumentMeta, "rel" | "ar
     }
   }
   umleitungen = next;
-  imMenue = docs
-    .filter((doc) => doc.menue && !doc.entwurf && doc.art === "kapitel")
-    .map((doc) => ({ href: publicPath(doc.rel), label: doc.titel }))
+  // Im Menü der Website steht nur, was online ist. Das Verzeichnis zeigt auch die Entwürfe.
+  const eigeneSeiten = (ort: MenueOrt) => docs
+    .filter((doc) => doc.art === "kapitel" && doc.menue === ort && !doc.entwurf && !istFesteMenueSeite(doc.rel))
+    .map((doc) => ({ rel: doc.rel, href: publicPath(doc.rel), label: menueBezeichnung(doc) }))
     .sort((a, b) => a.label.localeCompare(b.label, "de"));
+  const oben = eigeneSeiten(true);
+  online = new Set(docs.filter((doc) => !doc.entwurf).map((doc) => doc.rel));
+  imMenue = menueReihe(oben.map((punkt) => punkt.rel), reihenfolge).filter(istOnline).map((rel) => (
+    oben.find((punkt) => punkt.rel === rel) ?? { rel, href: publicPath(rel), label: FESTE_NAMEN[rel] ?? rel }
+  ));
+  unterAngebot = docs.some((doc) => doc.rel === ANGEBOT) ? eigeneSeiten("angebot") : [];
 }
 
 /** Ein Stempel der Adressen. Ändert er sich, müssen alle Seiten neu gesetzt werden (Menü, Links). */
 export function adressStempel(): string {
-  return JSON.stringify([[...eigene].sort(), [...umleitungen].sort(), imMenue]);
+  return JSON.stringify([[...eigene].sort(), [...umleitungen].sort(), imMenue, unterAngebot, [KONTAKT, ...FESTE_ANGEBOTE].filter(istOnline)]);
 }
 
 /** Alle Adressen, die früher galten und heute weiterleiten. */

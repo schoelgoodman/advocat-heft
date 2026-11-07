@@ -1146,7 +1146,17 @@ dialog.medien-wahl[open] { display: flex; flex-direction: column; }
 }
 
 /* Einträge ohne Pfeil beginnen dort, wo bei den anderen der Text beginnt. */
-aside > #seiten, aside > #seite-neu { margin-left: 1.05rem; }
+aside > #seiten, aside > #seite-neu, aside > #menue-ordnen, aside > .ordnen-leiste { margin-left: 1.05rem; }
+
+/* «Menü ordnen»: Zeilen nur zum Verschieben. Griff und Pfeile sind die einzigen Bedienelemente. */
+.ordnen-punkt { background: var(--flaeche-tief); border-radius: var(--rund-mittel); }
+.ordnen-zeile { display: flex; align-items: center; gap: 0.25rem; padding: 0.3rem 0.25rem 0.3rem 0.1rem; font-size: 0.92rem; }
+.ordnen-zeile .thema { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.ordnen-punkt.fest { background: none; color: var(--quiet); }
+.ordnen-punkt.fest .ordnen-zeile { padding-left: 1.55rem; }
+.ordnen-unter { display: block; padding: 0.1rem 0.5rem; font-size: 0.82rem; color: var(--quiet); }
+.ordnen-leiste { margin-top: 0.5rem; }
+.ordnen-leiste p { margin: 0 0 0.5rem; font-size: 0.82rem; }
 
 /* Zeilen ohne Aufklappen: Der Text steht dort, wo er bei den anderen nach dem Pfeil beginnt. */
 aside .zeile-link {
