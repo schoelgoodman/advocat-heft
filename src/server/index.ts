@@ -19,12 +19,13 @@ import {
   type ContentDocument,
 } from "../content/document.ts";
 import { schreibeAtomar } from "../content/atomar.ts";
-import { editorOrder, leseMenueReihe, loadDocuments, loadPapierkorb, PAPIERKORB, schreibeMenueReihe } from "../content/load.ts";
+import { ALLGEMEIN_DATEI, allgemein, allgemeinAus, ersetzeAngaben, pruefeAllgemein, type Allgemein } from "../content/allgemein.ts";
+import { editorOrder, leseAllgemein, leseMenueReihe, loadDocuments, loadPapierkorb, PAPIERKORB, schreibeAllgemein, schreibeMenueReihe } from "../content/load.ts";
 import { notFoundPage } from "../design/page.ts";
 import { siteUrl } from "../design/seo.ts";
-import { stelleSeitenUm } from "../content/migration.ts";
+import { legeAllgemeinAn, stelleSeitenUm } from "../content/migration.ts";
 import { istFesteMenueSeite, MENUE_DATEI, MENUE_NAME_MAX, menueOrt, menueReihe } from "../content/menue.ts";
-import { EINMALIG, neueSeite, pruefeFelder, VORLAGE_VON, type Felder } from "../content/seiten.ts";
+import { bereinigeFelder, EINMALIG, neueSeite, pruefeFelder, VORLAGE_VON, type Felder, type KontaktFelder } from "../content/seiten.ts";
 import { commitIfChanged, ensureContentGit, gibtEsInFassung, holeDateiZurueck, logAlles, logFile, restoreFile, showFile } from "../git/history.ts";
 import { anfragenDir, contentDir, repoRoot, siteDir } from "../paths.ts";
 import { buildSite, previewPage, rebuildDocuments, textHtml } from "../render/build.ts";
@@ -200,6 +201,25 @@ function pruefeSeite(doc: ContentDocument): void {
   if (!doc.vorlage || !doc.felder) return;
   const fehler = pruefeFelder(doc.vorlage, doc.titel, doc.felder);
   if (Object.keys(fehler).length) throw new FeldFehler(fehler);
+}
+
+/**
+ * Eine Seite mit den neuen allgemeinen Angaben im Text: das Rechtliche und die Texte der Kontaktseite.
+ * Andere Seiten nicht: «Patrick Rütsche» auf «Über uns» ist die Person, nicht «Vertreten durch».
+ */
+function angabenErsetzt(doc: ContentDocument, alt: Allgemein, neu: Allgemein): ContentDocument {
+  if (doc.art === "recht") {
+    const body = ersetzeAngaben(doc.body, alt, neu);
+    return body === doc.body ? doc : { ...doc, body };
+  }
+  if (doc.vorlage === "kontakt" && doc.felder) {
+    const k = doc.felder as KontaktFelder;
+    const einstieg = { ...k.einstieg, text: ersetzeAngaben(k.einstieg.text, alt, neu) };
+    const standort = { ...k.standort, text: ersetzeAngaben(k.standort.text, alt, neu) };
+    if (einstieg.text === k.einstieg.text && standort.text === k.standort.text) return doc;
+    return { ...doc, felder: { ...k, einstieg, standort } };
+  }
+  return doc;
 }
 
 async function writeDoc(doc: ContentDocument): Promise<void> {
@@ -611,7 +631,7 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
         entwurf: true,
         menue: menueOrt(payload.menue),
         vorlage: "abschnitte",
-        felder: neueSeite(bild),
+        felder: neueSeite(bild, allgemein().band),
         body: "",
       };
       await writeDoc(doc);
@@ -637,6 +657,44 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
       await updateSite([STARTSEITE]);
       await commitIfChanged("Menü neu geordnet", [MENUE_DATEI]);
       sendJson(res, 200, { reihenfolge });
+    });
+    return;
+  }
+
+  // Die allgemeinen Angaben (Verwaltung, Allgemein). Mit dem Stand, damit nichts still überschrieben wird.
+  if (req.method === "GET" && url.pathname === "/api/allgemein") {
+    res.setHeader("cache-control", "no-store");
+    sendJson(res, 200, { allgemein: await leseAllgemein(), version: await stand(ALLGEMEIN_DATEI) });
+    return;
+  }
+
+  // Patrick drückt «Speichern»: Die Angaben gelten sofort auf der ganzen Website. Wo die alten im
+  // Rechtlichen oder auf der Kontaktseite im Text stehen, werden sie mit ersetzt, in derselben Fassung.
+  if (req.method === "PUT" && url.pathname === "/api/allgemein") {
+    const payload = JSON.parse((await readBody(req)).toString("utf8")) as { allgemein?: unknown; version?: string };
+    const neu = allgemeinAus(payload.allgemein);
+    const fehler = pruefeAllgemein(neu);
+    if (Object.keys(fehler).length) throw new FeldFehler(fehler);
+    await flushPending();
+    await einzeln(async () => {
+      if (String(payload.version ?? "") !== (await stand(ALLGEMEIN_DATEI))) {
+        sendJson(res, 409, { error: "Die Angaben wurden inzwischen anderswo geändert. Bitte neu laden, dann erst weiterarbeiten." });
+        return;
+      }
+      const alt = await leseAllgemein();
+      const angepasst: ContentDocument[] = [];
+      for (const doc of await loadDocuments()) {
+        const geaendert = angabenErsetzt(doc, alt, neu);
+        if (geaendert === doc) continue;
+        await writeDoc(geaendert);
+        angepasst.push(geaendert);
+      }
+      await schreibeAllgemein(neu);
+      await loadDocuments();
+      await updateSite([STARTSEITE, ...angepasst.map((doc) => doc.rel)]);
+      await commitIfChanged("Allgemeine Angaben geändert", [ALLGEMEIN_DATEI, ...angepasst.map((doc) => doc.rel)]);
+      console.log(`Allgemeine Angaben geändert (${angepasst.length} Seiten im Text angepasst)`);
+      sendJson(res, 200, { allgemein: neu, version: await stand(ALLGEMEIN_DATEI), angepasst: angepasst.map((doc) => doc.titel) });
     });
     return;
   }
@@ -762,7 +820,7 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
         menue: before.art === "kapitel" && !VORLAGE_VON[rel] ? menueOrt(payload.menue) : false,
         menueName: String(payload.menueName ?? "").replace(/\s+/g, " ").trim().slice(0, MENUE_NAME_MAX) || null,
         vorlage: before.vorlage ?? null,
-        felder: before.vorlage ? payload.felder ?? null : null,
+        felder: before.vorlage && payload.felder ? bereinigeFelder(before.vorlage, payload.felder) : null,
         body: before.vorlage ? "" : payload.body,
       };
       // Online hängt die Adresse an der Nummer. Ändern geht nur im Entwurf.
@@ -1100,8 +1158,9 @@ function watchContent(): void {
       }
       return;
     }
-    // Die Reihenfolge des Menüs steht im Stempel der Adressen: Das Setzen merkt es und setzt alle Seiten neu.
-    if (rel === MENUE_DATEI) {
+    // Die Reihenfolge des Menüs steht im Stempel der Adressen, die allgemeinen Angaben merkt das Setzen
+    // ebenfalls: Es setzt dann alle Seiten neu.
+    if (rel === MENUE_DATEI || rel === ALLGEMEIN_DATEI) {
       console.log(`setzt ${rel}`);
       setzeNeu([STARTSEITE]);
       return;
@@ -1117,6 +1176,9 @@ async function main(): Promise<void> {
   console.log(`Rolle: ${ROLLE}`);
   if (hatRedaktion) {
     await ensureContentGit();
+    await legeAllgemeinAn().catch((error: unknown) => {
+      console.error("Allgemeine Angaben anlegen fehlgeschlagen:", error instanceof Error ? error.message : error);
+    });
     await stelleSeitenUm().catch((error: unknown) => {
       console.error("Umstellung auf Felder fehlgeschlagen:", error instanceof Error ? error.message : error);
     });
@@ -1126,8 +1188,7 @@ async function main(): Promise<void> {
   if (setztSeite) {
     // Immer neu setzen: nach einem Code-Update passt altes HTML nicht zum neuen heft.css.
     // Eine kaputte Datei darf die Seite nicht vom Netz nehmen: Was schon gesetzt ist, bleibt online.
-    console.log("Setze die Seiten …");
-    const setzen = buildSite().then(
+    const setzeAlles = () => buildSite().then(
       async (built) => {
         console.log(`${built.pages} Seiten gesetzt.`);
         await schreibeStatus();
@@ -1137,8 +1198,19 @@ async function main(): Promise<void> {
         await schreibeStatus(error);
       },
     );
+    console.log("Setze die Seiten …");
+    const setzen = setzeAlles();
     // Liegt schon eine Website da, antwortet der Server gleich und setzt im Hintergrund.
     if (!(await fs.stat(path.join(siteDir(), "index.html")).then(() => true, () => false))) await setzen;
+    // Das Jahr in der Fusszeile wird beim Setzen eingetragen: Zum Jahreswechsel alle Seiten neu setzen.
+    let jahr = new Date().getFullYear();
+    setInterval(() => {
+      const jetzt = new Date().getFullYear();
+      if (jetzt === jahr) return;
+      jahr = jetzt;
+      console.log(`Neues Jahr ${jetzt}: setze die Seiten neu …`);
+      void setzeAlles();
+    }, 60 * 1000).unref();
     // Anfragen nach Ablauf der Frist löschen: beim Start und danach einmal am Tag.
     const aufraeumen = () => void loescheAlteAnfragen().catch((error) => console.error("Anfragen löschen:", error instanceof Error ? error.message : error));
     aufraeumen();

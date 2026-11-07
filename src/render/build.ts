@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { allgemein } from "../content/allgemein.ts";
 import { adresseReserviert, adressStempel, alteAdressen, publicPath, type ContentDocument } from "../content/document.ts";
 import { briefsNewestFirst, loadDocuments } from "../content/load.ts";
 import { excerptFromMarkdown, minutesFromMarkdown, renderDocument, type PageView, type Teaser } from "../design/layout.ts";
@@ -175,6 +176,7 @@ export async function buildSite(): Promise<{ pages: number; index: string }> {
   await copyAssets();
 
   gesetzteAdressen = adressStempel();
+  gesetzteAngaben = JSON.stringify(allgemein());
   gesetzteReihe = briefReihe(teasers);
   let index = "Willkommen";
   gesetzt = new Set(["media", "fonts", "brand", "heft.css", "site.js", "sitemap.xml", "robots.txt", "status.json"]);
@@ -203,6 +205,9 @@ function briefReihe(teasers: Teaser[]): string {
 /** Die Adressen beim letzten Setzen. Ändert sich eine, stimmen Menü und Links auf allen Seiten nicht mehr. */
 let gesetzteAdressen: string | null = null;
 
+/** Die allgemeinen Angaben beim letzten Setzen. Sie stehen im Fuss jeder Seite: Ändern sie sich, alle neu. */
+let gesetzteAngaben: string | null = null;
+
 /** Eine Seite, die nicht mehr online ist, von der Website nehmen. Die Startseite bleibt immer. */
 async function entferne(site: string, rel: string): Promise<void> {
   const href = publicPath(rel);
@@ -212,6 +217,7 @@ async function entferne(site: string, rel: string): Promise<void> {
 /**
  * Baut nur die geänderten Seiten neu. Ein Brief erneuert auch Startseite und Archiv.
  * Hat eine Seite eine neue Adresse, werden alle neu gesetzt und die Ordner unter den alten Adressen gelöscht.
+ * Neue allgemeine Angaben setzen ebenfalls alle Seiten neu.
  */
 export async function rebuildDocuments(rels: string[]): Promise<void> {
   const docs = await publishedDocuments();
@@ -220,7 +226,10 @@ export async function rebuildDocuments(rels: string[]): Promise<void> {
   await fs.mkdir(site, { recursive: true });
   await copyAssets();
   const stempel = adressStempel();
-  if (gesetzteAdressen !== null && gesetzteAdressen !== stempel) {
+  const angaben = JSON.stringify(allgemein());
+  const angabenNeu = gesetzteAngaben !== null && gesetzteAngaben !== angaben;
+  gesetzteAngaben = angaben;
+  if ((gesetzteAdressen !== null && gesetzteAdressen !== stempel) || angabenNeu) {
     gesetzteAdressen = stempel;
     for (const alt of alteAdressen()) {
       if (alt !== "/" && !adresseReserviert(alt)) await fs.rm(path.join(site, alt.replace(/^\//, "")), { recursive: true, force: true });

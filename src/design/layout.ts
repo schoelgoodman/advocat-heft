@@ -1,4 +1,5 @@
 import { Window } from "happy-dom";
+import { allgemein, telefonLink } from "../content/allgemein.ts";
 import { publicPath, type Art } from "../content/document.ts";
 import { mediaSize, mediaVariants, mediaVariantsAvif } from "../render/media.ts";
 import { clip, DEFAULT_DESCRIPTION, DEFAULT_IMAGE } from "./seo.ts";
@@ -40,27 +41,6 @@ export interface PageView {
 }
 
 export const PER_PAGE = 10;
-
-const ADDRESS_LINES: Record<string, string[]> = {
-  "Advocat Finanz AG Rosenbergstrasse 50 CH-9000 St.Gallen": [
-    "Advocat Finanz AG",
-    "Rosenbergstrasse 50",
-    "CH-9000 St.Gallen",
-  ],
-  "Infomaniak Network AG Rue Eugène Marziano 25 CH-1227 Les Acacias (GE)": [
-    "Infomaniak Network AG",
-    "Rue Eugène Marziano 25",
-    "CH-1227 Les Acacias (GE)",
-  ],
-  "UID: CHE-357.969.124 Handelsregister-Nr: CH-320.3.081.815-5 MWST Nr: CHE-357.969.124 MWST Gerichtsstand: CH-9000 St.Gallen": [
-    "UID: CHE-357.969.124",
-    "Handelsregister-Nr: CH-320.3.081.815-5",
-    "MWST Nr: CHE-357.969.124 MWST",
-    "Gerichtsstand: CH-9000 St.Gallen",
-  ],
-};
-
-const MAPS_LINK = "https://maps.app.goo.gl/poLBfgcPVnj2UWaW9";
 
 const SHORT_MONTHS = ["Jan.", "Feb.", "März", "Apr.", "Mai", "Juni", "Juli", "Aug.", "Sep.", "Okt.", "Nov.", "Dez."];
 const LONG_MONTHS = [
@@ -255,21 +235,20 @@ export function knopfText(label: string): string {
 
 /** Neben dem Knopf Telefon und Mail: auf dem Handy ein Tipp bis zum Anruf. */
 export function bandHtml(heading: string, paragraph: string, label: string, href: string): string {
-  const direkt = `<p class="band-direkt"><a href="tel:+41712423030">+41 71 242 30 30</a><a href="mailto:office@advocat-finanz.ch">office@advocat-finanz.ch</a></p>`;
+  const { telefon, email } = allgemein();
+  const direkt = `<p class="band-direkt"><a href="tel:${esc(telefonLink(telefon))}">${esc(telefon)}</a><a href="mailto:${esc(email)}">${esc(email)}</a></p>`;
   return `<aside class="band"><div class="band-innen"><h2>${esc(heading)}</h2><p>${esc(paragraph)}</p><div class="aktionen"><a class="btn btn-solid" href="${esc(href)}">${esc(knopfText(label))}</a>${direkt}</div></div></aside>`;
 }
 
+/** Am Schluss jedes Newsletters. Titel und Satz stehen in den allgemeinen Angaben. */
 function standardBand(): string {
-  return bandHtml(
-    "Kontaktieren Sie uns.",
-    "Gerne stehen wir Ihnen beratend zur Seite und freuen uns auf einen Kontakt.",
-    "Kontaktieren sie uns",
-    "/kontakt",
-  );
+  const { band } = allgemein();
+  return bandHtml(band.titel, band.text, "Kontaktieren Sie uns", "/kontakt");
 }
 
 export function formHtml(): string {
-  return `<form class="anfrage" action="/kontakt" method="post" novalidate>
+  // site.js nennt die E-Mail-Adresse, wenn das Senden scheitert.
+  return `<form class="anfrage" action="/kontakt" method="post" novalidate data-email="${esc(allgemein().email)}">
     <div class="feld-reihe">
       <label class="feld"><span>Vorname</span><input name="vorname" autocomplete="given-name" maxlength="100" required aria-describedby="fehler-vorname"><span class="feld-fehler" id="fehler-vorname" hidden></span></label>
       <label class="feld"><span>Name</span><input name="name" autocomplete="family-name" maxlength="100" required aria-describedby="fehler-name"><span class="feld-fehler" id="fehler-name" hidden></span></label>
@@ -288,27 +267,25 @@ export function formHtml(): string {
 
 /** Die Karte lädt erst auf Klick (site.js), damit ohne Zustimmung nichts an Google geht. */
 export function kartePlatzhalter(href: string): string {
-  return `<div class="karte-frame karte-platzhalter" data-src="${esc(href)}" data-title="Advocat Finanz AG auf der Karte"><p>Die Karte stammt von Google Maps. Erst wenn Sie sie laden, werden Daten an Google übertragen.</p><p><button type="button" class="btn btn-ghost karte-laden">Karte laden</button></p><p><a href="${MAPS_LINK}">In Google Maps öffnen</a></p></div>`;
+  const { firma, karte } = allgemein();
+  const oeffnen = karte ? `<p><a href="${esc(karte)}">In Google Maps öffnen</a></p>` : "";
+  return `<div class="karte-frame karte-platzhalter" data-src="${esc(href)}" data-title="${esc(firma)} auf der Karte"><p>Die Karte stammt von Google Maps. Erst wenn Sie sie laden, werden Daten an Google übertragen.</p><p><button type="button" class="btn btn-ghost karte-laden">Karte laden</button></p>${oeffnen}</div>`;
 }
 
-function repair(root: HTMLElement, doc: Document): void {
+function repair(root: HTMLElement, doc: Document, art: Art): void {
+  // Im Rechtlichen ist jeder einfache Zeilenumbruch gemeint: Adresse, Handelsregister, «Vertreten durch».
+  if (art === "recht") {
+    for (const umbruch of [...root.querySelectorAll('span[data-type="hardbreak"]')]) umbruch.replaceWith(doc.createElement("br"));
+  }
+  const { telefon, email } = allgemein();
   for (const paragraph of [...root.querySelectorAll("p")]) {
     const value = plain(paragraph);
-    const lines = ADDRESS_LINES[value];
-    if (lines) {
-      paragraph.innerHTML = lines.map((line) => esc(line)).join("<br>");
+    if (value === telefon && !paragraph.querySelector("a")) {
+      paragraph.innerHTML = `<a href="tel:${esc(telefonLink(telefon))}">${esc(telefon)}</a>`;
       continue;
     }
-    if (value === "Vertreten durch: Patrick Rütsche") {
-      paragraph.innerHTML = "Vertreten durch:<br>Patrick Rütsche";
-      continue;
-    }
-    if (value === "+41 71 242 30 30" && !paragraph.querySelector("a")) {
-      paragraph.innerHTML = `<a href="tel:+41712423030">+41 71 242 30 30</a>`;
-      continue;
-    }
-    if (value === "office@advocat-finanz.ch" && !paragraph.querySelector("a")) {
-      paragraph.innerHTML = `<a href="mailto:office@advocat-finanz.ch">office@advocat-finanz.ch</a>`;
+    if (value === email && !paragraph.querySelector("a")) {
+      paragraph.innerHTML = `<a href="mailto:${esc(email)}">${esc(email)}</a>`;
       continue;
     }
     const anchor = soloAnchor(paragraph);
@@ -483,7 +460,7 @@ export function renderDocument(input: RenderInput): PageView {
   };
   return imDom(input.html, (root) => {
     const doc = root.ownerDocument;
-    repair(root, doc);
+    repair(root, doc, input.art);
     bilderAufbereiten(root);
     const firstImage = root.querySelector("img");
     const firstSrc = firstImage?.getAttribute("src");

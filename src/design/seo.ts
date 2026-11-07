@@ -1,3 +1,5 @@
+import { allgemein } from "../content/allgemein.ts";
+
 /**
  * Was Suchmaschinen und Vorschauen (Google, LinkedIn, WhatsApp) über eine Seite lesen.
  * Der Text kommt aus dem Inhalt; hier steht nur, wie er in den Kopf der Seite kommt.
@@ -38,23 +40,24 @@ export function jsonLd(data: unknown): string {
   return `<script type="application/ld+json">${JSON.stringify(data).replaceAll("<", "\\u003c")}</script>`;
 }
 
+/** Firma, Adresse, Telefon und E-Mail aus den allgemeinen Angaben. */
 export function organization(): Record<string, unknown> {
+  const angaben = allgemein();
   return {
     "@type": "FinancialService",
     "@id": `${siteUrl()}/#organisation`,
-    name: "Advocat Finanz AG",
+    name: angaben.firma,
     url: `${siteUrl()}/`,
     logo: absoluteUrl("/brand/logo-quadrat.png"),
     image: absoluteUrl(DEFAULT_IMAGE),
     slogan: "Vermögen und Recht – ein Leben lang",
-    telephone: "+41 71 242 30 30",
-    email: "office@advocat-finanz.ch",
+    telephone: angaben.telefon,
+    email: angaben.email,
     address: {
       "@type": "PostalAddress",
-      streetAddress: "Rosenbergstrasse 50",
-      postalCode: "9000",
-      addressLocality: "St. Gallen",
-      addressRegion: "SG",
+      streetAddress: angaben.strasse,
+      postalCode: angaben.plz,
+      addressLocality: angaben.ort,
       addressCountry: "CH",
     },
     areaServed: "CH",

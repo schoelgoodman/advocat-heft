@@ -132,16 +132,9 @@ In der Stadt.
 
 ## Adresse
 
-Firma
-Strasse 1
-
 ## E-Mail
 
-a@b.ch
-
 ## Telefon
-
-+41 71 000 00 00
 
 [Karte](https://www.google.com/maps/embed?pb=x)`],
   neuigkeiten: ["Neuigkeiten", `![](../media/a.jpg)
@@ -197,7 +190,7 @@ test("Alte Fassung einer festen Seite bekommt beim Lesen ihre Felder", () => {
   const [titel, text] = SEITEN.kontakt;
   const doc = parseDocument(`---\ndatum: 2025-10-02\nart: kapitel\ntitel: "${titel}"\n---\n\n${text}\n`, "kapitel/kontakt.md");
   assert.equal(doc.vorlage, "kontakt");
-  assert.equal((doc.felder as KontaktFelder).adresse.zeilen, "Firma\nStrasse 1");
+  assert.equal((doc.felder as KontaktFelder).adresse.titel, "Adresse");
   assert.match(textVon(doc), /## Standort/);
   // Nicht passender Text bleibt Text.
   const frei = mitFeldern({ ...doc, vorlage: null, felder: null, body: "Nur ein Satz." });
@@ -242,4 +235,46 @@ test("Klartext: Absätze, Titel und Punkte ohne Markdown", () => {
   assert.ok(stuecke.includes("Erster Absatz mit fett."));
   assert.ok(stuecke.includes("Punkt zwei (mit Folgezeile)"));
   assert.ok(!stuecke.some((s) => s.includes("bild.jpg")));
+});
+
+test("Kontaktseite: Adresse, E-Mail und Telefon von früher fallen beim Lesen weg, die Titel bleiben", () => {
+  const datei = `---
+datum: 2025-10-02
+art: kapitel
+titel: "Kontakt"
+vorlage: kontakt
+felder:
+  bild:
+    alt: ""
+    src: ../media/a.jpg
+  einstieg:
+    titel: Aufnehmen
+    text: Wir sind da.
+  standort:
+    titel: Standort
+    text: In der Stadt.
+  adresse:
+    titel: Die Adresse
+    zeilen: |-
+      Firma
+      Strasse 1
+  email:
+    titel: E-Mail
+    wert: a@b.ch
+  telefon:
+    titel: Telefon
+    wert: +41 71 000 00 00
+  karte: https://www.google.com/maps/embed?pb=x
+---
+`;
+  const doc = parseDocument(datei, "kapitel/kontakt.md");
+  const felder = doc.felder as KontaktFelder;
+  assert.deepEqual([felder.adresse, felder.email, felder.telefon], [{ titel: "Die Adresse" }, { titel: "E-Mail" }, { titel: "Telefon" }]);
+  assert.doesNotMatch(serializeDocument(doc), /zeilen|wert/);
+  assert.deepEqual(pruefeFelder("kontakt", "Kontakt", felder), {});
+});
+
+test("Neue Seite: Kontakt am Schluss aus den allgemeinen Angaben, der Knopf bleibt", () => {
+  const seite = neueSeite("../media/a.jpg", { titel: "Rufen Sie an.", text: "Wir sind für Sie da." });
+  assert.deepEqual(seite.band, { titel: "Rufen Sie an.", text: "Wir sind für Sie da.", knopf: { text: "Kontaktieren Sie uns", ziel: "/kontakt" } });
 });

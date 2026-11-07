@@ -46,7 +46,7 @@ ok("Verzeichnis: drei Bereiche", JSON.stringify(await p.$$eval("aside .kategorie
 ok("Verzeichnis: Zur Website neben Redaktion", await p.$eval(".verzeichnis-kopf",e=>!!e.querySelector("#heim")&&!!e.querySelector("#zur-website")&&e.querySelector("#heim").getBoundingClientRect().top<e.querySelector("#zur-website").getBoundingClientRect().bottom));
 const reihe=await p.evaluate(()=>{let k="";const out={};for(const el of document.querySelectorAll("aside > *")){if(el.classList.contains("kategorie")){k=el.textContent;out[k]=[];continue;}if(!k)continue;const n=el.classList.contains("zeile-link")?el.textContent:el.querySelector?.(":scope > summary .gruppe-titel")?.textContent;if(n)out[k].push(n);}return out;});
 ok("Verzeichnis: Täglich", JSON.stringify(reihe["Täglich"])===JSON.stringify(["Newsletter","Kontaktaufnahme"]));
-ok("Verzeichnis: Verwaltung", JSON.stringify(reihe["Verwaltung"])===JSON.stringify(["Support","Medien","Verlauf","Papierkorb"]));
+ok("Verzeichnis: Verwaltung", JSON.stringify(reihe["Verwaltung"])===JSON.stringify(["Allgemein","Support","Medien","Verlauf","Papierkorb"]));
 const haupt=await p.$$eval("#seiten > .eintrag .thema",l=>l.map(x=>x.textContent));
 ok("Verzeichnis: wie das Menü der Website", JSON.stringify(haupt)===JSON.stringify(["Home","Unser Angebot","Über uns","Neuigkeiten","Kontakt"]));
 ok("Verzeichnis: Angebote unter Unser Angebot", JSON.stringify(await p.$$eval("#seiten .unterseiten .thema",l=>l.map(x=>x.textContent)))===JSON.stringify(["Für Privatpersonen","Für Unternehmen","Für Stiftungen"]));
@@ -242,6 +242,34 @@ await p.goto(`${base}/redaktion#verlauf`,{waitUntil:"networkidle2"}); await slee
 ok("Verlauf: Einträge", (await p.$$(".aenderungen > li")).length>=10); await p.screenshot({path:`${shots}/verlauf.png`});
 ok("Verlauf: aktueller Stand markiert", await p.evaluate(()=>document.querySelector(".aenderungen").textContent.includes("aktueller Stand")));
 ok("Verlauf: Menü neu geordnet, ohne Zurückholen", await p.evaluate(()=>{const li=[...document.querySelectorAll(".aenderungen > li")].find(x=>x.textContent.includes("Menü neu geordnet"));return !!li&&!li.querySelector("button")}));
+// Verwaltung, Allgemein: Angaben ändern, sie gelten überall und ersetzen die alten im Rechtlichen
+const html=(s)=>fs.readFileSync(`${site}/${s}/index.html`,"utf8");
+ok("Allgemein: beim Start angelegt, Kontaktseite ohne eigene Adresse", fs.existsSync(`${content}/allgemein.json`) && !read("kapitel/kontakt.md").includes("zeilen:") && html("kontakt").includes("Rosenbergstrasse 50<br>"));
+await p.goto(`${base}/redaktion#allgemein`,{waitUntil:"networkidle2"}); await sleep(900);
+ok("Allgemein: Ansicht mit allen Feldern", await p.$eval("#allgemein-seite",e=>!e.hidden) && (await p.$$("#allgemein-seite .feld")).length===14 && await p.$eval("#allgemein-link",e=>e.hasAttribute("aria-current")));
+ok("Allgemein: Speichern erst nach einer Änderung", await p.$eval("#allgemein-speichern",e=>e.disabled));
+const feldA=async(pfad,wert)=>{const e=await p.$(`#allgemein-seite [data-pfad="${pfad}"] input`); await e.click({count:3}); await p.keyboard.press("Backspace"); if(wert) await p.keyboard.type(wert);};
+await feldA("telefon","+41 71 999 88 77"); await feldA("strasse","Teststrasse 7"); await feldA("email","kaputt");
+await p.click("#allgemein-speichern"); await sleep(500);
+ok("Allgemein: falsche E-Mail rot, nichts gespeichert", !!(await p.$('#allgemein-seite [data-pfad="email"].hat-fehler')) && !read("allgemein.json").includes("Teststrasse"));
+await feldA("email","info@beispiel.ch"); await sleep(100);
+ok("Allgemein: Fehler weg, sobald behoben", !(await p.$('#allgemein-seite [data-pfad="email"].hat-fehler')));
+await p.click("#medien-link"); await sleep(400);
+ok("Allgemein: Wechseln mit Ungespeichertem fragt", await p.$eval("#frage",d=>d.open)); await p.click("#frage-nein"); await sleep(300);
+ok("Allgemein: Hierbleiben behält die Änderungen", await p.$eval("#allgemein-seite",e=>!e.hidden) && await p.$eval('#allgemein-seite [data-pfad="strasse"] input',e=>e.value)==="Teststrasse 7");
+await p.screenshot({path:`${shots}/allgemein.png`,fullPage:true});
+await p.click("#allgemein-speichern");
+// Alle Seiten werden neu gesetzt; das Rechtliche kommt zuletzt.
+for (let i=0;i<60&&!["newsletter-1","ueber-uns","kontakt","impressum"].every(s=>html(s).includes("Teststrasse 7 | "));i+=1) await sleep(500);
+const imp=read("recht/impressum.md");
+ok("Allgemein: Impressum im Text angepasst, Gerichtsstand bleibt", imp.includes("Advocat Finanz AG\nTeststrasse 7\nCH-9000 St.Gallen") && imp.includes("Telefon +41 71 999 88 77") && imp.includes("(mailto:info@beispiel.ch)") && imp.includes("Gerichtsstand: CH-9000 St.Gallen"));
+ok("Allgemein: Datenschutz angepasst, Meldung nennt die Seiten", read("recht/datenschutz.md").includes("Teststrasse 7") && /Impressum/.test(await p.$eval(".toast",e=>e.textContent)));
+ok("Allgemein: Fuss auf allen Seiten neu", ["ueber-uns","kontakt","newsletter-1","impressum"].every(s=>html(s).includes("Teststrasse 7 | CH-9000 St.Gallen")&&html(s).includes('href="tel:+41719998877"')) && fs.readFileSync(`${site}/index.html`,"utf8").includes("Teststrasse 7"));
+ok("Allgemein: Kontaktseite, Band und Formular", html("kontakt").includes("Teststrasse 7<br>CH-9000 St.Gallen") && html("kontakt").includes('data-email="info@beispiel.ch"') && html("ueber-uns").includes('<a href="mailto:info@beispiel.ch">info@beispiel.ch</a></p></div></div></aside>'));
+ok("Allgemein: Impressum mit Zeilenumbrüchen", html("impressum").includes("Teststrasse 7<br>CH-9000 St.Gallen") && html("impressum").includes("Vertreten durch:<br>"));
+ok("Allgemein: Angaben für Google", fs.readFileSync(`${site}/index.html`,"utf8").includes('"telephone":"+41 71 999 88 77"'));
+ok("Allgemein: gespeichert, Leiste ruhig", await p.$eval("#allgemein-speichern",e=>e.disabled) && await p.$eval("#allgemein-verwerfen",e=>e.hidden));
+await p.click("#medien-link"); await sleep(400); ok("Allgemein: nach dem Speichern wechseln ohne Frage", !(await p.$eval("#frage",d=>d.open)) && await p.$eval("#medien-seite",e=>!e.hidden));
 // alte Fassung (Markdown) zurückholen
 await open("kapitel/unternehmen.md"); await p.evaluate(()=>{document.querySelector("#fassungen-gruppe").open=true}); await sleep(1200);
 const anz=await p.$$eval("#fassungen li",l=>l.length); ok("Fassungen da",anz>=2);
@@ -259,7 +287,7 @@ ok("Computer: keine Tabelle in der Leiste", !(await p.evaluate(()=>[...document.
 await p.keyboard.down("Shift"); await p.keyboard.press("Home"); await p.keyboard.up("Shift"); await p.click(".milkdown-top-bar .top-bar-item"); await sleep(1500);
 ok("Computer: Knopf Fett wirkt", read(br).includes("**Autosave-Test**"));
 const textVorher=read(br);
-await p.evaluate(()=>window.scrollTo(0,0)); const pm3=await p.$(".milkdown .ProseMirror"); await p.keyboard.press("ArrowRight"); for(let i=0;i<30;i++){await p.keyboard.type("Zeile");await p.keyboard.press("Enter");} await sleep(1500); await p.evaluate(()=>window.scrollTo(0,700)); await sleep(300); const klebe=await p.evaluate(()=>{const t=document.querySelector(".milkdown-top-bar").getBoundingClientRect();const l=document.querySelector(".leiste").getBoundingClientRect();return {t:t.top,l:l.bottom}});
+await p.evaluate(()=>window.scrollTo(0,0)); const pm3=await p.$(".milkdown .ProseMirror"); await p.keyboard.press("ArrowRight"); for(let i=0;i<30;i++){await p.keyboard.type("Zeile");await p.keyboard.press("Enter");} await sleep(1500); await p.evaluate(()=>window.scrollTo(0,700)); await sleep(300); const klebe=await p.evaluate(()=>{const t=document.querySelector(".milkdown-top-bar").getBoundingClientRect();const l=document.querySelector("#blatt .leiste").getBoundingClientRect();return {t:t.top,l:l.bottom}});
 ok("Computer: Werkzeugleiste klebt unter der Leiste", klebe.t>=klebe.l-3&&klebe.t<klebe.l+10); await p.screenshot({path:`${shots}/werkzeugleiste.png`}); await p.evaluate(()=>window.scrollTo(0,0)); await p.keyboard.down("Shift"); await p.keyboard.press("ArrowUp"); await p.keyboard.up("Shift"); await sleep(200);
 await p.click("#bild-aus-medien"); await sleep(800); await p.waitForSelector(".medium-wahl"); await p.click(".medium-wahl"); await sleep(1800); const mitBild=/!\[[^\]]*\]\(\.\.\/media\//.test(read(br)); ok("Bild aus Medien im Newsletter, Markierung bleibt", mitBild && read(br).includes("**Autosave-Test") && read(br).includes("Zeile")); if(!mitBild||!read(br).includes("Zeile")||!read(br).includes("**Autosave-Test")) console.log("  Datei:",JSON.stringify(read(br).slice(0,160)),JSON.stringify(read(br).slice(-200)));
 await p.screenshot({path:`${shots}/newsletter.png`});

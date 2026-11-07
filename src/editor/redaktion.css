@@ -1020,7 +1020,7 @@ input.suche {
 .feld-gruppe h2 { font-family: var(--serif); font-weight: 400; font-size: 1.3rem; margin: 0; }
 .feld-gruppe p.leise { margin: -0.4rem 0 0; }
 .feld-gruppe > button { justify-self: start; }
-#felder .feld { display: grid; gap: 0.3rem; }
+#felder .feld, .allgemein-felder .feld { display: grid; gap: 0.3rem; }
 .feld-name { font-size: 0.82rem; font-weight: 600; }
 .feld-kopf { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
 .feld-werkzeuge { display: flex; gap: 0.1rem; }
@@ -1028,7 +1028,7 @@ input.suche {
 .feld-hinweis { font-size: 0.78rem; color: var(--quiet); }
 .feld-fehler { font-size: 0.82rem; color: var(--rot); font-weight: 600; }
 #felder .feld > button.leise { justify-self: start; padding-inline: 0.4rem; font-size: 0.88rem; }
-#felder .feld input[type="text"], #felder .feld textarea {
+#felder .feld input[type="text"], #felder .feld textarea, .allgemein-felder .feld input {
   width: 100%;
   font: inherit;
   color: var(--ink);
@@ -1038,7 +1038,7 @@ input.suche {
   line-height: 1.5;
 }
 #felder .feld textarea { resize: none; overflow: hidden; display: block; }
-#felder .feld textarea:focus { outline: none; border-color: var(--olive); box-shadow: 0 0 0 3px var(--olive-ring); }
+#felder .feld textarea:focus, .allgemein-felder .feld input:focus { outline: none; border-color: var(--olive); box-shadow: 0 0 0 3px var(--olive-ring); }
 .hat-fehler > :is(input, textarea) { border-color: var(--rot); }
 .feld-haken { display: flex; gap: 0.5rem; align-items: center; font-size: 0.92rem; }
 .feld-bild { width: 100%; max-height: 14rem; object-fit: cover; border-radius: var(--rund-mittel); display: block; background: var(--flaeche-tief); }
@@ -1058,6 +1058,13 @@ input.suche {
 .werkzeug-klein:hover:not(:disabled) { background: var(--hover); color: var(--ink); border-color: transparent; }
 .werkzeug-klein.gefahr:hover { color: var(--rot); background: var(--rot-hauch); }
 .werkzeug-klein:disabled { opacity: 0.3; cursor: default; }
+
+/* Verwaltung, Allgemein: dieselben Felder wie bei den Seiten, mit eigener Leiste zum Speichern. */
+#allgemein-seite { padding-top: 1.5rem; }
+#allgemein-seite .einleitung { max-width: 42rem; margin: 0 0 1.2rem; line-height: 1.5; }
+.allgemein-felder { display: grid; gap: 1.1rem; margin: 1.2rem 0 3rem; }
+.allgemein-felder .feld.schmal input { max-width: 8rem; }
+.allgemein-leiste .aktionen { flex: 0 0 auto; }
 .leistungen { display: grid; gap: 0.3rem; }
 .leistung { display: flex; align-items: flex-start; gap: 0.2rem; background: var(--flaeche-tief); border-radius: var(--rund-klein); }
 .leistung textarea { flex: 1; min-width: 0; padding-block: 0.35rem; }

@@ -1,3 +1,4 @@
+import { allgemein, ortZeile, telefonLink } from "../content/allgemein.ts";
 import { aktuell, aktuelleLinks, istOnline, menueSeiten } from "../content/document.ts";
 import { ANGEBOT, KONTAKT } from "../content/menue.ts";
 import { angebote, istAngebot } from "./angebote.ts";
@@ -79,6 +80,9 @@ function headMeta(view: PageView): string {
 
 export function pageShell(view: PageView): string {
   const year = new Date().getFullYear();
+  const angaben = allgemein();
+  const adressText = `${esc(angaben.strasse)} | ${esc(ortZeile(angaben))}`;
+  const adresse = angaben.karte ? `<a href="${esc(angaben.karte)}">${adressText}</a>` : `<span>${adressText}</span>`;
   // Home steht immer zuerst, «Kontakt» ist ein eigener Knopf. Dazwischen die Reihenfolge aus der Redaktion.
   const link = (href: string, label: string) => {
     const ziel = aktuell(href);
@@ -121,9 +125,9 @@ export function pageShell(view: PageView): string {
   <footer class="fuss">
     <div class="fuss-innen">
       <div class="fuss-text">
-        <p><strong>Advocat Finanz AG</strong><br>
-        <a href="https://maps.app.goo.gl/poLBfgcPVnj2UWaW9">Rosenbergstrasse 50 | CH-9000 St. Gallen</a><span class="trenner"> | </span><a href="tel:+41712423030">Tel. +41 71 242 30 30</a><span class="trenner"> | </span><a href="mailto:office@advocat-finanz.ch">office@advocat-finanz.ch</a></p>
-        <p class="copy"><span>©${year} Advocat Finanz AG</span><span class="trenner"> | </span><a href="/impressum">Impressum</a><span class="trenner"> | </span><a href="/disclaimer">Disclaimer</a><span class="trenner"> | </span><a href="/datenschutz">Datenschutz</a></p>
+        <p><strong>${esc(angaben.firma)}</strong><br>
+        ${adresse}<span class="trenner"> | </span><a href="tel:${esc(telefonLink(angaben.telefon))}">Tel. ${esc(angaben.telefon)}</a><span class="trenner"> | </span><a href="mailto:${esc(angaben.email)}">${esc(angaben.email)}</a></p>
+        <p class="copy"><span>©${year} ${esc(angaben.firma)}</span><span class="trenner"> | </span><a href="/impressum">Impressum</a><span class="trenner"> | </span><a href="/disclaimer">Disclaimer</a><span class="trenner"> | </span><a href="/datenschutz">Datenschutz</a></p>
       </div>
       <a class="fuss-claim" href="/"><img src="/brand/claim-footer.png" alt="Vermögen und Recht – ein Leben lang" width="240" height="48" loading="lazy"></a>
     </div>

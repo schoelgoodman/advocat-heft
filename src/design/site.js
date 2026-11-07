@@ -375,7 +375,7 @@
               : err && err.vomServer
                 ? ""
                 : "Die Nachricht konnte nicht gesendet werden. Bitte prüfen Sie die Verbindung. ") +
-              "Sie erreichen uns auch unter office@advocat-finanz.ch.",
+              "Sie erreichen uns auch unter " + (form.getAttribute("data-email") || "office@advocat-finanz.ch") + ".",
           );
         })
         .then(function () {
