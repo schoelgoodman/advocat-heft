@@ -44,9 +44,18 @@ const speichern=async()=>{ await klick("Speichern & veröffentlichen"); await sl
 await p.goto(`${base}/redaktion`,{waitUntil:"networkidle2"}); await sleep(900);
 ok("Verzeichnis: drei Bereiche", JSON.stringify(await p.$$eval("aside .kategorie",l=>l.map(x=>x.textContent)))===JSON.stringify(["Täglich","Seiten","Verwaltung"]));
 ok("Verzeichnis: Zur Website neben Redaktion", await p.$eval(".verzeichnis-kopf",e=>!!e.querySelector("#heim")&&!!e.querySelector("#zur-website")&&e.querySelector("#heim").getBoundingClientRect().top<e.querySelector("#zur-website").getBoundingClientRect().bottom));
-const reihe=await p.evaluate(()=>{let k="";const out={};for(const el of document.querySelectorAll("aside > *")){if(el.classList.contains("kategorie")){k=el.textContent;out[k]=[];continue;}if(!k)continue;const n=el.classList.contains("zeile-link")?el.textContent:el.querySelector?.(":scope > summary .gruppe-titel")?.textContent;if(n)out[k].push(n);}return out;});
+const reihe=await p.evaluate(()=>{let k="";const out={};for(const el of document.querySelectorAll("aside > *")){if(el.classList.contains("kategorie")){k=el.textContent;out[k]=[];continue;}if(!k)continue;const n=el.classList.contains("zeile-link")?(el.querySelector(":scope > span:not(.zahl)")??el).textContent:el.querySelector?.(":scope > summary .gruppe-titel")?.textContent;if(n)out[k].push(n);}return out;});
 ok("Verzeichnis: Täglich", JSON.stringify(reihe["Täglich"])===JSON.stringify(["Newsletter","Kontaktaufnahme"]));
-ok("Verzeichnis: Verwaltung", JSON.stringify(reihe["Verwaltung"])===JSON.stringify(["Allgemein","Support","Medien","Verlauf","Papierkorb"]));
+ok("Verzeichnis: Verwaltung", JSON.stringify(reihe["Verwaltung"])===JSON.stringify(["Allgemein","Support","Website-Check","Medien","Verlauf","Papierkorb"]));
+// Startseite: der nächste Schritt, zwei Karten, zuletzt Bearbeitetes; der Website-Check wohnt unter Verwaltung
+ok("Start: Als Nächstes mit einem Satz", await p.$eval("#start-naechstes",e=>!e.hidden&&e.querySelector(".gross").textContent.length>3));
+ok("Start: Newsletter und Kontaktaufnahme", await p.$$eval("#start .aufgabe:not([hidden]) h2",l=>l.map(x=>x.firstChild.textContent).slice(0,2).join()==="Newsletter,Kontaktaufnahme"));
+ok("Start: kein Website-Check mehr", await p.$eval("#start",e=>!e.textContent.includes("Website-Check")));
+ok("Start: Zuletzt bearbeitet öffnet eine Seite", await p.$eval("#start-zuletzt",e=>!e.hidden&&e.querySelectorAll("li button").length>0));
+await p.screenshot({path:`${shots}/start.png`});
+await p.click("#check-link"); await sleep(900);
+ok("Website-Check: eigene Ansicht unter Verwaltung", await p.$eval("#check-seite",e=>!e.hidden&&e.querySelector("#check-stand").textContent.length>3) && await p.$eval("#check-link",e=>e.hasAttribute("aria-current")) && (await p.evaluate(()=>location.hash))==="#check");
+await p.click("#heim"); await sleep(600);
 const haupt=await p.$$eval("#seiten > .eintrag .thema",l=>l.map(x=>x.textContent));
 ok("Verzeichnis: wie das Menü der Website", JSON.stringify(haupt)===JSON.stringify(["Home","Unser Angebot","Über uns","Neuigkeiten","Kontakt"]));
 ok("Verzeichnis: Angebote unter Unser Angebot", JSON.stringify(await p.$$eval("#seiten .unterseiten .thema",l=>l.map(x=>x.textContent)))===JSON.stringify(["Für Privatpersonen","Für Unternehmen","Für Stiftungen"]));

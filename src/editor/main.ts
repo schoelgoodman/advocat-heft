@@ -181,6 +181,7 @@ root.innerHTML = `
         <summary><button type="button" class="gruppe-titel" id="wuensche-link">Support</button><span class="zahl offen" id="wuensche-zahl" title="Noch nicht erledigt"></span><span class="marke neu" id="wuensche-neu" hidden>Neu</span></summary>
         <nav id="wuensche-liste"></nav>
       </details>
+      <button type="button" class="zeile-link" id="check-link"><span>Website-Check</span><span class="zahl offen" id="check-zahl"></span></button>
       <button type="button" class="zeile-link" id="medien-link">Medien</button>
       <button type="button" class="zeile-link" id="verlauf-link">Verlauf</button>
       <details id="papierkorb-gruppe">
@@ -196,15 +197,21 @@ root.innerHTML = `
       <section id="allgemein-seite" hidden></section>
       <section id="medien-seite" hidden></section>
       <section id="verlauf-seite" hidden></section>
+      <section id="check-seite" hidden>
+        <h1>Website-Check</h1>
+        <p class="leise einleitung">Was Google von den Seiten liest: ein Thema, einen Einstiegsabsatz und Bilder mit Beschreibung. Die wichtigsten Seiten zuerst. Seite öffnen und im Assistenten «Seite prüfen» klicken, er schlägt die Verbesserung vor.</p>
+        <p class="check-stand" id="check-stand" aria-live="polite">Wird geprüft …</p>
+        <ol class="aenderungen" id="check-liste"></ol>
+      </section>
       <section id="start">
         <h1 id="gruss">Guten Tag, Patrick.</h1>
+        <div class="naechstes" id="start-naechstes" hidden></div>
         <div class="aufgaben">
           <article class="aufgabe" id="start-briefe"></article>
           <article class="aufgabe" id="start-anfragen"></article>
-          <article class="aufgabe breit laedt" id="start-check"></article>
+          <article class="aufgabe breit" id="start-zuletzt" hidden></article>
         </div>
-        <p class="wunsch-hinweis">Fehlt etwas in der Redaktion oder soll die Website anders aussehen? <button type="button" class="leise" id="start-wunsch">An Support schreiben →</button></p>
-        <p class="wunsch-hinweis">Funktioniert in der Redaktion etwas nicht? <button type="button" class="leise" id="start-fehler">Bug melden →</button></p>
+        <p class="wunsch-hinweis">Fehlt etwas, soll die Website anders aussehen oder funktioniert etwas nicht? <button type="button" class="leise" id="start-wunsch">An Support schreiben →</button> <button type="button" class="leise" id="start-fehler">Bug melden →</button> <button type="button" class="leise" id="start-support-offen" hidden></button></p>
       </section>
       <section id="anfragen" hidden>
         <h1>Kontaktaufnahme</h1>
@@ -331,9 +338,15 @@ const anfragenKacheln = root.querySelector<HTMLElement>("#anfragen-kacheln")!;
 const startAnfragen = root.querySelector<HTMLElement>("#start-anfragen")!;
 const startBriefe = root.querySelector<HTMLElement>("#start-briefe")!;
 const briefeZahl = root.querySelector<HTMLElement>("#briefe-zahl")!;
-const startCheck = root.querySelector<HTMLElement>("#start-check")!;
+const startNaechstes = root.querySelector<HTMLElement>("#start-naechstes")!;
+const startZuletzt = root.querySelector<HTMLElement>("#start-zuletzt")!;
+const startSupportOffen = root.querySelector<HTMLButtonElement>("#start-support-offen")!;
+const checkSeite = root.querySelector<HTMLElement>("#check-seite")!;
+const checkLink = root.querySelector<HTMLButtonElement>("#check-link")!;
+const checkZahl = root.querySelector<HTMLElement>("#check-zahl")!;
+const checkStand = root.querySelector<HTMLElement>("#check-stand")!;
+const checkListe = root.querySelector<HTMLOListElement>("#check-liste")!;
 const googleHinweise = root.querySelector<HTMLElement>("#google-hinweise")!;
-renderStartCheckLaedt();
 const anfragenKarten = root.querySelector<HTMLOListElement>("#anfragen-karten")!;
 const form = root.querySelector<HTMLFormElement>("#blatt")!;
 const stand = root.querySelector<HTMLElement>("#stand")!;
@@ -402,6 +415,7 @@ function ask(options: { titel: string; text: string; ja: string; nein?: string; 
 
 const eingangFormat = new Intl.DateTimeFormat("de-CH", { dateStyle: "medium", timeStyle: "short" });
 const tagFormat = new Intl.DateTimeFormat("de-CH", { dateStyle: "medium" });
+const uhrFormat = new Intl.DateTimeFormat("de-CH", { timeStyle: "short" });
 
 /** Die öffentliche Adresse kommt vom Server (PUBLIC_URL). Lokal ist es derselbe Server. */
 let publicOrigin = "";
@@ -884,7 +898,7 @@ function renderBriefe(): void {
 /** Eine Karte auf der Startseite: Titel, eine grosse Zeile, Kleingedrucktes, eine kurze Liste, ein Knopf. */
 function aufgabe(
   host: HTMLElement,
-  options: { titel: string; zahlen?: { text: string; art: "neu" | "offen" | "" }[]; gross: string; leise: string; liste: { label: string; info: string; onClick: () => void }[]; knopf: HTMLButtonElement | HTMLButtonElement[] },
+  options: { titel: string; zahlen?: { text: string; art: "neu" | "offen" | "" }[]; gross?: string; leise?: string; liste: { label: string; info: string; vorschau?: string; onClick: () => void }[]; knopf: HTMLButtonElement | HTMLButtonElement[] },
 ): void {
   const titel = document.createElement("h2");
   titel.textContent = options.titel;
@@ -897,10 +911,10 @@ function aufgabe(
   }
   const gross = document.createElement("p");
   gross.className = "gross";
-  gross.textContent = options.gross;
+  gross.textContent = options.gross ?? "";
   const leise = document.createElement("p");
   leise.className = "leise";
-  leise.textContent = options.leise;
+  leise.textContent = options.leise ?? "";
   const liste = document.createElement("ul");
   for (const eintrag of options.liste) {
     const item = document.createElement("li");
@@ -908,13 +922,19 @@ function aufgabe(
     const info = document.createElement("span");
     info.textContent = eintrag.info;
     link.append(info);
+    if (eintrag.vorschau) {
+      const vorschau = document.createElement("span");
+      vorschau.className = "vorschau";
+      vorschau.textContent = eintrag.vorschau;
+      link.append(vorschau);
+    }
     item.append(link);
     liste.append(item);
   }
   const knoepfe = document.createElement("div");
   knoepfe.className = "aktionen";
   knoepfe.append(...[options.knopf].flat());
-  host.replaceChildren(titel, gross, leise, ...(options.liste.length ? [liste] : []), knoepfe);
+  host.replaceChildren(titel, ...(options.gross ? [gross] : []), ...(options.leise ? [leise] : []), ...(options.liste.length ? [liste] : []), knoepfe);
 }
 
 function entwurfZahl(anzahl: number): string {
@@ -925,13 +945,25 @@ function renderStartBriefe(): void {
   const entwuerfe = alleBriefe.filter((page) => page.entwurf);
   briefeZahl.textContent = entwuerfe.length ? entwurfZahl(entwuerfe.length) : "";
   const zuletzt = alleBriefe.find((page) => !page.entwurf);
-  const neu = button("Neuen Newsletter schreiben", "haupt", () => void newBrief());
+  // Wartet ein Entwurf, ist Weiterschreiben das Naheliegende. So entsteht kein zweiter leerer Entwurf aus Versehen.
+  const weiter = entwuerfe[0];
+  const knoepfe = weiter
+    ? [
+        button("Entwurf weiterschreiben", "haupt", () => void openPage(weiter.rel)),
+        button("Neuen Newsletter schreiben", "", () => void newBrief()),
+      ]
+    : [button("Neuen Newsletter schreiben", "haupt", () => void newBrief())];
   // Entwürfe zuerst, die wollen fertig werden. Sonst die letzten veröffentlichten.
-  const liste = (entwuerfe.length ? entwuerfe : alleBriefe).slice(0, 3).map((page) => ({
-    label: thema(page.titel) || "Noch ohne Thema",
-    info: page.entwurf ? `Entwurf · Nr. ${page.nummer ?? ""}` : `Nr. ${page.nummer ?? ""} · ${shortDate(page.datum)}`,
-    onClick: () => void openPage(page.rel),
-  }));
+  const liste = (entwuerfe.length ? entwuerfe : alleBriefe).slice(0, 3).map((page) => {
+    const bearbeitet = page.entwurf ? zuletztAm.get(page.rel) : undefined;
+    return {
+      label: thema(page.titel) || "Noch ohne Thema",
+      info: page.entwurf
+        ? `Entwurf · Nr. ${page.nummer ?? ""}${bearbeitet ? ` · zuletzt bearbeitet ${wannKurz(bearbeitet)}` : ""}`
+        : `Nr. ${page.nummer ?? ""} · ${shortDate(page.datum)}`,
+      onClick: () => void openPage(page.rel),
+    };
+  });
   aufgabe(startBriefe, {
     titel: "Newsletter",
     zahlen: entwuerfe.length ? [{ text: entwurfZahl(entwuerfe.length), art: "" }] : [],
@@ -939,16 +971,15 @@ function renderStartBriefe(): void {
       ? `${entwuerfe.length === 1 ? "Ein Entwurf wartet" : `${entwuerfe.length} Entwürfe warten`}`
       : "Keine offenen Entwürfe",
     leise: zuletzt
-      ? `Zuletzt erschienen: Nr. ${zuletzt.nummer ?? ""} am ${shortDate(zuletzt.datum)}, ${seit(zuletzt.datum)}.${
-          tageSeit(zuletzt.datum) > PAUSE_TAGE && !entwuerfe.length ? " Zeit für den nächsten?" : ""
-        }`
+      ? `Zuletzt erschienen: Nr. ${zuletzt.nummer ?? ""} am ${shortDate(zuletzt.datum)}, ${seit(zuletzt.datum)}.`
       : "Der erste Newsletter erscheint, sobald Sie ihn veröffentlichen.",
     liste,
-    knopf: [neu, button("Zur Übersicht", "", () => void showBriefe())],
+    knopf: [...knoepfe, button("Zur Übersicht", "", () => void showBriefe())],
   });
+  renderNaechstes();
 }
 
-/** Nach so vielen Tagen ohne neuen Newsletter erinnert die Startseite sanft. Google mag Seiten, die leben. */
+/** Nach so vielen Tagen ohne neuen Newsletter erinnert «Als Nächstes» sanft. Google mag Seiten, die leben. */
 const PAUSE_TAGE = 60;
 
 function tageSeit(iso: string): number {
@@ -978,9 +1009,8 @@ interface Befund {
 }
 
 let befunde: Befund[] = [];
-let alleBefunde = false;
-/** Wie viele die Karte zeigt, bevor «Alle anzeigen» nötig ist. */
-const BEFUNDE_KURZ = 3;
+/** Solange der erste Check läuft, sagt die Ansicht «Wird geprüft …» statt «Alles in Ordnung». */
+let checkGeladen = false;
 
 /** Holt den Website-Check. Unveränderte Seiten prüft der Server nicht nochmals. */
 async function loadCheck(): Promise<void> {
@@ -989,43 +1019,161 @@ async function loadCheck(): Promise<void> {
     .catch(() => null)) as { befunde?: Befund[] } | null;
   if (!json?.befunde) return;
   befunde = json.befunde;
-  renderStartCheck();
+  checkGeladen = true;
+  renderCheck();
 }
 
-function renderStartCheck(): void {
-  startCheck.classList.remove("laedt");
+function checkSatz(n: number): string {
+  return `${n === 1 ? "Eine Seite lässt" : `${n} Seiten lassen`} sich für Google verbessern`;
+}
+
+/** Die Zahl im Verzeichnis, die Ansicht «Website-Check» und der nächste Schritt auf der Startseite. */
+function renderCheck(): void {
   const n = befunde.length;
-  const zeigen = alleBefunde ? befunde : befunde.slice(0, BEFUNDE_KURZ);
-  const knoepfe = n > BEFUNDE_KURZ
-    ? [button(alleBefunde ? "Weniger anzeigen" : `Alle ${n} anzeigen`, "", () => {
-        alleBefunde = !alleBefunde;
-        renderStartCheck();
-      })]
-    : [];
-  aufgabe(startCheck, {
-    titel: "Website-Check",
-    gross: n ? `${n === 1 ? "Eine Seite lässt" : `${n} Seiten lassen`} sich für Google verbessern` : "Alles in Ordnung",
-    leise: n
-      ? "Die wichtigsten zuerst. Seite öffnen und im Assistenten «Seite prüfen» klicken, er schlägt die Verbesserung vor."
-      : "Alle Seiten haben ein Thema, einen Einstiegsabsatz für Google und Bilder mit Beschreibung.",
-    liste: zeigen.map((befund) => ({
-      label: befund.art === "brief" ? thema(befund.titel) || befund.titel : befund.titel,
-      info: befund.probleme.map((problem) => problem.text).join(" · "),
-      onClick: () => void openPage(befund.rel),
+  // Gelb wie alles, was gesehen, aber nicht erledigt ist. Ohne Befund steht nichts da.
+  checkZahl.textContent = n ? String(n) : "";
+  checkLink.title = n ? checkSatz(n) : "";
+  checkStand.textContent = n
+    ? `${checkSatz(n)}.`
+    : "Alles in Ordnung ✓ Alle Seiten haben ein Thema, einen Einstiegsabsatz für Google und Bilder mit Beschreibung.";
+  checkStand.classList.toggle("gut", n === 0);
+  checkListe.replaceChildren(
+    ...befunde.map((befund) =>
+      h(
+        "li",
+        {},
+        h(
+          "div",
+          {},
+          h("strong", {}, befund.titel),
+          h("small", { class: "leise" }, befund.probleme.map((problem) => problem.text).join(" · ")),
+        ),
+        h("div", { class: "aktionen" }, button("Seite öffnen", "", () => void openPage(befund.rel))),
+      ),
+    ),
+  );
+  renderNaechstes();
+}
+
+/** «heute, 14:05», «gestern», «vor 5 Tagen», danach das Datum. Gezählt werden Kalendertage. */
+function wannKurz(iso: string): string {
+  const wann = new Date(iso);
+  if (Number.isNaN(wann.getTime())) return "";
+  const mitternacht = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const tage = Math.round((mitternacht(new Date()) - mitternacht(wann)) / 86_400_000);
+  if (tage <= 0) return `heute, ${uhrFormat.format(wann)}`;
+  if (tage === 1) return "gestern";
+  if (tage < 14) return `vor ${tage} Tagen`;
+  return `am ${tagFormat.format(wann)}`;
+}
+
+/** Wann eine Seite zuletzt geändert wurde, aus dem Verlauf. Für «Zuletzt bearbeitet» und die Entwürfe. */
+let zuletztAm = new Map<string, string>();
+const ZULETZT_ZAHL = 4;
+/** Fassungen über mehr Seiten sind Umstellungen oder «Allgemeine Angaben geändert», nicht Arbeit an einer Seite. */
+const UMSTELLUNG_AB = 2;
+
+async function loadZuletzt(): Promise<void> {
+  const json = (await fetch("/api/verlauf", { cache: "no-store" })
+    .then((res) => (res.ok ? res.json() : null))
+    .catch(() => null)) as { eintraege?: { date: string; dateien: { status: string; pfad: string }[] }[] } | null;
+  if (!json?.eintraege) return;
+  const neu = new Map<string, string>();
+  for (const eintrag of json.eintraege) {
+    const seiten = eintrag.dateien.filter((d) => d.status !== "D" && /^(briefe|kapitel|recht)\/.+\.md$/.test(d.pfad));
+    if (seiten.length > UMSTELLUNG_AB) continue;
+    // Die neueste Fassung zuerst: Was schon drin ist, ist neuer.
+    for (const seite of seiten) if (!neu.has(seite.pfad)) neu.set(seite.pfad, eintrag.date);
+  }
+  zuletztAm = neu;
+  renderStartZuletzt();
+  renderStartBriefe();
+}
+
+function zuletztName(page: PageSummary): string {
+  // Wie im Verzeichnis, damit Patrick die Seite wiedererkennt.
+  if (page.art !== "brief") return seitenName(page);
+  const text = thema(page.titel);
+  return `Newsletter ${page.nummer ?? ""}${text ? `: ${text}` : ""}`;
+}
+
+/** Weitermachen, wo Patrick aufgehört hat. Seiten, die es nicht mehr gibt, fallen weg. */
+function renderStartZuletzt(): void {
+  const seiten = [...zuletztAm]
+    .map(([rel, date]) => ({ page: alleSeiten.find((page) => page.rel === rel), date }))
+    .filter((eintrag): eintrag is { page: PageSummary; date: string } => eintrag.page != null)
+    .slice(0, ZULETZT_ZAHL);
+  startZuletzt.hidden = seiten.length === 0;
+  if (!seiten.length) return;
+  aufgabe(startZuletzt, {
+    titel: "Zuletzt bearbeitet",
+    liste: seiten.map(({ page, date }) => ({
+      label: zuletztName(page),
+      info: `${page.entwurf ? "Entwurf" : page.art === "brief" ? "Newsletter" : page.art === "recht" ? "Rechtliches" : "Seite"} · ${wannKurz(date)}`,
+      onClick: () => void openPage(page.rel),
     })),
-    knopf: knoepfe,
+    knopf: button("Zum Verlauf", "", () => void showVerlauf()),
   });
 }
 
-/** Bevor der Check da ist, steht die Karte schon an ihrem Platz. So springt nichts. */
-function renderStartCheckLaedt(): void {
-  aufgabe(startCheck, {
-    titel: "Website-Check",
-    gross: "Wird geprüft …",
-    leise: "Die Redaktion schaut, was Google von den Seiten liest. Das dauert einen Moment.",
-    liste: [],
-    knopf: [],
-  });
+/** Erst wenn Seiten und Anfragen da sind, weiss die Startseite, was als Nächstes ansteht. */
+let startBereit = false;
+
+/**
+ * Das eine, was als Nächstes ansteht, mit einem Knopf: eine neue Anfrage vor einem Entwurf, der vor
+ * gelesenen Anfragen, die noch offen sind, dann der Website-Check, dann ein überfälliger Newsletter.
+ */
+function renderNaechstes(): void {
+  if (!startBereit) return;
+  let satz = "Alles erledigt.";
+  let dazu = "Keine neue Anfrage, kein offener Entwurf.";
+  let knopf: HTMLButtonElement | null = null;
+  let dringend = false;
+
+  const neue = alleAnfragen.filter((a) => a.status === "neu");
+  // Wer am längsten wartet, kommt zuerst.
+  const aelteste = [...neue].sort((a, b) => a.eingang.localeCompare(b.eingang))[0];
+  const gelesene = alleAnfragen.filter((a) => a.status === "gelesen").length;
+  const entwuerfe = alleSeiten
+    .filter((page) => page.entwurf)
+    .sort((a, b) => (zuletztAm.get(b.rel) ?? "").localeCompare(zuletztAm.get(a.rel) ?? ""));
+  const entwurf = entwuerfe[0];
+  const zuletzt = alleBriefe.find((page) => !page.entwurf);
+
+  if (aelteste) {
+    dringend = true;
+    satz = `${wer(aelteste).trim() || "Jemand"} hat geschrieben`;
+    dazu = `Wartet ${wartetSeit(aelteste.eingang)}${neue.length > 1 ? ` · ${neue.length - 1 === 1 ? "eine weitere neue Anfrage" : `${neue.length - 1} weitere neue Anfragen`}` : ""}`;
+    knopf = button("Anfrage öffnen", "haupt", () => void openAnfrage(aelteste.id));
+  } else if (entwurf) {
+    const bearbeitet = zuletztAm.get(entwurf.rel);
+    satz = entwurf.art === "brief" ? `Newsletter ${entwurf.nummer ?? ""} ist noch ein Entwurf` : `«${seitenName(entwurf)}» ist noch ein Entwurf`;
+    dazu = [
+      entwurf.art === "brief" ? thema(entwurf.titel) || "Noch ohne Thema" : "",
+      bearbeitet ? `zuletzt bearbeitet ${wannKurz(bearbeitet)}` : "",
+      entwuerfe.length > 1 ? `${entwuerfe.length - 1 === 1 ? "ein weiterer Entwurf" : `${entwuerfe.length - 1} weitere Entwürfe`}` : "",
+    ].filter(Boolean).join(" · ");
+    knopf = button("Weiterschreiben", "haupt", () => void openPage(entwurf.rel));
+  } else if (gelesene) {
+    satz = `${gelesene === 1 ? "Eine gelesene Anfrage ist" : `${gelesene} gelesene Anfragen sind`} noch offen`;
+    dazu = "Beantwortet? Dann auf «Erledigt» setzen.";
+    knopf = button("Zur Kontaktaufnahme", "haupt", () => void showAnfragen());
+  } else if (befunde.length) {
+    satz = checkSatz(befunde.length);
+    dazu = "Thema, Einstiegsabsatz oder Bildbeschreibung fehlen.";
+    knopf = button("Ansehen", "haupt", () => void showCheck());
+  } else if (zuletzt && tageSeit(zuletzt.datum) > PAUSE_TAGE) {
+    satz = `Der letzte Newsletter erschien ${seit(zuletzt.datum)}`;
+    dazu = "Zeit für den nächsten? Google mag Seiten, die leben.";
+    knopf = button("Neuen Newsletter schreiben", "haupt", () => void newBrief());
+  }
+
+  const kopf = h("p", { class: "kopf" }, "Als Nächstes");
+  const text = h("div", {}, kopf, h("p", { class: "gross" }, satz), h("p", { class: "leise" }, dazu));
+  startNaechstes.classList.toggle("dringend", dringend);
+  startNaechstes.classList.toggle("ruhig", knopf == null);
+  startNaechstes.replaceChildren(text, ...(knopf ? [knopf] : []));
+  startNaechstes.hidden = false;
 }
 
 /** Für die offene Seite, wie sie gespeichert ist. Gilt nur, solange dieselbe Seite offen ist. */
@@ -1063,6 +1211,8 @@ function spaeterSeitenCheck(): void {
 }
 
 function renderSeitenCheck(rel: string, probleme: Problem[]): void {
+  // Der Website-Check zählt nur, was online ist. Stimmt er für diese Seite nicht mehr, neu holen.
+  if (current && !current.entwurf && befunde.some((befund) => befund.rel === rel) !== probleme.length > 0) void loadCheck();
   if (!probleme.length) {
     // Nur wer Hinweise gesehen hat, bekommt die Bestätigung. Sonst bleibt der Platz leer.
     googleHinweise.hidden = hinweiseFuer !== rel;
@@ -1323,7 +1473,8 @@ function gruss(): string {
 
 /** Von den Ansichten rechts ist immer nur eine sichtbar. */
 function zeigeNur(ansicht: HTMLElement): void {
-  for (const el of [start, form, anfragenSeite, briefeSeite, wuenscheSeite, allgemeinSeite, medienSeite, verlaufSeite]) el.hidden = el !== ansicht;
+  for (const el of [start, form, anfragenSeite, briefeSeite, wuenscheSeite, allgemeinSeite, medienSeite, verlaufSeite, checkSeite]) el.hidden = el !== ansicht;
+  checkLink.toggleAttribute("aria-current", ansicht === checkSeite);
   allgemeinLink.toggleAttribute("aria-current", ansicht === allgemeinSeite);
   medienLink.toggleAttribute("aria-current", ansicht === medienSeite);
   verlaufLink.toggleAttribute("aria-current", ansicht === verlaufSeite);
@@ -1335,6 +1486,7 @@ function showStart(): void {
   gewaehlt = null;
   zeigeNur(start);
   void loadCheck();
+  void loadZuletzt();
   merke("");
   // Auf der Startseite ist das Verzeichnis zugeklappt. Eine geöffnete Seite klappt ihre Gruppe selbst auf.
   for (const gruppe of root!.querySelectorAll<HTMLDetailsElement>("aside details")) gruppe.open = false;
@@ -2200,11 +2352,13 @@ function renderStartAnfragen(zahl: ReturnType<typeof zaehle>): void {
       : `Anfragen aus dem Kontaktformular erscheinen hier. Sie werden ${aufbewahrungMonate} Monate nach Eingang automatisch gelöscht.`,
     liste: zeigen.map((anfrage) => ({
       label: wer(anfrage),
-      info: `${anfrage.status === "neu" ? "Neu" : "Gelesen"} · ${eingangFormat.format(new Date(anfrage.eingang))}`,
+      info: anfrage.status === "neu" ? `Neu · wartet ${wartetSeit(anfrage.eingang)}` : `Gelesen · ${eingangFormat.format(new Date(anfrage.eingang))}`,
+      vorschau: anfrage.nachricht.replace(/\s+/g, " ").trim().slice(0, 160),
       onClick: () => void openAnfrage(anfrage.id),
     })),
     knopf: button("Zur Kontaktaufnahme", zahl.neu ? "haupt" : "", () => void showAnfragen()),
   });
+  renderNaechstes();
 }
 
 function kachel(filter: AnfragenFilter, wert: number, label: string, unter: string): HTMLButtonElement {
@@ -2392,6 +2546,8 @@ async function loadWuensche(): Promise<void> {
   alleWuensche = json.wuensche;
   const offene = alleWuensche.filter((w) => w.status === "offen").length;
   wuenscheZahl.textContent = offene ? `${offene} offen` : "";
+  startSupportOffen.hidden = offene === 0;
+  startSupportOffen.textContent = `${offene === 1 ? "1 Support-Anfrage" : `${offene} Support-Anfragen`} offen →`;
   renderWuenscheListe();
   if (!wuenscheSeite.hidden) renderWuensche();
 }
@@ -2674,6 +2830,7 @@ for (const [knopf, art] of [["#start-wunsch", "funktion"], ["#start-fehler", "fe
     wunschText.focus();
   });
 }
+startSupportOffen.addEventListener("click", () => void showWuensche());
 wunschArt.addEventListener("change", passeWunschFormAn);
 try {
   wuenscheNeu.hidden = localStorage.getItem(WUENSCHE_GESEHEN) === "1";
@@ -2813,7 +2970,23 @@ async function showVerlauf(): Promise<void> {
   nachOben();
 }
 
-// Allgemein, Medien und Verlauf klappen nichts auf: Sie öffnen nur ihre Ansicht.
+async function showCheck(): Promise<void> {
+  if (!(await flushCommit())) return;
+  current = null;
+  gewaehlt = null;
+  markCurrent();
+  zeigeNur(checkSeite);
+  merke("check");
+  if (!checkGeladen) checkStand.textContent = "Wird geprüft …";
+  await loadCheck();
+  nachOben();
+}
+
+// Allgemein, Website-Check, Medien und Verlauf klappen nichts auf: Sie öffnen nur ihre Ansicht.
+checkLink.addEventListener("click", () => {
+  void showCheck();
+  zeigeVerzeichnis(false);
+});
 allgemeinLink.addEventListener("click", () => {
   void showAllgemein();
   zeigeVerzeichnis(false);
@@ -2936,6 +3109,7 @@ function lage(): Lage {
         : !allgemeinSeite.hidden ? "allgemein"
         : !medienSeite.hidden ? "medien"
         : !verlaufSeite.hidden ? "verlauf"
+        : !checkSeite.hidden ? "check"
         : "start",
     };
   }
@@ -3074,6 +3248,7 @@ async function folge(): Promise<void> {
   else if (wanted === "allgemein") await showAllgemein();
   else if (wanted === "medien") await showMedien();
   else if (wanted === "verlauf") await showVerlauf();
+  else if (wanted === "check") await showCheck();
   else if (wanted) await openPage(wanted);
   else if (await flushCommit()) showStart();
 }
@@ -3082,5 +3257,8 @@ window.addEventListener("popstate", () => void folge());
 await loadList();
 await loadAnfragen();
 await loadWuensche();
+startBereit = true;
+renderNaechstes();
+void loadCheck();
 await folge();
 void pruefeSetzen();
