@@ -179,11 +179,8 @@ root.innerHTML = `
       </details>
       <button type="button" class="leise mehr" id="seite-neu">Neue Seite anlegen</button>
       <p class="kategorie">Verwaltung</p>
+      <!-- Einstellungen zuerst, dann der Inhalt von «jetzt verbessern» bis «gelöscht», Hilfe zuletzt. -->
       <button type="button" class="zeile-link" id="allgemein-link">Allgemein</button>
-      <details id="wuensche-gruppe">
-        <summary><button type="button" class="gruppe-titel" id="wuensche-link">Support</button><span class="zahl offen" id="wuensche-zahl" title="Noch nicht erledigt"></span><span class="marke neu" id="wuensche-neu" hidden>Neu</span></summary>
-        <nav id="wuensche-liste"></nav>
-      </details>
       <button type="button" class="zeile-link" id="check-link"><span>Website-Check</span><span class="zahl offen" id="check-zahl"></span></button>
       <button type="button" class="zeile-link" id="medien-link">Medien</button>
       <button type="button" class="zeile-link" id="verlauf-link">Verlauf</button>
@@ -192,6 +189,10 @@ root.innerHTML = `
         <p class="leise" id="papierkorb-hinweis"></p>
         <nav id="papierkorb"></nav>
         <button type="button" class="leise mehr gefahr" id="papierkorb-leeren">Papierkorb leeren</button>
+      </details>
+      <details id="wuensche-gruppe">
+        <summary><button type="button" class="gruppe-titel" id="wuensche-link">Support</button><span class="zahl offen" id="wuensche-zahl" title="Noch nicht erledigt"></span><span class="marke neu" id="wuensche-neu" hidden>Neu</span></summary>
+        <nav id="wuensche-liste"></nav>
       </details>
       <p class="setz-status" id="setz-status" role="status"></p>
     </aside>

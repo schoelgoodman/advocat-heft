@@ -72,7 +72,7 @@ ok("Verzeichnis: drei Bereiche", JSON.stringify(await p.$$eval("aside .kategorie
 ok("Verzeichnis: Zur Website neben Redaktion", await p.$eval(".verzeichnis-kopf",e=>!!e.querySelector("#heim")&&!!e.querySelector("#zur-website")&&e.querySelector("#heim").getBoundingClientRect().top<e.querySelector("#zur-website").getBoundingClientRect().bottom));
 const reihe=await p.evaluate(()=>{let k="";const out={};for(const el of document.querySelectorAll("aside > *")){if(el.classList.contains("kategorie")){k=el.textContent;out[k]=[];continue;}if(!k)continue;const n=el.classList.contains("zeile-link")?(el.querySelector(":scope > span:not(.zahl)")??el).textContent:el.querySelector?.(":scope > summary .gruppe-titel")?.textContent;if(n)out[k].push(n);}return out;});
 ok("Verzeichnis: Täglich", JSON.stringify(reihe["Täglich"])===JSON.stringify(["Newsletter","Kontaktaufnahme"]));
-ok("Verzeichnis: Verwaltung", JSON.stringify(reihe["Verwaltung"])===JSON.stringify(["Allgemein","Support","Website-Check","Medien","Verlauf","Papierkorb"]));
+ok("Verzeichnis: Verwaltung", JSON.stringify(reihe["Verwaltung"])===JSON.stringify(["Allgemein","Website-Check","Medien","Verlauf","Papierkorb","Support"]));
 // Startseite: der nächste Schritt, zwei Karten, zuletzt Bearbeitetes; der Website-Check wohnt unter Verwaltung
 ok("Start: Als Nächstes mit einem Satz", await p.$eval("#start-naechstes",e=>!e.hidden&&e.querySelector(".gross").textContent.length>3));
 ok("Start: Newsletter und Kontaktaufnahme", await p.$$eval("#start .aufgabe:not([hidden]) h2",l=>l.map(x=>x.firstChild.textContent).slice(0,2).join()==="Newsletter,Kontaktaufnahme"));

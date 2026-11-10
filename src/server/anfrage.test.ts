@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { beforeEach, test } from "node:test";
+import { afterEach, beforeEach, test } from "node:test";
 import { erinnereAnOffene, meldeNachtraeglich } from "./anfrage.ts";
 
 let ordner = "";
@@ -10,6 +10,11 @@ let ordner = "";
 beforeEach(async () => {
   ordner = await fs.mkdtemp(path.join(os.tmpdir(), "advocat-anfragen-"));
   process.env.ANFRAGEN_DIR = ordner;
+});
+
+// Jeder Test räumt seinen Ordner wieder weg, sonst sammeln sie sich im Temp-Ordner.
+afterEach(async () => {
+  await fs.rm(ordner, { recursive: true, force: true });
 });
 
 /** Eine Anfrage auf der Platte, wie sie das Formular schreibt. */
