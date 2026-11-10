@@ -251,6 +251,29 @@ const ICON = {
 };
 
 const DENKEN_KEY = "assistent-denken";
+const START_KEY = "assistent-beim-start";
+
+/**
+ * Soll der Assistent beim Öffnen der Redaktion schon dastehen? Patrick wählt es unter «Verwaltung»,
+ * «Allgemein». Gemerkt im Browser, wie «Schnell/Gründlich»: Es ist eine Vorliebe für dieses Gerät und
+ * gehört nicht in den Inhalt (eine Änderung dort setzte die ganze Website neu). Ohne Wahl: ja.
+ */
+export function assistentBeimStart(): boolean {
+  try {
+    return localStorage.getItem(START_KEY) !== "nein";
+  } catch {
+    return true;
+  }
+}
+
+export function merkeAssistentBeimStart(offen: boolean): void {
+  try {
+    if (offen) localStorage.removeItem(START_KEY);
+    else localStorage.setItem(START_KEY, "nein");
+  } catch {
+    // Privates Fenster ohne Speicher: Die Wahl gilt dann nicht über das Neuladen hinaus.
+  }
+}
 
 type Denken = "low" | "high";
 
@@ -341,8 +364,9 @@ export async function mountAssistent(anschluss: Anschluss, bereit: boolean): Pro
   }
   spalte.querySelector("[data-zu]")!.addEventListener("click", () => zeige(false));
   // Beim Öffnen der Redaktion ist der Assistent da, wo neben ihm Platz bleibt. Schmaler läge er über
-  // der Seite (auf dem Telefon ganz), dort wartet er hinter dem Knopf. Die Wahl gilt bis zum Neuladen.
-  zeige(!window.matchMedia("(max-width: 1100px)").matches);
+  // der Seite (auf dem Telefon ganz), dort wartet er hinter dem Knopf. Wer ihn unter «Allgemein»
+  // abgewählt hat, findet ihn auch auf dem grossen Bildschirm hinter dem Knopf. Auf und zu gilt bis zum Neuladen.
+  zeige(assistentBeimStart() && !window.matchMedia("(max-width: 1100px)").matches);
 
   // Klickt Patrick ins Eingabefeld, ist die Markierung im Text weg. Darum hier merken.
   document.addEventListener("selectionchange", () => {

@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import http from "node:http";
@@ -262,16 +263,28 @@ async function exists(rel: string): Promise<boolean> {
 }
 
 /**
- * Neue Dateien und Nummern der Reihe nach vergeben. Sonst bekommen zwei schnelle Klicks auf
- * «Neuen Newsletter schreiben» dieselbe Nummer, oder zwei Kopien denselben Dateinamen.
+ * Alles, was den Inhalt ändert, läuft der Reihe nach. Sonst bekommen zwei schnelle Klicks auf
+ * «Neuen Newsletter schreiben» dieselbe Nummer, zwei Kopien denselben Dateinamen, oder ein spätes
+ * Speichern überholt ein Veröffentlichen und schreibt dessen Stand zurück.
+ * Wer schon an der Reihe ist und nochmals `einzeln` ruft, läuft gleich weiter (sonst wartete er auf sich selbst).
  */
 let vergabe: Promise<unknown> = Promise.resolve();
+const anDerReihe = new AsyncLocalStorage<true>();
 
 function einzeln<T>(arbeit: () => Promise<T>): Promise<T> {
-  const lauf = vergabe.then(arbeit, arbeit);
+  if (anDerReihe.getStore()) return arbeit();
+  const dran = () => anDerReihe.run(true, arbeit);
+  const lauf = vergabe.then(dran, dran);
   vergabe = lauf.catch(() => undefined);
   return lauf;
 }
+
+/**
+ * Ändernde Wege, die nicht in die Reihe gehören: Der Assistent antwortet bis zu drei Minuten lang,
+ * Support wartet auf Telegram. Beide ändern den Inhalt nicht und ordnen ihr Schreiben selbst;
+ * der Stand der Anfragen ebenso.
+ */
+const OHNE_REIHE = new Set(["/api/chat", "/api/wuensche", "/api/anfragen"]);
 
 /** Der Browser schickt den Namen kodiert: Ein Header kann weder «–» noch ein zerlegtes «ü» tragen. */
 function dateiname(kodiert: string): string {
@@ -457,6 +470,9 @@ async function serveStatic(req: http.IncomingMessage, urlPath: string, res: http
     return false;
   }
   if (decoded.includes("\0") || decoded.split("/").includes("..")) return false;
+  // Das Ergebnis des Setzens liegt neben der Website, gehört aber der Redaktion (/api/status):
+  // Eine Fehlermeldung darin kann den Namen eines Entwurfs nennen.
+  if (decoded === "/status.json") return false;
   let file = path.join(siteDir(), decoded);
   const stat = await fs.stat(file).catch(() => null);
   if (stat?.isDirectory() || !path.extname(decoded)) {
@@ -941,6 +957,8 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     const payload = JSON.parse((await readBody(req)).toString("utf8")) as { rel?: string };
     const rel = safeRel(payload.rel ?? "");
     if (rel === STARTSEITE) throw new Error("Die Startseite bleibt online.");
+    // Der Fuss jeder Seite verlinkt Impressum, Disclaimer und Datenschutz fest.
+    if (rel.startsWith("recht/")) throw new Error("Rechtliche Seiten bleiben online: Der Fuss jeder Seite verlinkt sie.");
     await flushPending();
     const doc: ContentDocument = { ...(await readDoc(rel)), entwurf: true };
     await writeDoc(doc);
@@ -1299,7 +1317,8 @@ async function main(): Promise<void> {
         sendJson(res, 403, { error: "Fremde Herkunft" });
         return;
       }
-      void handleApi(req, res, url).catch((error: unknown) => {
+      const aendert = req.method !== "GET" && req.method !== "HEAD" && !OHNE_REIHE.has(url.pathname);
+      void (aendert ? einzeln(() => handleApi(req, res, url)) : handleApi(req, res, url)).catch((error: unknown) => {
         const message = error instanceof Error ? error.message : "Fehler";
         console.error(`${req.method} ${url.pathname}: ${message}`);
         if (res.headersSent) return;
@@ -1370,6 +1389,32 @@ async function main(): Promise<void> {
       console.error("Website-Check:", error instanceof Error ? error.message : error);
     });
   }
+
+  // Docker schickt SIGTERM und wartet zehn Sekunden. Node ist im Container Prozess 1 und bekäme das
+  // Signal ohne diese Zeilen gar nicht: Die Fassung, die noch auf ihre 20 Sekunden wartet, und frisch
+  // hochgeladene Bilder gingen sonst nie ins Inhalts-Git.
+  let beendet = false;
+  const beenden = (signal: string) => {
+    if (beendet) return;
+    beendet = true;
+    console.log(`${signal}: beende …`);
+    // Falls etwas hängt: nach acht Sekunden trotzdem gehen, bevor Docker hart abbricht.
+    setTimeout(() => process.exit(0), 8000).unref();
+    server.close();
+    server.closeIdleConnections();
+    // Erst fertig schreiben lassen, was gerade läuft, dann die offene Fassung.
+    void vergabe
+      .then(() => (hatRedaktion && (pendingFiles.size || commitTimer) ? flushPending() : null))
+      .then(
+        (sha) => {
+          if (sha) console.log(`Offene Fassung geschrieben (${sha}).`);
+        },
+        (error: unknown) => console.error("Inhalts-Git beim Beenden:", error instanceof Error ? error.message : error),
+      )
+      .finally(() => process.exit(0));
+  };
+  process.on("SIGTERM", () => beenden("SIGTERM"));
+  process.on("SIGINT", () => beenden("SIGINT"));
 
   server.listen(PORT, () => {
     if (setztSeite) console.log(`Heft auf http://127.0.0.1:${PORT}`);

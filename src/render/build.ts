@@ -35,7 +35,12 @@ export function publishHtml(html: string): string {
  * Kopiert als neue, beschreibbare Datei. `fs.copyFile` übernimmt die Rechte, und aus dem
  * Nix-Store ist alles 0444: dann scheitert das nächste Überschreiben mit EACCES.
  */
-async function copyWritable(from: string, to: string): Promise<void> {
+async function copyWritable(from: string, to: string, nurGeaendert = false): Promise<void> {
+  if (nurGeaendert) {
+    // Liegt die Datei schon da, gleich gross und nicht älter als die Quelle, ist sie dieselbe.
+    const [quelle, ziel] = await Promise.all([fs.stat(from), fs.stat(to).catch(() => null)]);
+    if (ziel && ziel.size === quelle.size && ziel.mtimeMs >= quelle.mtimeMs) return;
+  }
   const data = await fs.readFile(from);
   await fs.rm(to, { force: true });
   await fs.writeFile(to, data);
@@ -62,20 +67,24 @@ async function writePage(site: string, href: string, html: string): Promise<void
   await schreibeAtomar(pageFile(site, href), html);
 }
 
-export async function copyAssets(): Promise<void> {
+/**
+ * Stil, Skript, Schriften und Marke. Beim ganzen Setzen (Start) immer alle: Nach einem Code-Update
+ * sind sie neu. Beim Setzen einzelner Seiten nur, was sich seither geändert hat (lokal: heft.css).
+ */
+export async function copyAssets(nurGeaendert = false): Promise<void> {
   const site = siteDir();
   await fs.mkdir(path.join(site, "fonts"), { recursive: true });
   await fs.mkdir(path.join(site, "brand"), { recursive: true });
-  await copyWritable(path.join(repoRoot, "src/design/heft.css"), path.join(site, "heft.css"));
-  await copyWritable(path.join(repoRoot, "src/design/site.js"), path.join(site, "site.js"));
+  await copyWritable(path.join(repoRoot, "src/design/heft.css"), path.join(site, "heft.css"), nurGeaendert);
+  await copyWritable(path.join(repoRoot, "src/design/site.js"), path.join(site, "site.js"), nurGeaendert);
   for (const [name, rel] of Object.entries(FONTS)) {
-    await copyWritable(path.join(repoRoot, "node_modules", rel), path.join(site, "fonts", name));
+    await copyWritable(path.join(repoRoot, "node_modules", rel), path.join(site, "fonts", name), nurGeaendert);
   }
   const brand = path.join(repoRoot, "src/design/brand");
   const names = await fs.readdir(brand);
   for (const name of names) {
     const src = path.join(brand, name);
-    if ((await fs.stat(src)).isFile()) await copyWritable(src, path.join(site, "brand", name));
+    if ((await fs.stat(src)).isFile()) await copyWritable(src, path.join(site, "brand", name), nurGeaendert);
   }
 }
 
@@ -148,9 +157,13 @@ export async function previewPage(doc: ContentDocument): Promise<string> {
   return pageShell(await pageView(doc));
 }
 
-/** Titel, Beschreibung und Vorschaubild, wie Google sie von dieser Seite liest. Für den Assistenten. */
-export async function pageView(doc: ContentDocument): Promise<PageView> {
-  const teasers = teasersFor(briefsNewestFirst(await publishedDocuments()));
+/**
+ * Titel, Beschreibung und Vorschaubild, wie Google sie von dieser Seite liest. Für den Assistenten.
+ * Wer viele Seiten prüft, gibt die schon geladenen Seiten mit: Sonst liest jede Prüfung den ganzen Inhalt neu.
+ */
+export async function pageView(doc: ContentDocument, alle?: ContentDocument[]): Promise<PageView> {
+  const online = alle ? alle.filter((item) => !item.entwurf) : await publishedDocuments();
+  const teasers = teasersFor(briefsNewestFirst(online));
   return ansicht(doc, teasers);
 }
 
@@ -224,7 +237,7 @@ export async function rebuildDocuments(rels: string[]): Promise<void> {
   const teasers = teasersFor(briefsNewestFirst(docs));
   const site = siteDir();
   await fs.mkdir(site, { recursive: true });
-  await copyAssets();
+  await copyAssets(true);
   const stempel = adressStempel();
   const angaben = JSON.stringify(allgemein());
   const angabenNeu = gesetzteAngaben !== null && gesetzteAngaben !== angaben;

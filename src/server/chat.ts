@@ -94,8 +94,18 @@ async function writeVerlauf(verlauf: Nachricht[]): Promise<void> {
   await fs.rename(`${file}.tmp`, file);
 }
 
-export async function clearVerlauf(): Promise<void> {
-  await writeVerlauf([]);
+// Lesen und Schreiben am Stück und nacheinander: Zwei Antworten zur selben Zeit (zwei Fenster)
+// würden sonst beide den alten Verlauf lesen, und eine ginge verloren.
+let reihe: Promise<unknown> = Promise.resolve();
+
+function aendereVerlauf(aendern: (verlauf: Nachricht[]) => Nachricht[]): Promise<void> {
+  const lauf = reihe.then(async () => writeVerlauf(aendern(await readVerlauf())));
+  reihe = lauf.catch(() => undefined);
+  return lauf;
+}
+
+export function clearVerlauf(): Promise<void> {
+  return aendereVerlauf(() => []);
 }
 
 function text(value: unknown, max: number): string {
@@ -345,7 +355,7 @@ export async function handleChat(payload: unknown, res: http.ServerResponse): Pr
 
   const neu: Nachricht[] = [jetzt];
   if (antwort.trim()) neu.push({ rolle: "assistent", text: antwort, zeit: new Date().toISOString(), rel: jetzt.rel });
-  await writeVerlauf([...(await readVerlauf()), ...neu]).catch((error: unknown) => {
+  await aendereVerlauf((verlauf) => [...verlauf, ...neu]).catch((error: unknown) => {
     console.error("Assistent: Verlauf nicht gespeichert:", error instanceof Error ? error.message : error);
   });
 

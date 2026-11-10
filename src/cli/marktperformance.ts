@@ -11,7 +11,7 @@ import { contentDir } from "../paths.ts";
  * die Vorsorge-Grafiken in Newsletter 1 und 2 bleiben, wie sie sind. Sonst ändert sich nichts.
  * Zweimal laufen lassen schadet nicht. Mit --nur-zeigen wird nichts geschrieben.
  *
- * Auf Neo im Container der Redaktion: docker exec advocat-redaktion node --import tsx src/cli/marktperformance.ts
+ * Auf Neo im Container der Redaktion: docker exec advocat-redaktion node src/cli/marktperformance.ts
  */
 
 const BILD = /^!\[((?:[^\]\\]|\\.)*)\]\((\S+?)(?:\s+"((?:[^"\\]|\\.)*)")?\)[ \t]*$/;

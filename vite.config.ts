@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { defineConfig } from "vite";
 
-/** Baut nur die Redaktion. Der Setzer bleibt TypeScript und läuft über tsx. */
+/** Baut nur die Redaktion. Der Setzer bleibt TypeScript und läuft direkt in Node (die Typen fallen beim Laden weg). */
 export default defineConfig({
   server: {
     watch: {
