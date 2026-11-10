@@ -233,6 +233,7 @@ nav .thema {
   vertical-align: 0.05em;
 }
 .marke.online { background: var(--olive); color: var(--paper); }
+.marke.offen { background: var(--gelb); color: var(--ink); }
 
 /* Start */
 #start { padding-top: 3rem; }
@@ -422,15 +423,24 @@ aside details > nav, aside details > .leise, aside details > .mehr { margin-left
 aside .unterseiten { margin: 0 0 0.1rem 1.05rem; padding-left: 0.1rem; border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 0.15rem; }
 aside .papierkorb-leer { margin: 0.2rem 0 0.4rem 1.05rem; }
 
-/* Kontaktaufnahme */
-aside summary .zahl:not(:empty) {
+/* Zahlen im Verzeichnis und auf den Karten der Startseite, und die Kontaktaufnahme */
+:is(aside summary, .aufgabe h2) .zahl:not(:empty) {
   margin-left: 0.3rem;
   padding: 0.05rem 0.45rem;
   border-radius: 999px;
-  background: var(--rot);
-  color: var(--paper);
+  background: var(--line);
+  color: var(--ink);
   letter-spacing: 0.04em;
+  white-space: nowrap;
 }
+/*
+ * Überall dieselben Farben: Rot heisst neu und ungelesen, Gelb heisst gesehen, aber noch nicht erledigt,
+ * Grau heisst liegt bereit, aber niemand wartet (Entwürfe, Papierkorb). Auf Gelb dunkle Schrift.
+ */
+:is(aside summary, .aufgabe h2) .zahl.neu:not(:empty) { background: var(--rot); color: var(--paper); }
+:is(aside summary, .aufgabe h2) .zahl.offen:not(:empty) { background: var(--gelb); color: var(--ink); }
+.aufgabe h2 .zahl { margin-left: 0.4rem; font-size: 0.72rem; text-transform: none; letter-spacing: 0.02em; vertical-align: 0.05em; }
+.marke.entwurf { background: var(--line); color: var(--ink); }
 nav .ungelesen .thema { font-weight: 600; }
 .marke.neu { background: var(--rot); color: var(--paper); }
 #anfragen { padding-top: 1.5rem; }

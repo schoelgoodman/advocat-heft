@@ -148,12 +148,12 @@ root.innerHTML = `
       </div>
       <p class="kategorie">Täglich</p>
       <details id="briefe-gruppe">
-        <summary><button type="button" class="gruppe-titel" id="briefe-titel">Newsletter</button></summary>
+        <summary><button type="button" class="gruppe-titel" id="briefe-titel">Newsletter</button><span class="zahl" id="briefe-zahl" title="Entwürfe, noch nicht veröffentlicht"></span></summary>
         <nav id="briefe"></nav>
         <button type="button" class="leise mehr" id="mehr" hidden></button>
       </details>
       <details id="anfragen-gruppe">
-        <summary><button type="button" class="gruppe-titel" id="anfragen-titel">Kontaktaufnahme</button><span class="zahl" id="anfragen-zahl"></span></summary>
+        <summary><button type="button" class="gruppe-titel" id="anfragen-titel">Kontaktaufnahme</button><span class="zahl neu" id="anfragen-zahl"></span><span class="zahl offen" id="anfragen-gelesen" title="Gelesen, aber noch nicht erledigt"></span></summary>
         <nav id="anfragen-liste"></nav>
       </details>
       <p class="kategorie">Seiten</p>
@@ -178,7 +178,7 @@ root.innerHTML = `
       <p class="kategorie">Verwaltung</p>
       <button type="button" class="zeile-link" id="allgemein-link">Allgemein</button>
       <details id="wuensche-gruppe">
-        <summary><button type="button" class="gruppe-titel" id="wuensche-link">Support</button><span class="zahl" id="wuensche-zahl"></span><span class="marke neu" id="wuensche-neu" hidden>Neu</span></summary>
+        <summary><button type="button" class="gruppe-titel" id="wuensche-link">Support</button><span class="zahl offen" id="wuensche-zahl" title="Noch nicht erledigt"></span><span class="marke neu" id="wuensche-neu" hidden>Neu</span></summary>
         <nav id="wuensche-liste"></nav>
       </details>
       <button type="button" class="zeile-link" id="medien-link">Medien</button>
@@ -199,8 +199,8 @@ root.innerHTML = `
       <section id="start">
         <h1 id="gruss">Guten Tag, Patrick.</h1>
         <div class="aufgaben">
-          <article class="aufgabe" id="start-anfragen"></article>
           <article class="aufgabe" id="start-briefe"></article>
+          <article class="aufgabe" id="start-anfragen"></article>
           <article class="aufgabe breit laedt" id="start-check"></article>
         </div>
         <p class="wunsch-hinweis">Fehlt etwas in der Redaktion oder soll die Website anders aussehen? <button type="button" class="leise" id="start-wunsch">An Support schreiben →</button></p>
@@ -307,6 +307,7 @@ const start = root.querySelector<HTMLElement>("#start")!;
 const anfragenGruppe = root.querySelector<HTMLDetailsElement>("#anfragen-gruppe")!;
 const anfragenListe = root.querySelector<HTMLElement>("#anfragen-liste")!;
 const anfragenZahl = root.querySelector<HTMLElement>("#anfragen-zahl")!;
+const anfragenGelesen = root.querySelector<HTMLElement>("#anfragen-gelesen")!;
 const anfragenSeite = root.querySelector<HTMLElement>("#anfragen")!;
 const briefeSeite = root.querySelector<HTMLElement>("#briefe-seite")!;
 const briefeKacheln = root.querySelector<HTMLElement>("#briefe-kacheln")!;
@@ -329,6 +330,7 @@ const anfragenFrist = root.querySelector<HTMLElement>("#anfragen-frist")!;
 const anfragenKacheln = root.querySelector<HTMLElement>("#anfragen-kacheln")!;
 const startAnfragen = root.querySelector<HTMLElement>("#start-anfragen")!;
 const startBriefe = root.querySelector<HTMLElement>("#start-briefe")!;
+const briefeZahl = root.querySelector<HTMLElement>("#briefe-zahl")!;
 const startCheck = root.querySelector<HTMLElement>("#start-check")!;
 const googleHinweise = root.querySelector<HTMLElement>("#google-hinweise")!;
 renderStartCheckLaedt();
@@ -701,12 +703,12 @@ function listItem(page: PageSummary): HTMLElement {
   text.className = "thema";
   if (page.art === "brief") {
     head.innerHTML = page.entwurf
-      ? `<span class="marke">Entwurf</span> Nr. ${page.nummer ?? ""}`
+      ? `<span class="marke entwurf">Entwurf</span> Nr. ${page.nummer ?? ""}`
       : `Nr. ${page.nummer ?? ""} · ${esc(shortDate(page.datum))}`;
     text.textContent = thema(page.titel) || "Noch ohne Thema";
     item.append(head, text);
   } else {
-    head.innerHTML = `<span class="marke">Entwurf</span>`;
+    head.innerHTML = `<span class="marke entwurf">Entwurf</span>`;
     text.textContent = seitenName(page);
     item.append(...(page.entwurf ? [head, text] : [text]));
   }
@@ -807,7 +809,7 @@ function zeichneSeiten(): void {
 /** Eine Zeile in «Menü ordnen». Sie öffnet keine Seite: In diesem Modus geht es nur um den Platz. */
 function ordnenPunkt({ seite, unter }: BaumPunkt<PageSummary>): HTMLElement {
   const name = h("span", { class: "thema" }, seitenName(seite));
-  const entwurf = seite.entwurf ? h("span", { class: "marke" }, "Entwurf") : null;
+  const entwurf = seite.entwurf ? h("span", { class: "marke entwurf" }, "Entwurf") : null;
   const unterseiten = unter.length ? h("div", { class: "unterseiten" }, ...unter.map((u) => h("span", { class: "ordnen-unter" }, seitenName(u)))) : null;
   if (seite.rel === HOME || seite.rel === KONTAKT) {
     return h("div", { class: "ordnen-punkt fest" }, h("div", { class: "ordnen-zeile" }, name));
@@ -882,10 +884,17 @@ function renderBriefe(): void {
 /** Eine Karte auf der Startseite: Titel, eine grosse Zeile, Kleingedrucktes, eine kurze Liste, ein Knopf. */
 function aufgabe(
   host: HTMLElement,
-  options: { titel: string; gross: string; leise: string; liste: { label: string; info: string; onClick: () => void }[]; knopf: HTMLButtonElement | HTMLButtonElement[] },
+  options: { titel: string; zahlen?: { text: string; art: "neu" | "offen" | "" }[]; gross: string; leise: string; liste: { label: string; info: string; onClick: () => void }[]; knopf: HTMLButtonElement | HTMLButtonElement[] },
 ): void {
   const titel = document.createElement("h2");
   titel.textContent = options.titel;
+  // Dieselben Zahlen wie im Verzeichnis links, in denselben Farben.
+  for (const zahl of options.zahlen ?? []) {
+    const pille = document.createElement("span");
+    pille.className = `zahl ${zahl.art}`.trim();
+    pille.textContent = zahl.text;
+    titel.append(pille);
+  }
   const gross = document.createElement("p");
   gross.className = "gross";
   gross.textContent = options.gross;
@@ -908,8 +917,13 @@ function aufgabe(
   host.replaceChildren(titel, gross, leise, ...(options.liste.length ? [liste] : []), knoepfe);
 }
 
+function entwurfZahl(anzahl: number): string {
+  return anzahl === 1 ? "1 Entwurf" : `${anzahl} Entwürfe`;
+}
+
 function renderStartBriefe(): void {
   const entwuerfe = alleBriefe.filter((page) => page.entwurf);
+  briefeZahl.textContent = entwuerfe.length ? entwurfZahl(entwuerfe.length) : "";
   const zuletzt = alleBriefe.find((page) => !page.entwurf);
   const neu = button("Neuen Newsletter schreiben", "haupt", () => void newBrief());
   // Entwürfe zuerst, die wollen fertig werden. Sonst die letzten veröffentlichten.
@@ -920,6 +934,7 @@ function renderStartBriefe(): void {
   }));
   aufgabe(startBriefe, {
     titel: "Newsletter",
+    zahlen: entwuerfe.length ? [{ text: entwurfZahl(entwuerfe.length), art: "" }] : [],
     gross: entwuerfe.length
       ? `${entwuerfe.length === 1 ? "Ein Entwurf wartet" : `${entwuerfe.length} Entwürfe warten`}`
       : "Keine offenen Entwürfe",
@@ -1233,7 +1248,7 @@ function renderStand(): void {
   form.dataset.stand = doc.entwurf ? "entwurf" : "online";
   // Was die Seite wegnimmt (Löschen, Zurückziehen) steht links für sich, die übrigen Knöpfe rechts.
   if (doc.entwurf) {
-    stand.innerHTML = `<span class="marke">Entwurf</span> Nur hier in der Redaktion sichtbar.`;
+    stand.innerHTML = `<span class="marke entwurf">Entwurf</span> Nur hier in der Redaktion sichtbar.`;
     aktionen.append(
       button("Löschen", "leise weg", () => void deleteDraft()),
       ...(doc.felder ? [] : [button("Word importieren", "leise", () => wordInput.click())]),
@@ -2032,7 +2047,7 @@ const TELEGRAM: Record<NonNullable<Anfrage["telegram"]>, string> = {
 
 const STATUS_MARKE: Record<Anfrage["status"], string> = {
   neu: `<span class="marke neu">Neu</span>`,
-  gelesen: `<span class="marke">Gelesen</span>`,
+  gelesen: `<span class="marke offen">Gelesen</span>`,
   erledigt: `<span class="marke online">Erledigt</span>`,
 };
 
@@ -2054,8 +2069,9 @@ function wartetSeit(iso: string): string {
 
 function zaehle() {
   const neu = alleAnfragen.filter((a) => a.status === "neu").length;
+  const gelesen = alleAnfragen.filter((a) => a.status === "gelesen").length;
   const offene = alleAnfragen.filter(offen).length;
-  return { neu, offen: offene, erledigt: alleAnfragen.length - offene, alle: alleAnfragen.length };
+  return { neu, gelesen, offen: offene, erledigt: alleAnfragen.length - offene, alle: alleAnfragen.length };
 }
 
 function anfrageItem(anfrage: Anfrage): HTMLElement {
@@ -2065,7 +2081,7 @@ function anfrageItem(anfrage: Anfrage): HTMLElement {
   item.toggleAttribute("aria-current", anfrage.id === gewaehlt);
   const head = document.createElement("span");
   head.className = "kopfzeile";
-  head.innerHTML = `${anfrage.status === "neu" ? STATUS_MARKE.neu + " " : ""}${esc(eingangFormat.format(new Date(anfrage.eingang)))}`;
+  head.innerHTML = `${anfrage.status === "erledigt" ? "" : STATUS_MARKE[anfrage.status] + " "}${esc(eingangFormat.format(new Date(anfrage.eingang)))}`;
   const text = document.createElement("span");
   text.className = "thema";
   text.textContent = wer(anfrage);
@@ -2147,6 +2163,8 @@ function renderAnfragen(): void {
   const zahl = zaehle();
   document.title = `${zahl.neu ? `(${zahl.neu}) ` : ""}Redaktion · Advocat Finanz`;
   anfragenZahl.textContent = zahl.neu ? `${zahl.neu} neu` : "";
+  // Gelb: gelesen, aber noch nicht erledigt. Steht neben dem Roten, nie statt seiner.
+  anfragenGelesen.textContent = zahl.gelesen ? `${zahl.gelesen} offen` : "";
 
   // Im Verzeichnis nur, was noch offen ist. Erledigte stehen in der Übersicht.
   const offene = alleAnfragen.filter(offen);
@@ -2168,9 +2186,15 @@ function renderStartAnfragen(zahl: ReturnType<typeof zaehle>): void {
   startAnfragen.classList.toggle("dringend", zahl.neu > 0);
   aufgabe(startAnfragen, {
     titel: "Kontaktaufnahme",
+    zahlen: [
+      ...(zahl.neu ? [{ text: `${zahl.neu} neu`, art: "neu" as const }] : []),
+      ...(zahl.gelesen ? [{ text: `${zahl.gelesen} offen`, art: "offen" as const }] : []),
+    ],
     gross: zahl.neu
       ? zahl.neu === 1 ? "Eine neue Anfrage" : `${zahl.neu} neue Anfragen`
-      : "Keine neuen Anfragen",
+      : zahl.gelesen
+        ? `${zahl.gelesen === 1 ? "Eine gelesene Anfrage ist" : `${zahl.gelesen} gelesene Anfragen sind`} noch offen`
+        : "Keine neuen Anfragen",
     leise: zahl.alle
       ? `${zahl.offen} offen · ${zahl.erledigt} erledigt · ${baldText() ?? `gelöscht ${aufbewahrungMonate} Monate nach Eingang`}`
       : `Anfragen aus dem Kontaktformular erscheinen hier. Sie werden ${aufbewahrungMonate} Monate nach Eingang automatisch gelöscht.`,
@@ -2196,10 +2220,16 @@ function kachel(filter: AnfragenFilter, wert: number, label: string, unter: stri
   return element;
 }
 
+function offenUnter(zahl: ReturnType<typeof zaehle>): string {
+  if (!zahl.offen) return "keine";
+  if (!zahl.neu) return "alle gelesen";
+  return zahl.gelesen ? `${zahl.neu} neu, ${zahl.gelesen} gelesen` : "alle neu";
+}
+
 function renderUebersicht(): void {
   const zahl = zaehle();
   anfragenKacheln.replaceChildren(
-    kachel("offen", zahl.offen, "Offen", zahl.neu ? `davon ${zahl.neu} neu` : "keine neuen"),
+    kachel("offen", zahl.offen, "Offen", offenUnter(zahl)),
     kachel("erledigt", zahl.erledigt, "Erledigt", zahl.alle ? `${Math.round((zahl.erledigt / zahl.alle) * 100)} % aller Anfragen` : "–"),
     kachel("alle", zahl.alle, "Gesamt", `${alleAnfragen.filter((a) => Date.now() - new Date(a.eingang).getTime() < 30 * 86_400_000).length} in den letzten 30 Tagen`),
   );
@@ -2265,7 +2295,7 @@ function briefKarte(page: PageSummary): HTMLElement {
   const kopf = document.createElement("p");
   kopf.className = "kopfzeile";
   kopf.innerHTML = page.entwurf
-    ? `<span class="marke">Entwurf</span> Nr. ${page.nummer ?? ""} · ${esc(shortDate(page.datum))}`
+    ? `<span class="marke entwurf">Entwurf</span> Nr. ${page.nummer ?? ""} · ${esc(shortDate(page.datum))}`
     : `<span class="marke online">Online</span> Nr. ${page.nummer ?? ""} · ${esc(shortDate(page.datum))}`;
   const titel = document.createElement("h2");
   const link = button(thema(page.titel) || "Noch ohne Thema", "titel-knopf", () => void openPage(page.rel));
@@ -2433,7 +2463,7 @@ function wunschKarte(wunsch: Wunsch): HTMLElement {
   karte.classList.toggle("gewaehlt", wunsch.id === gewaehlt);
   const kopf = document.createElement("p");
   kopf.className = "kopfzeile";
-  kopf.innerHTML = `${wunsch.status === "erledigt" ? `<span class="marke online">Erledigt</span>` : `<span class="marke">Offen</span>`} ${esc(ART_LABEL[wunsch.art])} · ${esc(eingangFormat.format(new Date(wunsch.eingang)))}${
+  kopf.innerHTML = `${wunsch.status === "erledigt" ? `<span class="marke online">Erledigt</span>` : `<span class="marke offen">Offen</span>`} ${esc(ART_LABEL[wunsch.art])} · ${esc(eingangFormat.format(new Date(wunsch.eingang)))}${
     wunsch.status === "erledigt" && wunsch.erledigtAm ? ` · erledigt am ${esc(shortDate(wunsch.erledigtAm.slice(0, 10)))}` : ""
   }${wunsch.seite ? ` · ${esc(wunsch.seite)}` : ""}`;
   const text = document.createElement("p");

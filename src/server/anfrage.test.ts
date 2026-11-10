@@ -63,19 +63,58 @@ test("Nachholen: Gelesenes und schon Gemeldetes löst nichts aus", async () => {
   assert.equal(texte.length, 0);
 });
 
-test("Erinnerung: zählt Offene, nie Name oder Nachricht, und nur einmal am Tag", async () => {
+test("Erinnerung: Ungelesenes täglich, nur Zahlen, nur einmal am Tag", async () => {
   await lege(A, "2026-11-02T08:00:00Z", "gesendet");
   await lege(B, "2026-11-02T09:00:00Z", "gesendet");
   await lege(C, "2026-11-02T10:00:00Z", "gesendet");
-  await stand({ [B]: "gelesen", [C]: "erledigt" });
+  await stand({ [C]: "erledigt" });
+  // Die Wochenübersicht ist schon durch, hier zählt nur der Tag.
+  await fs.writeFile(path.join(ordner, "_erinnerung.json"), JSON.stringify({ woche: "2026-11-02" }));
   const { texte, senden } = bote();
   assert.equal(await erinnereAnOffene(MITTWOCH, senden), true);
-  assert.match(texte[0], /2 Anfragen sind seit über einem Tag offen, davon 1 ungelesen/);
-  assert.doesNotMatch(texte[0], /Vertraulich|a@b\.ch/);
+  assert.match(texte[0], /2 Anfragen sind seit über einem Tag ungelesen\./);
+  assert.doesNotMatch(texte[0], /Wochenübersicht|Vertraulich|a@b\.ch/);
   assert.equal(await erinnereAnOffene(new Date(2026, 10, 4, 15, 0), senden), false);
   assert.equal(texte.length, 1);
   assert.equal(await erinnereAnOffene(new Date(2026, 10, 5, 8, 0), senden), true);
   assert.equal(texte.length, 2);
+});
+
+test("Erinnerung: Gelesenes, nicht Erledigtes nur einmal die Woche", async () => {
+  await lege(A, "2026-11-02T08:00:00Z", "gesendet");
+  await lege(B, "2026-11-02T09:00:00Z", "gesendet");
+  await stand({ [A]: "gelesen", [B]: "gelesen" });
+  const { texte, senden } = bote();
+  assert.equal(await erinnereAnOffene(MITTWOCH, senden), true);
+  assert.match(texte[0], /Wochenübersicht: 2 gelesene Anfragen sind noch nicht erledigt\./);
+  assert.doesNotMatch(texte[0], /ungelesen/);
+  // Rest der Woche still, nächsten Montag wieder.
+  assert.equal(await erinnereAnOffene(new Date(2026, 10, 5, 9, 0), senden), false);
+  assert.equal(await erinnereAnOffene(new Date(2026, 10, 6, 9, 0), senden), false);
+  assert.equal(await erinnereAnOffene(new Date(2026, 10, 9, 8, 0), senden), true);
+  assert.equal(texte.length, 2);
+});
+
+test("Erinnerung: beides am selben Tag kommt in einer Nachricht", async () => {
+  await lege(A, "2026-11-02T08:00:00Z", "gesendet");
+  await lege(B, "2026-11-02T09:00:00Z", "gesendet");
+  await stand({ [B]: "gelesen" });
+  const { texte, senden } = bote();
+  assert.equal(await erinnereAnOffene(MITTWOCH, senden), true);
+  assert.equal(texte.length, 1);
+  assert.match(texte[0], /1 Anfrage ist seit über einem Tag ungelesen\. Wochenübersicht: 1 gelesene Anfrage ist noch nicht erledigt\./);
+});
+
+test("Erinnerung: wer erst nach dem Wochenblick liest, hört nächste Woche davon", async () => {
+  await lege(A, "2026-11-02T08:00:00Z", "gesendet");
+  await stand({ [A]: "erledigt" });
+  const { texte, senden } = bote();
+  // Montag: nichts Gelesenes offen, die Woche ist damit abgehakt.
+  assert.equal(await erinnereAnOffene(new Date(2026, 10, 2, 9, 0), senden), false);
+  await stand({ [A]: "gelesen" });
+  assert.equal(await erinnereAnOffene(MITTWOCH, senden), false);
+  assert.equal(await erinnereAnOffene(new Date(2026, 10, 9, 9, 0), senden), true);
+  assert.equal(texte.length, 1);
 });
 
 test("Erinnerung: nicht nachts, nicht am Wochenende, nicht vor Ablauf eines Tages", async () => {

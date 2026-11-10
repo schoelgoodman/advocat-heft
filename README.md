@@ -83,7 +83,7 @@ Sind `TELEGRAM_BOT_TOKEN` und `TELEGRAM_CHAT_ID` gesetzt, meldet der Server jede
 Damit keine Anfrage unbemerkt bleibt, schaut die Seite alle fünf Minuten nach (`meldeNachtraeglich`, `erinnereAnOffene`):
 
 - **Nachholen:** Steht bei einer ungelesenen Anfrage `fehler`, versucht sie die Meldung erneut, eine Nachricht für alle.
-- **Erinnern:** Ist eine Anfrage seit über 24 Stunden nicht erledigt, kommt Montag bis Freitag zwischen 8 und 18 Uhr (Zeitzone des Containers) höchstens eine Erinnerung am Tag, nur mit der Zahl. Sie hört auf, wenn die Anfrage in der Redaktion auf «Erledigt» steht. Den letzten Tag merkt sich `_erinnerung.json` im selben Ordner.
+- **Erinnern:** Montag bis Freitag zwischen 8 und 18 Uhr (Zeitzone des Containers) kommt höchstens eine Erinnerung am Tag, nur mit Zahlen. Täglich, solange eine Anfrage seit über 24 Stunden ungelesen ist. Einmal die Woche (am ersten Arbeitstag, an dem nachgeschaut wird) eine Wochenübersicht, solange gelesene Anfragen nicht auf «Erledigt» stehen. Fällt beides zusammen, kommt eine Nachricht. Tag und Woche merkt sich `_erinnerung.json` im selben Ordner.
 
 Ohne Telegram (`aus`) fällt beides weg. Ist der Bot dauerhaft kaputt, steht es nur im Log (`Telegram: …`).
 

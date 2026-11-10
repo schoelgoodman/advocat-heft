@@ -162,7 +162,7 @@ done < /root/advocat-alte-adressen.txt | grep -v '^200 '
 
 Von Hand:
 
-- **Kontaktformular:** Auf `https://advocat-finanz.ch/kontakt` eine Testanfrage schicken. Sie erscheint in der Redaktion unter «Kontaktaufnahme», die Telegram-Meldung kommt. Danach auf «Erledigt» setzen, sonst kommt morgen eine Erinnerung.
+- **Kontaktformular:** Auf `https://advocat-finanz.ch/kontakt` eine Testanfrage schicken. Sie erscheint in der Redaktion unter «Kontaktaufnahme», die Telegram-Meldung kommt. Danach auf «Erledigt» setzen, sonst taucht sie in der nächsten Wochenübersicht auf Telegram auf (ungelesen schon morgen).
 - **E-Mail:** Eine Nachricht an und von `office@advocat-finanz.ch` geht durch.
 - **Bilder:** Die Startseite auf dem Handy öffnen. In den Entwicklerwerkzeugen laden die Bilder aus `/media/_klein/` als `image/avif`.
 

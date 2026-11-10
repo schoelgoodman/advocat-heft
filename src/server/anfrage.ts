@@ -251,27 +251,51 @@ function ortsTag(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
+/** Der Montag der Woche, als Schlüssel für die Wochenübersicht. */
+function ortsWoche(date: Date): string {
+  const montag = new Date(date.getFullYear(), date.getMonth(), date.getDate() - ((date.getDay() + 6) % 7));
+  return ortsTag(montag);
+}
+
 /**
- * Montag bis Freitag zwischen 8 und 18 Uhr höchstens eine Erinnerung am Tag, solange eine Anfrage
- * seit über 24 Stunden nicht erledigt ist. Nur die Zahl: Name und Nachricht bleiben auf dem Server.
- * Der Tag steht in einer Datei, damit ein Neustart nicht zweimal erinnert.
+ * Montag bis Freitag zwischen 8 und 18 Uhr höchstens eine Erinnerung am Tag. Zwei Gründe:
+ * - täglich, solange eine Anfrage seit über 24 Stunden ungelesen ist;
+ * - einmal die Woche (am ersten Arbeitstag, an dem es klappt), solange Gelesenes nicht erledigt ist.
+ * Fallen beide zusammen, kommt eine Nachricht. Nur Zahlen: Name und Nachricht bleiben auf dem Server.
+ * Tag und Woche stehen in einer Datei, damit ein Neustart nicht zweimal erinnert.
  */
 export async function erinnereAnOffene(jetzt = new Date(), senden = sendTelegram): Promise<boolean> {
   const stunde = jetzt.getHours();
   if (jetzt.getDay() === 0 || jetzt.getDay() === 6 || stunde < 8 || stunde >= 18) return false;
   const file = path.join(anfragenDir(), ERINNERUNG_FILE);
   const tag = ortsTag(jetzt);
-  const zuletzt = await fs.readFile(file, "utf8").then((raw) => (JSON.parse(raw) as { tag?: string }).tag, () => undefined);
-  if (zuletzt === tag) return false;
-  const offen = (await listAnfragen()).filter(
-    (anfrage) => anfrage.status !== "erledigt" && jetzt.getTime() - Date.parse(anfrage.eingang) > EIN_TAG_MS,
+  const woche = ortsWoche(jetzt);
+  const zuletzt = await fs.readFile(file, "utf8").then(
+    (raw) => JSON.parse(raw) as { tag?: string; woche?: string },
+    () => ({}) as { tag?: string; woche?: string },
   );
-  if (!offen.length) return false;
-  const ungelesen = offen.filter((anfrage) => anfrage.status === "neu").length;
-  const zahl = offen.length === 1 ? "1 Anfrage ist" : `${offen.length} Anfragen sind`;
-  const text = `Erinnerung: ${zahl} seit über einem Tag offen, davon ${ungelesen} ungelesen. Bitte in der Redaktion unter «Kontaktaufnahme» ansehen und Beantwortetes mit «Erledigt» abschliessen.`;
+  if (zuletzt.tag === tag) return false;
+  const anfragen = await listAnfragen();
+  const ungelesen = anfragen.filter(
+    (anfrage) => anfrage.status === "neu" && jetzt.getTime() - Date.parse(anfrage.eingang) > EIN_TAG_MS,
+  ).length;
+  // Die Woche gilt als gesehen, sobald einmal nachgeschaut wurde. Was danach gelesen wird, kommt nächste Woche.
+  const wocheFaellig = zuletzt.woche !== woche;
+  const gelesen = wocheFaellig ? anfragen.filter((anfrage) => anfrage.status === "gelesen").length : 0;
+  const merken = async (stand: { tag?: string; woche?: string }) => {
+    await fs.mkdir(anfragenDir(), { recursive: true });
+    await fs.writeFile(file, `${JSON.stringify(stand)}\n`, "utf8");
+  };
+  if (!ungelesen && !gelesen) {
+    if (wocheFaellig) await merken({ ...zuletzt, woche });
+    return false;
+  }
+  const saetze: string[] = [];
+  if (ungelesen) saetze.push(`${ungelesen === 1 ? "1 Anfrage ist" : `${ungelesen} Anfragen sind`} seit über einem Tag ungelesen.`);
+  if (gelesen) saetze.push(`Wochenübersicht: ${gelesen === 1 ? "1 gelesene Anfrage ist" : `${gelesen} gelesene Anfragen sind`} noch nicht erledigt.`);
+  const text = `Erinnerung: ${saetze.join(" ")} Bitte in der Redaktion unter «Kontaktaufnahme» ansehen und Beantwortetes mit «Erledigt» abschliessen.`;
   if ((await senden(text)) !== "gesendet") return false;
-  await fs.writeFile(file, `${JSON.stringify({ tag })}\n`, "utf8");
+  await merken({ tag, woche });
   return true;
 }
 
