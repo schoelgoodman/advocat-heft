@@ -54,7 +54,9 @@ for (let i = 0; ; i += 1) {
   if (i > 180) throw new Error(`Der Server kam nicht hoch.\n${serverLog()}`);
   await new Promise((r) => setTimeout(r, 1000));
 }
-const b = await puppeteer.launch({ executablePath: chrome, headless: "new", args: ["--no-sandbox"] });
+// Ein Runner hat keine Maus: Chrome meldet dort «hover: none», und das Menü «Unser Angebot» der Website
+// (heft.css, @media (hover: hover)) ginge beim Darüberfahren nie auf. Darum überall eine Maus vorgeben, wie auf dem Mac.
+const b = await puppeteer.launch({ executablePath: chrome, headless: "new", args: ["--no-sandbox", "--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4"] });
 const p = await b.newPage(); await p.setViewport({width:1600,height:1000});
 const errs=[]; p.on("pageerror",e=>errs.push("pageerror "+e.message)); p.on("console",m=>{if(m.type()==="error")errs.push("console "+m.text())});
 let fails=0; const ok=(n,c)=>{ if(!c) fails++; console.log((c?"PASS ":"FAIL ")+n)};
