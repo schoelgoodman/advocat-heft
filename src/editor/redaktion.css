@@ -192,8 +192,8 @@ p.leise { color: var(--quiet); font-size: 0.88rem; }
   box-shadow: var(--schatten);
 }
 
-/* Verzeichnis */
-aside {
+/* Verzeichnis. Das Kleben und die Schublade gelten nur ihm, nicht jedem <aside>: Ein zweites klebte sonst beim Scrollen mit. */
+aside:where(#verzeichnis) {
   position: sticky;
   top: 1.5rem;
   align-self: start;
@@ -976,7 +976,7 @@ body.schublade .verzeichnis-auf {
   box-shadow: var(--schatten);
 }
 body.schublade .verzeichnis-auf:hover { border-color: var(--olive); color: var(--olive); }
-body.schublade aside {
+body.schublade aside:where(#verzeichnis) {
   position: fixed;
   top: 0;
   left: 0;
@@ -994,7 +994,7 @@ body.schublade aside {
   visibility: hidden;
   transition: transform 0.2s ease-out, visibility 0.2s;
 }
-body.schublade.verzeichnis-offen aside { transform: none; visibility: visible; }
+body.schublade.verzeichnis-offen aside:where(#verzeichnis) { transform: none; visibility: visible; }
 /* Dahinter die Seite abgedunkelt. Ein Tippen darauf schliesst die Schublade, ohne darunter etwas auszulösen. */
 body.schublade.verzeichnis-offen .schleier { display: block; position: fixed; inset: 0; z-index: 16; background: rgba(var(--schatten-rgb), 0.3); }
 @media (min-width: 1101px) { body.schublade .redaktion { padding-left: 4.5rem; } }

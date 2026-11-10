@@ -291,7 +291,7 @@ root.innerHTML = `
         <p class="nummer-hinweis" id="menue-hinweis" hidden>Dieser Name ist lang für das Menü. Am besten «Name im Menü» kürzer wählen.</p>
         <p class="nummer-hinweis" id="adresse-hinweis" hidden></p>
         <p class="nummer-hinweis" id="nummer-hinweis" hidden></p>
-        <aside class="google-hinweise" id="google-hinweise" hidden aria-live="polite"></aside>
+        <div class="google-hinweise" id="google-hinweise" role="note" hidden aria-live="polite"></div>
         <div id="editor"></div>
         <div id="felder" hidden></div>
         <p class="tipp" id="tipp">Tipp: Am Anfang einer leeren Zeile <kbd>/</kbd> tippen für Zwischentitel, Liste oder Bild. Text markieren für fett, kursiv oder Link. <button type="button" class="leise" id="bild-aus-medien">Bild aus Medien einfügen</button></p>
