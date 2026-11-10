@@ -10,7 +10,7 @@ import type { Art, ContentDocument } from "../content/document.ts";
 import { mountAssistent, type AktionArt, type Lage, type SeiteKurz } from "./assistent.ts";
 import { allgemeinAnsicht } from "./ansichten/allgemein.ts";
 import { starteEinstellungen } from "./einstellungen.ts";
-import { medienAnsicht, waehleMedium } from "./ansichten/medien.ts";
+import { medienAnsicht, waehleMedium, type MedienFilter } from "./ansichten/medien.ts";
 import { bloecke, markiereUnterschiede, norm } from "./ansichten/vergleich.ts";
 import { verlaufAnsicht } from "./ansichten/verlauf.ts";
 import { h, toast } from "./dom.ts";
@@ -881,7 +881,12 @@ async function deleteFromTrash(rel: string | null, titel: string): Promise<void>
     await ask({ titel: "Das hat nicht geklappt", text: response ? await errorText(response, "Löschen ging nicht.") : "Keine Verbindung zum Server.", ja: "OK" });
     return;
   }
+  const { bilderFrei = 0 } = (await response.json().catch(() => ({}))) as { bilderFrei?: number };
   await loadList();
+  // Bilder, die nur noch der gelöschte Eintrag brauchte, blieben sonst unbemerkt in «Medien» liegen.
+  if (bilderFrei) {
+    toast(bilderFrei === 1 ? "Ein Bild wird jetzt nicht mehr verwendet." : `${bilderFrei} Bilder werden jetzt nicht mehr verwendet.`, { label: "In Medien ansehen", aus: () => void showMedien("frei") });
+  }
 }
 
 async function loadList(): Promise<void> {
@@ -3057,14 +3062,14 @@ async function showAllgemein(): Promise<void> {
   nachOben();
 }
 
-async function showMedien(): Promise<void> {
+async function showMedien(filter?: MedienFilter): Promise<void> {
   if (!(await flushCommit())) return;
   current = null;
   gewaehlt = null;
   markCurrent();
   zeigeNur(medienSeite);
   merke("medien");
-  await ladeMedien().catch((error: Error) => toast(error.message, undefined, true));
+  await ladeMedien(filter).catch((error: Error) => toast(error.message, undefined, true));
   nachOben();
 }
 

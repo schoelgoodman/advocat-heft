@@ -277,6 +277,17 @@ const loesch=await p.evaluateHandle((n)=>[...document.querySelectorAll(".medium"
 ok("Bild gelöscht", !fs.existsSync(`${content}/media/${nachUp[0]}`));
 await p.click(".toast.sichtbar button"); await sleep(1200); ok("Bild zurückgeholt", fs.existsSync(`${content}/media/${nachUp[0]}`));
 const r=await p.evaluate(async()=>{const a=await fetch("/api/medien?name=Start-scaled.jpg",{method:"DELETE"});return [a.status,(await a.json()).error]}); ok("Gebrauchtes Bild nicht löschbar", r[0]===400&&r[1].includes("gebraucht")); console.log("  ",r[1]);
+// Ein Bild, das nur noch ein Eintrag im Papierkorb braucht: eigener Filter, und nach dem endgültigen Löschen ein Hinweis.
+fs.writeFileSync(`${content}/papierkorb/kapitel/nur-korb.md`, read("papierkorb/kapitel/test.md").replace('titel: "Test"','titel: "Nur Korb"').replace("Start-scaled.jpg",nachUp[0]));
+await p.reload({waitUntil:"networkidle2"}); await sleep(1500);
+await klick("Nur im Papierkorb"); await sleep(300);
+ok("Medien: Filter «Nur im Papierkorb»", (await p.$$(".medium")).length===1 && await p.$eval(".medium",m=>m.textContent.includes("Nur noch im Papierkorb: Nur Korb")&&!m.querySelector("button")));
+await p.screenshot({path:`${shots}/medien-nur-korb.png`});
+await p.goto(`${base}/redaktion#papierkorb`,{waitUntil:"networkidle2"}); await sleep(1500);
+const weg=await p.evaluateHandle(()=>[...[...document.querySelectorAll("#papierkorb-karten li")].find(li=>li.querySelector("h2")?.textContent==="Nur Korb").querySelectorAll("button")].find(x=>x.textContent==="Endgültig löschen")); await weg.click(); await sleep(300); await p.click("#frage-ja"); await sleep(1500);
+ok("Papierkorb: Hinweis auf frei gewordenes Bild", await p.$eval(".toast.sichtbar",t=>t.textContent.includes("Ein Bild wird jetzt nicht mehr verwendet")) && !fs.existsSync(`${content}/papierkorb/kapitel/nur-korb.md`));
+await p.click(".toast.sichtbar button"); await sleep(1200);
+ok("Papierkorb: «In Medien ansehen» zeigt die freien Bilder", await p.$eval("#medien-seite",e=>!e.hidden) && await p.evaluate((n)=>[...document.querySelectorAll("#medien-seite .chips button")].find(x=>x.textContent.startsWith("Nicht verwendet")).getAttribute("aria-pressed")==="true" && [...document.querySelectorAll(".medium")].some(m=>m.textContent.includes(n)),nachUp[0]));
 // Verlauf
 await p.goto(`${base}/redaktion#verlauf`,{waitUntil:"networkidle2"}); await sleep(1400);
 ok("Verlauf: Einträge", (await p.$$(".aenderungen > li")).length>=10); await p.screenshot({path:`${shots}/verlauf.png`});

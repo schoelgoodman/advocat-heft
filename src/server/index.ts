@@ -33,7 +33,7 @@ import { buildSite, previewPage, rebuildDocuments, textHtml } from "../render/bu
 import { publishMedia, pruneVariants } from "../render/media.ts";
 import { AUFBEWAHRUNG_MONATE, erinnereAnOffene, handleAnfrage, listAnfragen, loescheAlteAnfragen, meldeNachtraeglich, setAnfrageStatus } from "./anfrage.ts";
 import { verarbeiteBild } from "./bilder.ts";
-import { bilderIn, listeMedien, medienName, pruefeLoeschbar, sendeVorschau } from "./medien.ts";
+import { bilderIn, freiGeworden, listeMedien, medienName, pruefeLoeschbar, sendeVorschau } from "./medien.ts";
 import { leseStatus, schreibeStatus } from "./status.ts";
 import { importWord } from "./word.ts";
 import { seitenCheck, websiteCheck } from "./pruefung.ts";
@@ -537,11 +537,13 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     const rel = url.searchParams.get("rel");
     const docs = rel ? [parseDocument(await fs.readFile(path.join(contentDir(), trashRel(rel)), "utf8"), trashRel(rel))] : await loadPapierkorb();
     await flushPending();
+    const vorher = await listeMedien();
     for (const doc of docs) await fs.rm(path.join(contentDir(), doc.rel), { force: true });
     const message = docs.length === 1 ? `Endgültig gelöscht: ${docs[0].titel}` : `Papierkorb geleert (${docs.length})`;
     await commitIfChanged(message, docs.map((doc) => doc.rel));
     console.log(message);
-    sendJson(res, 200, { geloescht: docs.length });
+    // Bilder, die nur noch diese Einträge brauchten: Die Redaktion weist darauf hin.
+    sendJson(res, 200, { geloescht: docs.length, bilderFrei: freiGeworden(vorher, await listeMedien()).length });
     return;
   }
 

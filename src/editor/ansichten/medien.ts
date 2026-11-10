@@ -63,19 +63,23 @@ export function waehleMedium(): Promise<string | null> {
   });
 }
 
-type Filter = "alle" | "frei";
+export type MedienFilter = "alle" | "frei" | "korb";
 
-/** Die Seite «Medien». `oeffne` springt zur Seite, die ein Bild braucht. */
-export function medienAnsicht(host: HTMLElement, oeffne: (rel: string) => void, hochladen: (datei: File) => Promise<string>): () => Promise<void> {
+/** Braucht nur noch ein Eintrag im Papierkorb das Bild? Dann ist es weder frei noch auf der Website. */
+const nurImKorb = (m: Medium) => !m.fest && m.verwendet.length > 0 && m.verwendet.every((v) => v.papierkorb);
+
+/** Die Seite «Medien». `oeffne` springt zur Seite, die ein Bild braucht. Zurück kommt das Laden, auf Wunsch gleich mit einem Filter. */
+export function medienAnsicht(host: HTMLElement, oeffne: (rel: string) => void, hochladen: (datei: File) => Promise<string>): (zeige?: MedienFilter) => Promise<void> {
   let medien: Medium[] = [];
-  let filter: Filter = "alle";
+  let filter: MedienFilter = "alle";
   const suche = h("input", { type: "search", class: "suche", placeholder: "Dateiname suchen", "aria-label": "Dateiname suchen" });
   const kacheln = h("div", { class: "chips", role: "group", "aria-label": "Filter" });
   const raster = h("ul", { class: "medien-liste" });
   const text = h("p", { class: "leise" });
   const datei = h("input", { type: "file", accept: "image/png,image/jpeg,image/webp,image/gif,image/svg+xml", multiple: true, hidden: true });
 
-  const laden = async () => {
+  const laden = async (zeige?: MedienFilter) => {
+    if (zeige) filter = zeige;
     medien = await lade();
     zeichne();
   };
@@ -124,7 +128,11 @@ export function medienAnsicht(host: HTMLElement, oeffne: (rel: string) => void, 
       gebraucht.length
         ? h("small", { class: "medium-wo" }, "In: ", ...gebraucht.flatMap((v, i) => [i ? ", " : "", h("a", { href: `#${v.rel}`, onclick: (event: Event) => { event.preventDefault(); oeffne(v.rel); } }, v.titel)]))
         : null,
-      imKorb.length ? h("small", { class: "leise" }, `Im Papierkorb: ${imKorb.map((v) => v.titel).join(", ")}`) : null,
+      imKorb.length
+        ? h("small", { class: "leise" }, nurImKorb(m)
+          ? `Nur noch im Papierkorb: ${imKorb.map((v) => v.titel).join(", ")}. Löschbar, sobald ${imKorb.length === 1 ? "der Eintrag dort endgültig gelöscht ist" : "die Einträge dort endgültig gelöscht sind"}.`
+          : `Im Papierkorb: ${imKorb.map((v) => v.titel).join(", ")}`)
+        : null,
       m.verwendet.length || m.fest
         ? null
         : h("div", { class: "medium-frei" }, h("small", { class: "leise" }, "Nicht verwendet"), h("button", { type: "button", class: "leise gefahr", onclick: () => void loesche(m) }, "Löschen")),
@@ -133,7 +141,8 @@ export function medienAnsicht(host: HTMLElement, oeffne: (rel: string) => void, 
 
   function zeichne(): void {
     const frei = medien.filter((m) => !m.verwendet.length && !m.fest);
-    const chips: [Filter, string][] = [["alle", `Alle (${medien.length})`], ["frei", `Nicht verwendet (${frei.length})`]];
+    const korb = medien.filter(nurImKorb);
+    const chips: [MedienFilter, string][] = [["alle", `Alle (${medien.length})`], ["frei", `Nicht verwendet (${frei.length})`], ["korb", `Nur im Papierkorb (${korb.length})`]];
     kacheln.replaceChildren(...chips.map(([wert, label]) => h("button", {
       type: "button",
       class: filter === wert ? "haupt" : "",
@@ -143,7 +152,7 @@ export function medienAnsicht(host: HTMLElement, oeffne: (rel: string) => void, 
         zeichne();
       },
     }, label)));
-    const treffer = (filter === "frei" ? frei : medien).filter((m) => m.name.toLowerCase().includes(suche.value.trim().toLowerCase()));
+    const treffer = (filter === "frei" ? frei : filter === "korb" ? korb : medien).filter((m) => m.name.toLowerCase().includes(suche.value.trim().toLowerCase()));
     text.textContent = treffer.length ? "" : "Kein passendes Bild.";
     raster.replaceChildren(...treffer.map(karte));
   }

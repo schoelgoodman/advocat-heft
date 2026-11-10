@@ -73,6 +73,15 @@ export async function listeMedien(): Promise<Medium[]> {
   return liste.sort((a, b) => a.name.localeCompare(b.name, "de"));
 }
 
+/**
+ * Bilder, die vor dem endgültigen Löschen aus dem Papierkorb noch gebraucht wurden und jetzt frei sind.
+ * Die Redaktion sagt es, damit sie in «Medien» nicht unbemerkt liegen bleiben.
+ */
+export function freiGeworden(vorher: Medium[], nachher: Medium[]): string[] {
+  const gebraucht = new Set(vorher.filter((medium) => medium.verwendet.length).map((medium) => medium.name));
+  return nachher.filter((medium) => !medium.fest && !medium.verwendet.length && gebraucht.has(medium.name)).map((medium) => medium.name);
+}
+
 /** Löschen geht nur, wenn nichts das Bild braucht, auch nichts im Papierkorb. */
 export async function pruefeLoeschbar(name: string): Promise<void> {
   const medium = (await listeMedien()).find((eintrag) => eintrag.name === name);
