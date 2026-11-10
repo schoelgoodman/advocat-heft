@@ -1,5 +1,7 @@
 import { allgemeinAus, pruefeAllgemein, type Allgemein, type AllgemeinFehler } from "../../content/allgemein.ts";
+import { assistentBeimStart, merkeAssistentBeimStart } from "../assistent.ts";
 import { fehlerText, h, toast } from "../dom.ts";
+import { schrift, setzeSchrift, setzeThema, thema, type Schrift, type Thema } from "../einstellungen.ts";
 
 /**
  * «Verwaltung», «Allgemein»: Firma, Adresse, Telefon, E-Mail, Handelsregister und der Kontakt am
@@ -133,6 +135,58 @@ export function allgemeinAnsicht(host: HTMLElement): AllgemeinAnsicht {
     return rahmen;
   }
 
+  /**
+   * Der Teil «Redaktion»: keine Angaben der Website, sondern Vorlieben. Sie gelten sofort, ohne «Speichern»,
+   * und stehen im Browser, nicht im Inhalt.
+   */
+  function redaktionGruppen(): HTMLElement[] {
+    const haken = h("input", { type: "checkbox", id: "assistent-beim-start", checked: assistentBeimStart() });
+    haken.addEventListener("change", () => {
+      merkeAssistentBeimStart(haken.checked);
+      toast(haken.checked ? "Der Assistent ist beim Öffnen der Redaktion wieder da." : "Der Assistent bleibt beim Öffnen der Redaktion zu. Der Knopf «Assistent» unten rechts öffnet ihn.");
+    });
+    /** Eine Auswahl aus wenigen Möglichkeiten, als Knöpfe nebeneinander. */
+    const wahl = <T extends string>(id: string, name: string, heute: T, moeglich: [T, string][], setze: (wert: T) => void, hinweis: string): HTMLElement => {
+      const knoepfe = moeglich.map(([wert, text]) => {
+        const knopf = h("button", { type: "button", "data-wert": wert, "aria-pressed": String(wert === heute) }, text);
+        knopf.addEventListener("click", () => {
+          setze(wert);
+          for (const anderer of knoepfe) anderer.setAttribute("aria-pressed", String(anderer === knopf));
+        });
+        return knopf;
+      });
+      return h(
+        "div",
+        { class: "wahl", id },
+        h("span", { class: "feld-name", id: `${id}-name` }, name),
+        h("div", { class: "wahl-knoepfe", role: "group", "aria-labelledby": `${id}-name` }, ...knoepfe),
+        h("small", { class: "feld-hinweis" }, hinweis),
+      );
+    };
+    return [
+      h(
+        "section",
+        { class: "feld-gruppe" },
+        h("h2", {}, "Darstellung"),
+        h("p", { class: "leise" }, "Wie die Redaktion aussieht. Die Website und die Vorschau bleiben, wie Besucher sie sehen."),
+        wahl<Thema>("wahl-thema", "Aussehen", thema(), [["hell", "Hell"], ["dunkel", "Dunkel"], ["geraet", "Wie das Gerät"]], setzeThema,
+          "«Wie das Gerät» folgt der Einstellung von Computer oder Telefon, etwa abends dunkel."),
+        wahl<Schrift>("wahl-schrift", "Schriftgrösse", schrift(), [["normal", "Normal"], ["gross", "Gross"]], setzeSchrift,
+          "«Gross» vergrössert alles in der Redaktion um eine Stufe."),
+      ),
+      h(
+        "section",
+        { class: "feld-gruppe" },
+        h("h2", {}, "Assistent"),
+        h("p", { class: "leise" }, "Der Assistent rechts hilft beim Schreiben und mit der Redaktion."),
+        h("div", { class: "wahl" },
+          h("label", { class: "feld-haken" }, haken, " Assistent beim Öffnen der Redaktion zeigen"),
+          h("small", { class: "feld-hinweis" }, "Ohne Haken wartet er hinter dem Knopf «Assistent» unten rechts. Auf dem Telefon und in schmalen Fenstern ist das immer so."),
+        ),
+      ),
+    ];
+  }
+
   function zeichne(): void {
     if (!daten) return;
     formular.replaceChildren(...GRUPPEN.map((gruppe) => h(
@@ -199,11 +253,38 @@ export function allgemeinAnsicht(host: HTMLElement): AllgemeinAnsicht {
     }
   });
 
-  host.replaceChildren(
-    h("h1", {}, "Allgemein"),
-    h("p", { class: "leise einleitung" }, "Firma, Adresse und Kontakt für die ganze Website. «Speichern» ändert sie sofort überall: im Fuss jeder Seite, auf der Kontaktseite, neben jedem «Kontaktieren Sie uns.» und in den Angaben für Google. Stehen die alten Angaben im Impressum, im Datenschutz, im Disclaimer oder im Text der Kontaktseite, werden sie dort mit ersetzt."),
+  // Zwei Teile auf einer Seite. Die Leiste mit «Speichern» gehört nur zur Website: In der Redaktion gilt alles sofort.
+  const teilWebsite = h(
+    "div",
+    { id: "allgemein-website", role: "tabpanel", "aria-labelledby": "reiter-website" },
+    h("p", { class: "leise einleitung" }, "Firma, Adresse und Kontakt, wie sie auf der Website stehen: im Fuss jeder Seite, auf der Kontaktseite, neben jedem «Kontaktieren Sie uns.» und in den Angaben für Google. Erst «Speichern» ändert sie, dann aber sofort überall. Stehen die alten Angaben im Impressum, im Datenschutz, im Disclaimer oder im Text der Kontaktseite, werden sie dort mit ersetzt."),
     h("div", { class: "leiste allgemein-leiste" }, stand, h("div", { class: "aktionen" }, verwerfen, speichern)),
     formular,
+  );
+  const teilRedaktion = h(
+    "div",
+    { id: "allgemein-redaktion", role: "tabpanel", "aria-labelledby": "reiter-redaktion", hidden: true },
+    h("p", { class: "leise einleitung" }, "Wie die Redaktion für dich aussieht und sich verhält. Jede Wahl gilt sofort, ohne «Speichern», und nur in diesem Browser: Auf dem Telefon oder an einem anderen Computer wählst du für sich. An der Website ändert sich dadurch nichts."),
+    h("div", { class: "allgemein-felder" }, ...redaktionGruppen()),
+  );
+  const reiter = ([["website", "Website", teilWebsite], ["redaktion", "Redaktion", teilRedaktion]] as const).map(([wert, text, teil]) => {
+    const knopf = h("button", { type: "button", role: "tab", id: `reiter-${wert}`, "data-wert": wert, "aria-controls": teil.id, "aria-selected": String(wert === "website") }, text);
+    knopf.addEventListener("click", () => zeigeTeil(wert));
+    return { wert, knopf, teil };
+  });
+  function zeigeTeil(wert: "website" | "redaktion"): void {
+    for (const eintrag of reiter) {
+      eintrag.knopf.setAttribute("aria-selected", String(eintrag.wert === wert));
+      eintrag.teil.hidden = eintrag.wert !== wert;
+    }
+  }
+
+  host.replaceChildren(
+    h("h1", {}, "Allgemein"),
+    h("p", { class: "leise einleitung" }, "Die Einstellungen, in zwei Teilen: «Website» für die Angaben, die Besucher sehen, «Redaktion» für deine Arbeit hier."),
+    h("div", { class: "wahl-knoepfe reiter", id: "allgemein-reiter", role: "tablist", "aria-label": "Einstellungen für" }, ...reiter.map((eintrag) => eintrag.knopf)),
+    teilWebsite,
+    teilRedaktion,
   );
 
   return {

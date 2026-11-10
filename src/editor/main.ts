@@ -9,6 +9,7 @@ import { EINMALIG, klartextBloecke, VORLAGE_VON, vorlageName } from "../content/
 import type { Art, ContentDocument } from "../content/document.ts";
 import { mountAssistent, type AktionArt, type Lage, type SeiteKurz } from "./assistent.ts";
 import { allgemeinAnsicht } from "./ansichten/allgemein.ts";
+import { starteEinstellungen } from "./einstellungen.ts";
 import { medienAnsicht, waehleMedium } from "./ansichten/medien.ts";
 import { bloecke, markiereUnterschiede, norm } from "./ansichten/vergleich.ts";
 import { verlaufAnsicht } from "./ansichten/verlauf.ts";
@@ -129,6 +130,8 @@ let ordnung: string[] | null = null;
 /** Ab hier wird es im Kopf der Website eng. */
 const MENUE_NAME_LANG = 24;
 
+// Hell oder dunkel und die Schriftgrösse gelten, bevor etwas zu sehen ist.
+starteEinstellungen();
 root.innerHTML = `
   <button type="button" class="verzeichnis-auf" id="verzeichnis-auf" title="Verzeichnis zeigen" aria-label="Verzeichnis zeigen" aria-expanded="false">
     <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
@@ -1512,7 +1515,8 @@ function renderStand(): void {
     return;
   }
   stand.innerHTML = `<span class="marke online">Online</span> Änderungen erscheinen erst nach dem Speichern auf der Website.`;
-  if (doc.rel !== STARTSEITE) aktionen.append(button("Zurückziehen", "leise weg", () => void unpublish()));
+  // Startseite und Rechtliches bleiben online: Der Fuss jeder Seite verlinkt Impressum, Disclaimer und Datenschutz.
+  if (doc.rel !== STARTSEITE && doc.art !== "recht") aktionen.append(button("Zurückziehen", "leise weg", () => void unpublish()));
   if (!einmalig) aktionen.append(button("Kopie anlegen", "leise", () => void copyPage(doc.rel)));
   const link = document.createElement("a");
   link.className = "knopf";

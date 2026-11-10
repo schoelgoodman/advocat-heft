@@ -1,0 +1,56 @@
+# Bei jedem Pull Request und auf main: Typen, Tests, die Redaktion bauen, die Redaktion im Browser.
+# Der Inhalt liegt nicht im Repo; die Tests im Browser laufen mit dem erfundenen Inhalt in tests/fixtures/content.
+name: Prüfen
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pruefen-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Typen und Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run editor:build
+
+  browser:
+    name: Redaktion im Browser
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      # Mit dem erfundenen Inhalt aus tests/fixtures/content. Chrome bringt der Runner mit.
+      - run: npm run test:browser
+        env:
+          SHOTS: ${{ runner.temp }}/shots
+      - name: Bildschirmfotos und Server-Protokoll behalten, wenn etwas scheitert
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-test
+          path: |
+            ${{ runner.temp }}/shots
+            /tmp/advocat-browser-*/server.log
+          if-no-files-found: ignore

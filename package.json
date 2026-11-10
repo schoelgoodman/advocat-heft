@@ -4,15 +4,15 @@
   "type": "module",
   "description": "Setzer und Redaktion für Advocat Finanz. Markdown liegt ausserhalb dieses Repos.",
   "engines": {
-    "node": ">=22 <26"
+    "node": ">=24 <27"
   },
   "scripts": {
-    "import": "tsx scripts/import-wordpress.ts",
-    "render": "tsx src/cli/render.ts",
-    "build": "tsx src/cli/build.ts",
+    "import": "node scripts/import-wordpress.ts",
+    "render": "node src/cli/render.ts",
+    "build": "node src/cli/build.ts",
     "editor:build": "vite build",
-    "dev": "tsx src/server/index.ts",
-    "test": "node --import tsx --test \"src/**/*.test.ts\"",
+    "dev": "node src/server/index.ts",
+    "test": "node --test \"src/**/*.test.ts\"",
     "test:browser": "node tests/browser/redaktion.mjs",
     "typecheck": "tsc --noEmit"
   },
@@ -25,7 +25,6 @@
     "mammoth": "^1.13.0",
     "sharp": "^0.35.5",
     "simple-git": "^4.0.2",
-    "tsx": "^4.20.6",
     "vite": "^7.1.12",
     "yaml": "^2.9.1"
   },

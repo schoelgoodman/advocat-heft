@@ -8,8 +8,8 @@ Lokal liegt der Inhalt in `dev-content/` (gitignoriert, eigenes Git). Der Server
 npm install
 npm run dev
 npm run typecheck
-npm test   # Zugang, Herkunft, Bilder, Vorlagen, Verzeichnis, Anfragen, Sitemap-Daten
-npm run test:browser   # die Redaktion in Chrome, mit einer Kopie von dev-content
+npm test   # Zugang, Herkunft, Bilder, Vorlagen, Verzeichnis, Anfragen, Sitemap-Daten, Satz
+npm run test:browser   # die Redaktion in Brave oder Chrome, mit dem erfundenen Inhalt aus tests/fixtures/content
 ```
 
 Die Seite ist dann auf `http://127.0.0.1:4321`, die Redaktion auf `http://127.0.0.1:4321/redaktion`. Eine geänderte Datei in `dev-content/` baut die betroffene Seite neu. Nach etwa 20 Sekunden Ruhe schreibt das Git in `dev-content/` eine Fassung.
@@ -30,7 +30,7 @@ Was wo liegt:
 
 Die Releases `content-<Datum>` auf GitHub taugen nicht zum Neuaufsetzen: Die Bundles dort sind inkrementell und brauchen einen vorhandenen Inhalt.
 
-1. **Node 24.** Mit Node 26 bricht `tsx` ohne Meldung ab (Exit 134); `package.json` erlaubt darum nur `>=22 <26`. Auf dem Mac: `brew install node@24`, dann in jeder Shell `export PATH="/opt/homebrew/opt/node@24/bin:$PATH"`. Prüfen mit `node -v` (v24.x).
+1. **Node 24**, wie auf dem Server (`.nvmrc`, `modules/packages/advocat-heft.nix`). Node liest das TypeScript selbst, die Typen fallen beim Laden weg; `tsx` braucht es nicht mehr. Darum gilt in `tsconfig.json` `erasableSyntaxOnly`: kein `enum`, keine Parameter-Eigenschaften. Auf dem Mac: `brew install node@24`, dann in jeder Shell `export PATH="/opt/homebrew/opt/node@24/bin:$PATH"`. Prüfen mit `node -v` (v24.x).
 
 2. **Code holen.**
    ```sh
@@ -66,6 +66,22 @@ Die Releases `content-<Datum>` auf GitHub taugen nicht zum Neuaufsetzen: Die Bun
 
 Danach den Inhalt wie gewohnt pflegen und neue Fassungen als Bundle an den Server geben (`DEPLOY.md`, Teil 2: zusammenführen, nie ersetzen). Gilt das Bundle vom Server als Ausgangsstand, passen die neuen Fassungen ohne Konflikt auf den Server.
 
+## Tests
+
+`npm test` läuft ohne Inhalt und ohne Browser. GitHub lässt Typen, Tests, den Bau der Redaktion und die Tests im Browser bei jedem Pull Request und auf `main` laufen (`.github/workflows/pruefen.yml`).
+
+`npm run test:browser` klickt sich in einem echten Browser durch die Redaktion (rund fünf Minuten). Ohne weitere Angabe mit dem erfundenen Inhalt in `tests/fixtures/content/` (siehe das README dort; `tests/fixtures/inhalt.mjs` gibt ihm beim Kopieren ein Git mit Fassungen). Mit dem echten Inhalt: `INHALT=dev-content npm run test:browser`. Der Test arbeitet immer auf einer Kopie in einem Wegwerf-Ordner und auf Port 45890; `SHOTS=<Ordner>` behält die Bildschirmfotos. Er sucht Brave, dann Chrome; anderswo `CHROME_PATH` setzen.
+
+Der Satz hat einen Vergleich mit einer abgelegten Fassung (`src/render/satz.test.ts`, `tests/fixtures/satz/`): Das HTML der Website schreibt Milkdown in einer Browser-Attrappe (happy-dom), und ein Update von einem der beiden kann jede Seite still ändern. Schlägt der Test nach einem Update an und ist die Änderung gewollt: `AKTUALISIEREN=1 npm test`, den Unterschied in `tests/fixtures/satz/` ansehen und mit einchecken.
+
+## Beenden
+
+Auf SIGTERM (so stoppt Docker) und Ctrl+C nimmt der Server keine neuen Anfragen mehr an, lässt laufendes Schreiben fertig werden und schreibt die Fassung, die noch auf ihre 20 Sekunden wartet, samt frisch hochgeladenen Bildern ins Inhalts-Git. Spätestens nach acht Sekunden geht er trotzdem.
+
+Alles, was den Inhalt ändert (Speichern, Veröffentlichen, Zurückziehen, Adresse, Zurückholen, Hochladen), läuft der Reihe nach (`einzeln` in `src/server/index.ts`). Der Assistent und Support laufen daneben, damit eine lange Antwort das Speichern nicht aufhält.
+
+Startseite und Rechtliches (Impressum, Disclaimer, Datenschutz) lassen sich nicht zurückziehen: Der Fuss jeder Seite verlinkt sie fest. `site/status.json` liegt neben der Website, wird aber nicht ausgeliefert; die Redaktion liest es über `/api/status`.
+
 ## Suchmaschinen
 
 Jede Seite bekommt Beschreibung, canonical, Open Graph und auf der Startseite bzw. bei Newslettern strukturierte Daten (`src/design/seo.ts`). Die Beschreibung sind die ersten Absätze der Seite; wer sie ändern will, ändert den Anfang des Textes. Der Setzer schreibt `sitemap.xml` und `robots.txt` mit. Das Datum in der Sitemap kommt aus dem Inhalts-Git: die letzte Fassung, die den Text einer Seite geändert hat. Fassungen über mehr als fünf Seiten sind Umstellungen und zählen nicht; eine feste Seite ohne echte Änderung hat kein Datum. Die Adresse darin kommt aus `SITE_URL` (Standard `https://advocat-finanz.ch`, auf Neo die Option `siteUrl`). Der Server leitet `/angebot/` auf `/angebot` und alte WordPress-Bilder unter `/wp-content/uploads/…` auf `/media/…` um. Die Redaktion und `/api` tragen `X-Robots-Tag: noindex`.
@@ -93,7 +109,7 @@ Die Redaktion zeigt alle Anfragen unter „Kontaktaufnahme“ (`GET /api/anfrage
 
 ## Assistent
 
-Rechts in der Redaktion sitzt ein Assistent: Er erklärt die Redaktion und schreibt mit Patrick an den Texten. Dahinter steht ein Modell bei xAI (`XAI_API_KEY`, Modell `XAI_MODEL`, Standard `grok-4.7`). Lokal steht der Schlüssel in `.env` (gitignoriert); der Server liest die Datei ausserhalb von `NODE_ENV=production` selbst. Ohne Schlüssel ist der Assistent aus, die Redaktion läuft sonst normal.
+Rechts in der Redaktion sitzt ein Assistent: Er erklärt die Redaktion und schreibt mit Patrick an den Texten. Dahinter steht ein Modell bei xAI (`XAI_API_KEY`, Modell `XAI_MODEL`, Standard `grok-4.7`). Lokal steht der Schlüssel in `.env` (gitignoriert); der Server liest die Datei ausserhalb von `NODE_ENV=production` selbst. Ohne Schlüssel ist der Assistent aus, die Redaktion läuft sonst normal. Ob er beim Öffnen der Redaktion schon dasteht, wählt Patrick unter «Verwaltung», «Allgemein», «Redaktion». Dort stehen auch das Aussehen (hell, dunkel, wie das Gerät) und die Schriftgrösse der Redaktion (`src/editor/einstellungen.ts`; das dunkle Thema tauscht in `redaktion.css` nur die Grundfarben unter `data-thema="dunkel"`). Alle drei stehen im Browser (`localStorage`), nicht im Inhalt, und ändern an der Website nichts.
 
 Der Assistent hat keine Werkzeuge. Der Server schickt ihm die Anleitung (`src/server/anleitung.ts`), die offene Seite samt Markierung und die drei neuesten Newsletter, dazu jeden, den Patrick mit Nummer nennt. Änderungen am Text kommen als Vorschlag; erst «Übernehmen» setzt sie ein, als normale Änderung im Editor (Ctrl+Z, Fassungen). Ändert sich die Redaktion, muss `anleitung.ts` mit.
 

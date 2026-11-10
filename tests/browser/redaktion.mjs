@@ -1,7 +1,9 @@
 /**
- * Die Redaktion im echten Browser, mit einer Kopie von dev-content in einem Wegwerf-Ordner.
- * npm run test:browser. Braucht Chrome (sonst CHROME_PATH setzen), den Inhalt in dev-content und Node 24.
- * Der Inhalt liegt nicht im Repo, darum läuft das nur lokal und nicht bei npm test.
+ * Die Redaktion im echten Browser, mit einer Kopie des Inhalts in einem Wegwerf-Ordner.
+ * npm run test:browser. Braucht Brave oder Chrome (anderswo: CHROME_PATH setzen), git und Node 24.
+ * Ohne weitere Angabe läuft es mit dem erfundenen Inhalt in tests/fixtures/content, also auch auf
+ * einem Runner. Mit dem echten Inhalt: INHALT=dev-content npm run test:browser (oder ein anderer Pfad).
+ * SHOTS=<Ordner> behält die Bildschirmfotos und den Wegwerf-Ordner.
  */
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -9,6 +11,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import puppeteer from "puppeteer-core";
+import { legeInhaltAn } from "../fixtures/inhalt.mjs";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const arbeit = fs.mkdtempSync(path.join(os.tmpdir(), "advocat-browser-"));
@@ -16,21 +19,44 @@ const content = path.join(arbeit, "content");
 const site = path.join(arbeit, "site");
 const shots = process.env.SHOTS ?? path.join(arbeit, "shots");
 fs.mkdirSync(shots, { recursive: true });
-fs.cpSync(path.join(repo, "dev-content"), content, { recursive: true });
+// Chrome: was CHROME_PATH sagt, sonst der übliche Ort auf dem Mac (Brave, dann Chrome) oder auf einem Linux-Runner.
+const chrome = process.env.CHROME_PATH ?? ["/Applications/Brave Browser.app/Contents/MacOS/Brave Browser", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable", "/usr/bin/chromium", "/usr/bin/chromium-browser"].find((ort) => fs.existsSync(ort));
+// Was auch geschieht (ein Fehler mitten im Test, Ctrl-C): Der Server bleibt nicht zurück, der Wegwerf-Ordner auch nicht.
+let server = null;
+process.on("exit", () => {
+  server?.kill();
+  if (!process.env.SHOTS) fs.rmSync(arbeit, { recursive: true, force: true });
+});
+for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => process.exit(130));
+if (!chrome) throw new Error("Weder Chrome noch Brave gefunden. Bitte CHROME_PATH setzen.");
+// Der echte Inhalt bringt sein Git mit. Der erfundene bekommt seine Fassungen beim Kopieren.
+const echt = process.env.INHALT ? path.resolve(repo, process.env.INHALT) : "";
+if (echt) {
+  if (!fs.existsSync(path.join(echt, "kapitel"))) throw new Error(`INHALT=${process.env.INHALT}: In ${echt} liegt kein Inhalt.`);
+  fs.cpSync(echt, content, { recursive: true });
+} else legeInhaltAn(content);
+console.log(`Inhalt: ${echt || "tests/fixtures/content (erfunden)"}`);
 const port = 45890;
 const base = `http://127.0.0.1:${port}`;
-const server = spawn(process.execPath, ["--import", "tsx", "src/server/index.ts"], {
+// Was der Server schreibt, landet in einer Datei: Kommt er nicht hoch, steht dort warum.
+const protokoll = path.join(arbeit, "server.log");
+const protokollDatei = fs.openSync(protokoll, "w");
+const serverLog = () => fs.readFileSync(protokoll, "utf8").split("\n").slice(-40).join("\n");
+server = spawn(process.execPath, ["src/server/index.ts"], {
   cwd: repo,
-  stdio: "ignore",
+  stdio: ["ignore", protokollDatei, protokollDatei],
   env: { ...process.env, PORT: String(port), XAI_API_KEY: "", TELEGRAM_BOT_TOKEN: "", CONTENT_DIR: content, SITE_DIR: site, ANFRAGEN_DIR: path.join(arbeit, "anf"), CHAT_DIR: path.join(arbeit, "chat") },
 });
 for (let i = 0; ; i += 1) {
+  if (server.exitCode !== null) throw new Error(`Der Server ist beim Start ausgestiegen (${server.exitCode}).\n${serverLog()}`);
   const fertig = fs.existsSync(path.join(site, "status.json")) && await fetch(`${base}/redaktion`).then((r) => r.ok, () => false);
   if (fertig) break;
-  if (i > 180) throw new Error("Der Server kam nicht hoch.");
+  if (i > 180) throw new Error(`Der Server kam nicht hoch.\n${serverLog()}`);
   await new Promise((r) => setTimeout(r, 1000));
 }
-const b = await puppeteer.launch({ executablePath: process.env.CHROME_PATH ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", args: ["--no-sandbox"] });
+// Ein Runner hat keine Maus: Chrome meldet dort «hover: none», und das Menü «Unser Angebot» der Website
+// (heft.css, @media (hover: hover)) ginge beim Darüberfahren nie auf. Darum überall eine Maus vorgeben, wie auf dem Mac.
+const b = await puppeteer.launch({ executablePath: chrome, headless: "new", args: ["--no-sandbox", "--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4"] });
 const p = await b.newPage(); await p.setViewport({width:1600,height:1000});
 const errs=[]; p.on("pageerror",e=>errs.push("pageerror "+e.message)); p.on("console",m=>{if(m.type()==="error")errs.push("console "+m.text())});
 let fails=0; const ok=(n,c)=>{ if(!c) fails++; console.log((c?"PASS ":"FAIL ")+n)};
@@ -237,8 +263,10 @@ await wiederOnline(); ok("Zurückgezogen: Kontakt-Knopf wieder da", auf("ueber-u
 // Startseite nicht kopierbar
 await open("kapitel/willkommen.md"); ok("Startseite ohne Kopie", !(await p.evaluate(()=>[...document.querySelectorAll("#aktionen button")].some(x=>x.textContent==="Kopie anlegen"))));
 // Medien
+// So viele Bilder, wie im Inhalt liegen: Bis hier hat der Test keines hochgeladen oder gelöscht.
+const bilderImInhalt=fs.readdirSync(`${content}/media`,{withFileTypes:true}).filter(e=>e.isFile()&&!e.name.startsWith(".")).length;
 await p.goto(`${base}/redaktion#medien`,{waitUntil:"networkidle2"}); await sleep(1800);
-ok("Medien: Liste", (await p.$$(".medium")).length>=40); await p.screenshot({path:`${shots}/medien.png`});
+ok(`Medien: Liste (${bilderImInhalt} Bilder)`, bilderImInhalt>=10 && (await p.$$(".medium")).length===bilderImInhalt); await p.screenshot({path:`${shots}/medien.png`});
 ok("Medien: fest markiert", await p.evaluate(()=>document.body.textContent.includes("Fest auf der Website")));
 const up=await p.$('#medien-seite input[type=file]'); const png=path.join(arbeit, "test – bild.png"); 
 fs.writeFileSync(png,Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIApD5fRAAAAABJRU5ErkJggg==","base64"));
@@ -259,8 +287,28 @@ const html=(s)=>fs.readFileSync(`${site}/${s}/index.html`,"utf8");
 ok("Allgemein: beim Start angelegt, Kontaktseite ohne eigene Adresse", fs.existsSync(`${content}/allgemein.json`) && !read("kapitel/kontakt.md").includes("zeilen:") && html("kontakt").includes("Rosenbergstrasse 50<br>"));
 await p.goto(`${base}/redaktion#allgemein`,{waitUntil:"networkidle2"}); await sleep(900);
 ok("Allgemein: Ansicht mit allen Feldern", await p.$eval("#allgemein-seite",e=>!e.hidden) && (await p.$$("#allgemein-seite .feld")).length===14 && await p.$eval("#allgemein-link",e=>e.hasAttribute("aria-current")));
+// Vorlieben der Redaktion: gelten sofort, stehen im Browser, ändern das Formular nicht
+const wurzel=()=>p.evaluate(()=>({thema:document.documentElement.dataset.thema,schrift:document.documentElement.dataset.schrift,px:getComputedStyle(document.documentElement).fontSize,grund:getComputedStyle(document.body).backgroundColor}));
+const hell=await wurzel();
+const zurRedaktion=async()=>{ await p.click('#allgemein-reiter [data-wert="redaktion"]'); await sleep(150); };
+ok("Allgemein: zwei Teile, zuerst die Website", await p.$eval("#allgemein-website",e=>!e.hidden) && await p.$eval("#allgemein-redaktion",e=>e.hidden) && await p.$eval("#allgemein-speichern",e=>e.offsetParent!==null));
+await zurRedaktion();
+ok("Allgemein: Teil Redaktion ohne Speichern-Leiste", await p.$eval("#allgemein-redaktion",e=>!e.hidden) && await p.$eval("#allgemein-website",e=>e.hidden) && await p.$eval("#allgemein-speichern",e=>e.offsetParent===null));
+await p.click('#wahl-thema [data-wert="dunkel"]'); await p.click('#wahl-schrift [data-wert="gross"]'); await sleep(200);
+const dunkel=await wurzel();
+ok("Redaktion: dunkel und grosse Schrift gelten sofort", hell.thema==="hell"&&hell.px==="16px"&&dunkel.thema==="dunkel"&&dunkel.schrift==="gross"&&dunkel.px==="18px"&&dunkel.grund!==hell.grund&&await p.$eval("#allgemein-speichern",e=>e.disabled));
+await p.screenshot({path:`${shots}/allgemein-dunkel.png`,fullPage:true});
+await p.reload({waitUntil:"networkidle2"}); await sleep(900);
+ok("Redaktion: Wahl bleibt nach dem Neuladen", (await wurzel()).thema==="dunkel"&&(await wurzel()).px==="18px"&&await p.$eval('#wahl-thema [data-wert="dunkel"]',e=>e.getAttribute("aria-pressed")==="true"));
+await zurRedaktion();
+await p.click('#wahl-thema [data-wert="hell"]'); await p.click('#wahl-schrift [data-wert="normal"]'); await sleep(200);
+await p.click("#assistent-beim-start"); await sleep(200); await p.reload({waitUntil:"networkidle2"}); await sleep(900);
+ok("Redaktion: Assistent bleibt beim Öffnen zu, der Knopf öffnet ihn", (await wurzel()).thema==="hell"&&await p.$eval(".assistent",e=>e.hidden)&&await p.$eval(".assistent-auf",e=>!e.hidden));
+await zurRedaktion(); await p.click("#assistent-beim-start"); await sleep(200); await p.reload({waitUntil:"networkidle2"}); await sleep(900);
+ok("Redaktion: Assistent wieder da", await p.$eval(".assistent",e=>!e.hidden));
 ok("Allgemein: Speichern erst nach einer Änderung", await p.$eval("#allgemein-speichern",e=>e.disabled));
-const feldA=async(pfad,wert)=>{const e=await p.$(`#allgemein-seite [data-pfad="${pfad}"] input`); await e.click({count:3}); await p.keyboard.press("Backspace"); if(wert) await p.keyboard.type(wert);};
+// Mit focus() statt Klick: Die Leiste mit «Speichern» klebt oben und kann über einem Feld liegen.
+const feldA=async(pfad,wert)=>{const e=await p.$(`#allgemein-seite [data-pfad="${pfad}"] input`); await e.evaluate(x=>{x.scrollIntoView({block:"center"});x.focus();x.select();}); await p.keyboard.press("Backspace"); if(wert) await p.keyboard.type(wert);};
 await feldA("telefon","+41 71 999 88 77"); await feldA("strasse","Teststrasse 7"); await feldA("email","kaputt");
 await p.click("#allgemein-speichern"); await sleep(500);
 ok("Allgemein: falsche E-Mail rot, nichts gespeichert", !!(await p.$('#allgemein-seite [data-pfad="email"].hat-fehler')) && !read("allgemein.json").includes("Teststrasse"));
@@ -307,7 +355,7 @@ const ph=await b.newPage(); await ph.setViewport({width:390,height:844,isMobile:
 ok("Telefon: Werkzeugleiste sichtbar", await ph.evaluate(()=>{const b=document.querySelector(".milkdown-top-bar");return !!b&&getComputedStyle(b).display!=="none"})); await ph.screenshot({path:`${shots}/tel-newsletter.png`});
 await ph.goto(`${base}/redaktion#medien`,{waitUntil:"networkidle2"}); await sleep(1500); await ph.screenshot({path:`${shots}/tel-medien.png`}); await ph.close();
 const real=errs.filter(e=>!/ERR_|favicon|404|409|422|400|WebSocket|websocket/.test(e)); console.log("Browserfehler:",real.slice(0,6),errs.length); console.log(fails?`${fails} FEHLGESCHLAGEN`:"ALLE OK");
+if (real.length) console.log(`${real.length} Fehler im Browser`);
 await b.close();
-server.kill();
-if (!process.env.SHOTS) fs.rmSync(arbeit, { recursive: true, force: true });
-process.exit(fails ? 1 : 0);
+// Den Server und den Wegwerf-Ordner räumt process.on("exit") weiter oben weg.
+process.exit(fails || real.length ? 1 : 0);

@@ -7,7 +7,8 @@
     ...
   }: let
     n2c = inputs.nix2container.packages.${system}.nix2container;
-    nodejs = pkgs.nodejs_22;
+    # Wie .nvmrc. Node liest TypeScript ab 22.18 selbst (die Typen fallen beim Laden weg), ohne tsx.
+    nodejs = pkgs.nodejs_24;
 
     # node_modules ohne Dev-Abhängigkeiten plus die gebaute Redaktion unter dist/.
     app = pkgs.buildNpmPackage {
@@ -25,7 +26,7 @@
         ];
       };
       # Nach jeder Änderung an package-lock.json neu: prefetch-npm-deps package-lock.json
-      npmDepsHash = "sha256-yHNUAqHnZ0VMlQ85KaW3BaGADIRWsSWVX8U5D6QUwHo=";
+      npmDepsHash = "sha256-Z+/a5B/a1pynNkjbOrGq1JDTS1V/0/Nr1jHpVm58Dns=";
       npmBuildScript = "editor:build";
       installPhase = ''
         runHook preInstall
@@ -62,7 +63,7 @@
         }
       ];
       config = {
-        Cmd = ["node" "--import" "tsx" "src/server/index.ts"];
+        Cmd = ["node" "src/server/index.ts"];
         WorkingDir = "/app";
         Env = [
           "PATH=/bin"

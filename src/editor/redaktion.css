@@ -22,28 +22,120 @@
 
 /* Die Redaktion spricht dieselbe Sprache wie der Assistent: weiche Ecken, helle Flächen, leiser Schatten. */
 :root {
+  /* Die Grundfarben auch als Zahlen: Daraus entstehen alle durchscheinenden Töne. Das dunkle Thema
+     (unten, data-thema="dunkel") tauscht nur diese Werte. */
+  --paper-rgb: 244, 240, 230;
+  --ink-rgb: 28, 25, 21;
+  --olive-rgb: 95, 107, 69;
+  --rot-rgb: 154, 59, 42;
+  --gelb-rgb: 226, 200, 122;
+  --schatten-rgb: 28, 25, 21;
+  --weiss: #fff;
+  --live: #c9e09a;
+  --rot-flaeche: #f6e4df;
+  /* Schrift auf Gelb bleibt dunkel, auch im dunklen Thema: Gelb bleibt hell. */
+  --auf-gelb: #1c1915;
+  /* Knöpfe: gefüllt (.haupt, .gefahr) beim Darüberfahren, und der Grund von Eingabefeldern. */
+  --haupt-hover: var(--ink);
+  --gefahr-hover: var(--ink);
+  --feld: var(--flaeche);
+  color-scheme: light;
   --paper: #f4f0e6;
   --ink: #1c1915;
   --olive: #5f6b45;
   --rot: #9a3b2a;
   --gelb: #e2c87a;
-  --quiet: rgba(28, 25, 21, 0.62);
-  --line: rgba(28, 25, 21, 0.12);
-  --rand: rgba(28, 25, 21, 0.22);
-  --hover: rgba(28, 25, 21, 0.05);
+  /* Nebentext: 0.7 gibt auf Papier und Karte rund 6:1. Mit 0.62 lagen kleine Hinweise knapp an der Grenze (4.7:1). */
+  --quiet: rgba(var(--ink-rgb), 0.7);
+  --line: rgba(var(--ink-rgb), 0.12);
+  --rand: rgba(var(--ink-rgb), 0.28);
+  --hover: rgba(var(--ink-rgb), 0.05);
   --flaeche: #fffdf9;
   --flaeche-tief: #f9f7f2;
-  --olive-hauch: rgba(95, 107, 69, 0.1);
-  --olive-ring: rgba(95, 107, 69, 0.18);
-  --rot-hauch: rgba(154, 59, 42, 0.08);
-  --schatten: 0 1px 2px rgba(28, 25, 21, 0.06), 0 4px 16px rgba(28, 25, 21, 0.06);
-  --schatten-hoch: 0 6px 20px rgba(28, 25, 21, 0.14);
+  --olive-hauch: rgba(var(--olive-rgb), 0.1);
+  --olive-ring: rgba(var(--olive-rgb), 0.18);
+  --rot-hauch: rgba(var(--rot-rgb), 0.08);
+  --schatten: 0 1px 2px rgba(var(--schatten-rgb), 0.06), 0 4px 16px rgba(var(--schatten-rgb), 0.06);
+  --schatten-hoch: 0 6px 20px rgba(var(--schatten-rgb), 0.14);
   --rund: 14px;
   --rund-mittel: 10px;
   --rund-klein: 8px;
   --sans: Manrope, "Helvetica Neue", sans-serif;
   --serif: Marcellus, Georgia, serif;
 }
+/* Dunkel: Patrick wählt es unter «Verwaltung», «Allgemein», «Redaktion» (src/editor/einstellungen.ts).
+   Nur die Redaktion; Website und Vorschau zeigen, was Besucher sehen. */
+:root[data-thema="dunkel"] {
+  color-scheme: dark;
+  --paper-rgb: 30, 28, 25;
+  --ink-rgb: 240, 236, 226;
+  --olive-rgb: 174, 190, 134;
+  --rot-rgb: 232, 133, 113;
+  --schatten-rgb: 0, 0, 0;
+  --paper: #1e1c19;
+  --ink: #f0ece2;
+  --olive: #aebe86;
+  --rot: #e88571;
+  --gelb: #dcc378;
+  /* Flächen heben sich in Stufen vom Grund ab: Karte, darin Vertieftes, darin Helles (Knopfreihen, Vorschau). */
+  --flaeche: #2a2723;
+  --flaeche-tief: #24221e;
+  --weiss: #34302b;
+  /* Eingabefelder liegen tiefer als ihre Karte, so sind sie als Felder zu erkennen. */
+  --feld: #1b1916;
+  /* Nebentext, Linien und Ränder kräftiger als im Hellen: Auf Dunkel verlieren sich feine Töne schneller. */
+  --quiet: rgba(var(--ink-rgb), 0.72);
+  --line: rgba(var(--ink-rgb), 0.16);
+  --rand: rgba(var(--ink-rgb), 0.32);
+  --hover: rgba(var(--ink-rgb), 0.09);
+  /* Gefüllte Knöpfe werden beim Darüberfahren heller, nicht weiss. */
+  --haupt-hover: #c3d19f;
+  --gefahr-hover: #f0a08f;
+  --live: #3d4a26;
+  --rot-flaeche: #43261f;
+  --olive-hauch: rgba(var(--olive-rgb), 0.16);
+  --olive-ring: rgba(var(--olive-rgb), 0.32);
+  --rot-hauch: rgba(var(--rot-rgb), 0.16);
+  --schatten: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.3);
+  --schatten-hoch: 0 6px 20px rgba(0, 0, 0, 0.5);
+}
+/* Knöpfe im Dunkeln. Gefüllte (.haupt, .gefahr) tragen dunkle Schrift auf hellem Grund und werden beim
+   Darüberfahren heller (--haupt-hover, --gefahr-hover). Knöpfe mit Rand, leise Knöpfe und Werkzeuge
+   (Griff, Pfeile, «…») bekommen ihren Grund wie im Hellen über --hover. */
+:root[data-thema="dunkel"] .werkzeug-klein:disabled { opacity: 0.35; }
+:root[data-thema="dunkel"] .griff { color: rgba(var(--ink-rgb), 0.6); }
+:root[data-thema="dunkel"] .griff:hover { color: var(--ink); }
+/* Langer Text liest sich hell auf dunkel leichter mit etwas mehr Luft. */
+:root[data-thema="dunkel"] .milkdown .ProseMirror { letter-spacing: 0.005em; }
+:root[data-thema="dunkel"] :is(.feld-hinweis, p.leise) { color: rgba(var(--ink-rgb), 0.76); }
+/* Der Editor (Milkdown) bringt eigene Farben mit. */
+:root[data-thema="dunkel"] .milkdown {
+  --crepe-color-background: transparent;
+  --crepe-color-on-background: var(--ink);
+  --crepe-color-surface: #2a2723;
+  --crepe-color-surface-low: #34302b;
+  --crepe-color-on-surface: #ddd7ca;
+  --crepe-color-on-surface-variant: #b9b2a5;
+  --crepe-color-outline: #8d8779;
+  --crepe-color-primary: var(--olive);
+  --crepe-color-secondary: #45413a;
+  --crepe-color-on-secondary: #ddd7ca;
+  --crepe-color-inverse: #ece7dc;
+  --crepe-color-on-inverse: #26231f;
+  --crepe-color-inline-code: #e27c68;
+  --crepe-color-error: #e27c68;
+  --crepe-color-hover: #34302b;
+  --crepe-color-selected: #403b34;
+  --crepe-color-inline-area: #322f29;
+  --crepe-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px 1px rgba(0, 0, 0, 0.3);
+  --crepe-shadow-2: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 6px 2px rgba(0, 0, 0, 0.3);
+}
+/* Bilder sind für die helle Website gemacht: Durchsichtige (Logos, Tabellen) bekommen deren hellen Grund,
+   das weisse Signet seinen dunklen. Sonst verschwinden sie im dunklen Thema. */
+:root[data-thema="dunkel"] :is(.medium img, .medium-wahl img, .feld-bild, .milkdown img, #vorschau img) { background: #f4f0e6; }
+:root[data-thema="dunkel"] .feld-bild.dunkel { background: #1c1915; box-shadow: 0 0 0 1px var(--rand); }
+/* Grössere Schrift: Die Redaktion ist in rem gesetzt und wächst mit. */
+:root[data-schrift="gross"] { font-size: 112.5%; }
 * { box-sizing: border-box; }
 body {
   margin: 0;
@@ -72,12 +164,22 @@ button, .knopf, input, select {
 }
 button, .knopf { cursor: pointer; text-decoration: none; display: inline-block; transition: background 0.15s, border-color 0.15s, color 0.15s; }
 button:hover, .knopf:hover { border-color: var(--ink); }
-input, select, textarea { background: var(--flaeche); }
+/* Knöpfe mit Rand bekommen beim Darüberfahren auch einen leichten Grund, hell wie dunkel. */
+/* Ohne Gewicht (:where): Wer seinen eigenen Grund hat (.haupt, .leise, Werkzeuge, Karten), behält ihn. Nur im
+   Blatt, in Dialogen und bei den zwei Knöpfen mit Rand im Verzeichnis; die Zeilen des Verzeichnisses haben ihren eigenen. */
+:where(main, dialog) :where(button, .knopf):where(:not(.haupt, .leise, [aria-pressed="true"], [aria-selected="true"], [aria-checked="true"], :disabled)):hover,
+:where(#ordnen-abbrechen, .zur-website):hover { background: var(--hover); }
+input, select, textarea { background: var(--feld); }
+/* Jeder Knopf: gedrückt gibt er nach, gesperrt tritt er zurück. */
+:is(button, .knopf):active:not(:disabled) { transform: translateY(1px); }
+:is(button, .knopf):disabled { opacity: 0.5; cursor: default; }
+button:disabled:hover { border-color: var(--rand); }
+.haupt:disabled:hover { background: var(--olive); border-color: var(--olive); }
 input:focus, select:focus { outline: none; border-color: var(--olive); box-shadow: 0 0 0 3px var(--olive-ring); }
 :focus-visible { outline: 2px solid var(--olive); outline-offset: 2px; }
 input:focus-visible, select:focus-visible, textarea:focus-visible { outline: none; }
 .haupt { background: var(--olive); border-color: var(--olive); color: var(--paper); }
-.haupt:hover { background: var(--ink); border-color: var(--ink); }
+.haupt:hover { background: var(--haupt-hover); border-color: var(--haupt-hover); }
 button.leise { border-color: transparent; color: var(--quiet); padding-inline: 0.5rem; }
 button.leise:hover { color: var(--ink); border-color: transparent; background: var(--hover); }
 p.leise { color: var(--quiet); font-size: 0.88rem; }
@@ -185,10 +287,10 @@ nav .eintrag:has(button[aria-current]) .thema { color: var(--olive); font-weight
 nav .werkzeuge { display: flex; gap: 0.1rem; padding: 0.35rem 0.25rem 0 0; opacity: 0.35; }
 nav .eintrag:hover .werkzeuge, nav .werkzeuge:focus-within { opacity: 1; }
 nav button.werkzeug { display: block; border: 0; border-radius: 6px; padding: 0.25rem; color: var(--quiet); line-height: 0; }
-nav button.werkzeug:hover { color: var(--ink); background: rgba(28, 25, 21, 0.08); }
+nav button.werkzeug:hover { color: var(--ink); background: rgba(var(--ink-rgb), 0.08); }
 nav button.werkzeug svg { width: 1rem; height: 1rem; }
 nav .werkzeuge:has([aria-expanded="true"]) { opacity: 1; }
-nav button.werkzeug[aria-expanded="true"] { color: var(--ink); background: rgba(28, 25, 21, 0.08); }
+nav button.werkzeug[aria-expanded="true"] { color: var(--ink); background: rgba(var(--ink-rgb), 0.08); }
 
 /* Das Menü «…» eines Eintrags */
 .menue {
@@ -229,11 +331,11 @@ nav .thema {
   padding: 0.12rem 0.5rem;
   border-radius: 999px;
   background: var(--gelb);
-  color: var(--ink);
+  color: var(--auf-gelb);
   vertical-align: 0.05em;
 }
 .marke.online { background: var(--olive); color: var(--paper); }
-.marke.offen { background: var(--gelb); color: var(--ink); }
+.marke.offen { background: var(--gelb); color: var(--auf-gelb); }
 
 /* Start */
 #start { padding-top: 3rem; }
@@ -276,7 +378,7 @@ nav .thema {
 .leiste .aktionen .weg:hover { color: var(--rot); background: var(--rot-hauch); }
 
 /* Online: die Leiste olivgrün, ein pulsierender Punkt, der Rahmen ums Textfeld auch. */
-#blatt[data-stand="online"] .leiste { background: color-mix(in srgb, var(--olive) 9%, var(--paper)); border-color: rgba(95, 107, 69, 0.35); }
+#blatt[data-stand="online"] .leiste { background: color-mix(in srgb, var(--olive) 9%, var(--paper)); border-color: rgba(var(--olive-rgb), 0.35); }
 #blatt[data-stand="online"] .stand .marke::before {
   content: "";
   display: inline-block;
@@ -284,12 +386,12 @@ nav .thema {
   height: 0.45rem;
   margin-right: 0.35rem;
   border-radius: 50%;
-  background: #c9e09a;
+  background: var(--live);
   vertical-align: 0.05em;
   animation: live 2s infinite ease-in-out;
 }
 @keyframes live { 50% { opacity: 0.35; } }
-#blatt[data-stand="online"] #editor { border-color: rgba(95, 107, 69, 0.4); box-shadow: 0 0 0 4px var(--olive-hauch), var(--schatten); }
+#blatt[data-stand="online"] #editor { border-color: rgba(var(--olive-rgb), 0.4); box-shadow: 0 0 0 4px var(--olive-hauch), var(--schatten); }
 
 .kennung { margin: 1.8rem 0 0.2rem; font-size: 0.8rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--quiet); }
 textarea.titel {
@@ -355,7 +457,7 @@ textarea.titel:focus { outline: none; border-bottom-color: var(--olive); }
   padding-top: 5rem;
   border: 2px dashed var(--olive);
   border-radius: inherit;
-  background: rgba(244, 240, 230, 0.85);
+  background: rgba(var(--paper-rgb), 0.85);
   color: var(--olive);
   font-weight: 600;
   pointer-events: none;
@@ -372,7 +474,7 @@ textarea.titel:focus { outline: none; border-bottom-color: var(--olive); }
 /* Der Rahmen ums ganze Textfeld zeigt den Fokus schon. */
 .milkdown [contenteditable]:focus-visible { outline: none; }
 .tipp { font-size: 0.85rem; color: var(--quiet); margin: 0.6rem 0.2rem 2rem; }
-kbd { font-family: var(--sans); border: 1px solid var(--line); border-radius: 4px; padding: 0 0.3rem; background: #fff; }
+kbd { font-family: var(--sans); border: 1px solid var(--line); border-radius: 4px; padding: 0 0.3rem; background: var(--weiss); }
 
 /* Fassungen */
 #fassungen-gruppe { border-top: 1px solid var(--line); padding: 0.8rem 0 3rem; }
@@ -384,7 +486,7 @@ kbd { font-family: var(--sans); border: 1px solid var(--line); border-radius: 4p
 #vorschau {
   margin-top: 0.6rem;
   padding: 1rem 1.2rem;
-  background: #fff;
+  background: var(--weiss);
   font-family: var(--serif);
   font-size: 0.95rem;
 }
@@ -394,8 +496,8 @@ kbd { font-family: var(--sans); border: 1px solid var(--line); border-radius: 4p
 #vorschau img { max-width: 100%; height: auto; }
 #vorschau .legende { margin: 0 0 0.8rem; font-family: var(--sans); font-size: 0.82rem; color: var(--quiet); }
 /* Was in der alten Fassung anders ist als heute */
-#vorschau .anders { background: rgba(226, 200, 122, 0.25); border-radius: 4px; box-shadow: 0 0 0 0.25rem rgba(226, 200, 122, 0.25); }
-#vorschau mark { background: rgba(226, 200, 122, 0.85); color: inherit; border-radius: 3px; padding: 0 0.1em; }
+#vorschau .anders { background: rgba(var(--gelb-rgb), 0.25); border-radius: 4px; box-shadow: 0 0 0 0.25rem rgba(var(--gelb-rgb), 0.25); }
+#vorschau mark { background: rgba(var(--gelb-rgb), 0.85); color: inherit; border-radius: 3px; padding: 0 0.1em; }
 
 [hidden] { display: none !important; }
 
@@ -407,16 +509,16 @@ dialog {
   color: var(--ink);
   padding: 1.6rem 1.8rem;
   max-width: min(28rem, calc(100vw - 2rem));
-  box-shadow: 0 1rem 3rem rgba(28, 25, 21, 0.2);
+  box-shadow: 0 1rem 3rem rgba(var(--schatten-rgb), 0.2);
 }
-dialog::backdrop { background: rgba(28, 25, 21, 0.35); }
+dialog::backdrop { background: rgba(var(--schatten-rgb), 0.35); }
 dialog h2 { font-family: var(--serif); font-weight: 400; font-size: 1.5rem; margin: 0 0 0.6rem; }
 dialog p { margin: 0 0 1.4rem; line-height: 1.5; }
 dialog .aktionen { justify-content: flex-end; }
 .haupt.gefahr { background: var(--rot); border-color: var(--rot); }
 .leise.gefahr { color: var(--rot); }
 .leise.gefahr:hover { color: var(--ink); }
-.haupt.gefahr:hover { background: var(--ink); border-color: var(--ink); }
+.haupt.gefahr:hover { background: var(--gefahr-hover); border-color: var(--gefahr-hover); }
 aside .mehr { display: block; margin: 0.3rem 0 0; font-size: 0.85rem; }
 /* Unterseiten und aufgeklappte Listen rücken ein. */
 aside details > nav, aside details > .leise, aside details > .mehr { margin-left: 1.05rem; }
@@ -438,7 +540,7 @@ aside .papierkorb-leer { margin: 0.2rem 0 0.4rem 1.05rem; }
  * Grau heisst liegt bereit, aber niemand wartet (Entwürfe, Papierkorb). Auf Gelb dunkle Schrift.
  */
 :is(aside summary, .aufgabe h2) .zahl.neu:not(:empty) { background: var(--rot); color: var(--paper); }
-:is(aside summary, aside .zeile-link, .aufgabe h2) .zahl.offen:not(:empty) { background: var(--gelb); color: var(--ink); }
+:is(aside summary, aside .zeile-link, .aufgabe h2) .zahl.offen:not(:empty) { background: var(--gelb); color: var(--auf-gelb); }
 /* Die Zahl bleibt, wie sie ist, auch wenn die Zeile gewählt und darum fett und oliv ist. */
 aside .zeile-link .zahl { font-weight: 400; }
 .aufgabe h2 .zahl { margin-left: 0.4rem; font-size: 0.72rem; text-transform: none; letter-spacing: 0.02em; vertical-align: 0.05em; }
@@ -472,7 +574,7 @@ nav .ungelesen .thema { font-weight: 600; }
   text-align: left;
   padding: 0.9rem 1rem;
 }
-.kachel:hover { border-color: rgba(95, 107, 69, 0.5); }
+.kachel:hover { border-color: rgba(var(--olive-rgb), 0.5); }
 .kachel[aria-pressed="true"] { border-color: var(--olive); background: color-mix(in srgb, var(--olive) 8%, var(--flaeche)); }
 .kachel .label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--quiet); }
 /* Manrope statt Marcellus: dort sieht die Null aus wie ein O. */
@@ -489,7 +591,7 @@ nav .ungelesen .thema { font-weight: 600; }
   gap: 0.8rem 1.5rem;
   margin-top: 1.6rem;
   padding: 1.1rem 1.4rem;
-  border: 1px solid rgba(95, 107, 69, 0.4);
+  border: 1px solid rgba(var(--olive-rgb), 0.4);
   border-radius: var(--rund-mittel);
   background: var(--olive-hauch);
 }
@@ -497,7 +599,7 @@ nav .ungelesen .thema { font-weight: 600; }
 .naechstes .kopf { margin: 0 0 0.3rem; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--olive); }
 .naechstes .gross { margin: 0; font-family: var(--serif); font-size: 1.6rem; line-height: 1.2; font-variant-numeric: lining-nums; overflow-wrap: anywhere; }
 .naechstes .leise { margin: 0.25rem 0 0; }
-.naechstes.dringend { border-color: rgba(154, 59, 42, 0.35); background: var(--rot-hauch); }
+.naechstes.dringend { border-color: rgba(var(--rot-rgb), 0.35); background: var(--rot-hauch); }
 .naechstes.dringend .kopf { color: var(--rot); }
 /* Nichts steht an: nur eine ruhige Zeile, kein Kasten, der nach Arbeit aussieht. */
 .naechstes.ruhig { border-color: var(--line); background: transparent; }
@@ -510,7 +612,7 @@ nav .ungelesen .thema { font-weight: 600; }
   flex-direction: column;
   padding: 1.3rem 1.4rem 1.4rem;
 }
-.aufgabe.dringend { border-color: rgba(154, 59, 42, 0.35); box-shadow: 0 0 0 3px var(--rot-hauch), var(--schatten); }
+.aufgabe.dringend { border-color: rgba(var(--rot-rgb), 0.35); box-shadow: 0 0 0 3px var(--rot-hauch), var(--schatten); }
 .aufgabe h2 { margin: 0 0 0.6rem; font-size: 0.78rem; font-weight: 400; text-transform: uppercase; letter-spacing: 0.08em; color: var(--quiet); }
 .aufgabe.dringend h2 { color: var(--rot); }
 .aufgabe .gross { margin: 0; font-family: var(--serif); font-size: 1.6rem; line-height: 1.2; font-variant-numeric: lining-nums; }
@@ -540,8 +642,8 @@ nav .ungelesen .thema { font-weight: 600; }
 /* Assistent */
 .assistent {
   --a-bg: var(--flaeche-tief);
-  --a-flaeche: #ffffff;
-  --a-rand: rgba(28, 25, 21, 0.1);
+  --a-flaeche: var(--weiss);
+  --a-rand: rgba(var(--ink-rgb), 0.1);
   --a-schatten: var(--schatten);
   --a-rund: var(--rund);
   position: fixed;
@@ -568,7 +670,7 @@ body.mit-assistent { padding-right: 26rem; }
   color: var(--quiet);
   background: transparent;
 }
-.assistent .symbol:hover { color: var(--ink); background: rgba(28, 25, 21, 0.06); }
+.assistent .symbol:hover { color: var(--ink); background: rgba(var(--ink-rgb), 0.06); }
 .assistent .symbol.klein { width: 1.75rem; height: 1.75rem; }
 .assistent .neuer-chat {
   display: inline-flex;
@@ -634,7 +736,7 @@ body.mit-assistent { padding-right: 26rem; }
 .assistent .verlauf ul, .assistent .verlauf ol { margin: 0 0 0.7rem; padding-left: 1.25rem; }
 .assistent .verlauf li li { margin-bottom: 0.25rem; }
 .assistent .verlauf blockquote { margin: 0 0 0.7rem; padding-left: 0.8rem; border-left: 2px solid var(--a-rand); color: var(--quiet); }
-.assistent .verlauf code { font-size: 0.85em; background: rgba(28, 25, 21, 0.06); padding: 0.05rem 0.3rem; border-radius: 4px; }
+.assistent .verlauf code { font-size: 0.85em; background: rgba(var(--ink-rgb), 0.06); padding: 0.05rem 0.3rem; border-radius: 4px; }
 .assistent .verlauf a { color: var(--olive); }
 .assistent .zwischentitel { font-weight: 600; }
 
@@ -698,7 +800,7 @@ body.mit-assistent { padding-right: 26rem; }
   background: var(--a-flaeche);
   border: 1px solid var(--a-rand);
   padding: 0.7rem 0.9rem;
-  box-shadow: 0 1px 2px rgba(28, 25, 21, 0.04);
+  box-shadow: 0 1px 2px rgba(var(--schatten-rgb), 0.04);
   transition: border-color 0.15s, transform 0.15s;
 }
 .assistent .beispiele button:hover { border-color: var(--olive); transform: translateY(-1px); }
@@ -734,7 +836,7 @@ body.mit-assistent { padding-right: 26rem; }
   font-size: 0.8rem;
   color: var(--quiet);
   text-decoration: line-through;
-  text-decoration-color: rgba(28, 25, 21, 0.3);
+  text-decoration-color: rgba(var(--ink-rgb), 0.3);
 }
 .assistent .vorschlag .aktionen { padding: 0 0.85rem 0.8rem; gap: 0.35rem; }
 .assistent .vorschlag .aktionen button { font-size: 0.84rem; padding: 0.4rem 0.85rem; }
@@ -743,8 +845,8 @@ body.mit-assistent { padding-right: 26rem; }
 .assistent .vorschlag.newsletter .inhalt { font-family: var(--sans); font-size: 0.94rem; }
 .assistent .vorschlag.newsletter .zwischentitel { font-family: var(--serif); font-weight: 400; font-size: 1.15rem; margin-bottom: 0.2rem; }
 .assistent .vorschlag.newsletter .alt { text-decoration: none; }
-.assistent .vorschlag.schreibt { border-color: rgba(95, 107, 69, 0.45); animation: assistent-schreibt 1.6s infinite ease-in-out; }
-@keyframes assistent-schreibt { 50% { box-shadow: 0 0 0 4px rgba(95, 107, 69, 0.12); } }
+.assistent .vorschlag.schreibt { border-color: rgba(var(--olive-rgb), 0.45); animation: assistent-schreibt 1.6s infinite ease-in-out; }
+@keyframes assistent-schreibt { 50% { box-shadow: 0 0 0 4px rgba(var(--olive-rgb), 0.12); } }
 .assistent .vorschlag .meldung { margin: 0; padding: 0 0.85rem 0.8rem; font-size: 0.8rem; color: var(--quiet); }
 
 /* Eingabe */
@@ -768,7 +870,7 @@ body.mit-assistent { padding-right: 26rem; }
   gap: 0.5rem;
   padding: 0.45rem 0.45rem 0.45rem 0.95rem;
   background: var(--a-flaeche);
-  border: 1px solid rgba(28, 25, 21, 0.16);
+  border: 1px solid rgba(var(--ink-rgb), 0.16);
   border-radius: 16px;
   box-shadow: var(--a-schatten);
   transition: border-color 0.15s, box-shadow 0.15s;
@@ -801,7 +903,7 @@ body.mit-assistent { padding-right: 26rem; }
   color: var(--paper);
   transition: background 0.15s, opacity 0.15s;
 }
-.assistent .senden:hover { background: var(--ink); }
+.assistent .senden:hover { background: var(--haupt-hover); }
 .assistent .senden:disabled { opacity: 0.3; cursor: default; background: var(--olive); }
 .assistent .senden.stopp { background: var(--ink); }
 .assistent .unten { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-top: 0.6rem; }
@@ -811,7 +913,7 @@ body.mit-assistent { padding-right: 26rem; }
   flex: none;
   padding: 3px;
   border-radius: 999px;
-  background: rgba(28, 25, 21, 0.06);
+  background: rgba(var(--ink-rgb), 0.06);
 }
 .assistent .denken button {
   display: inline-flex;
@@ -831,7 +933,7 @@ body.mit-assistent { padding-right: 26rem; }
   background: var(--a-flaeche);
   color: var(--olive);
   font-weight: 600;
-  box-shadow: 0 1px 3px rgba(28, 25, 21, 0.12);
+  box-shadow: 0 1px 3px rgba(var(--schatten-rgb), 0.12);
 }
 .assistent li.denkt { display: flex; align-items: center; gap: 0.7rem; }
 .assistent .denkt-lange { font-size: 0.8rem; color: var(--quiet); }
@@ -853,7 +955,7 @@ body.mit-assistent { padding-right: 26rem; }
   box-shadow: var(--schatten-hoch);
   transition: transform 0.15s, background 0.15s;
 }
-.assistent-auf:hover { background: var(--ink); transform: translateY(-1px); }
+.assistent-auf:hover { background: var(--haupt-hover); transform: translateY(-1px); }
 
 /* Das Verzeichnis als Schublade: auf dem Telefon und auf einem kleinen Laptop mit Assistent. Wann, entscheidet main.ts. */
 .verzeichnis-auf, .schleier { display: none; }
@@ -887,20 +989,20 @@ body.schublade aside {
   padding: 1.4rem 1rem;
   background: var(--flaeche-tief);
   border-right: 1px solid var(--line);
-  box-shadow: 8px 0 32px rgba(28, 25, 21, 0.15);
+  box-shadow: 8px 0 32px rgba(var(--schatten-rgb), 0.15);
   transform: translateX(-105%);
   visibility: hidden;
   transition: transform 0.2s ease-out, visibility 0.2s;
 }
 body.schublade.verzeichnis-offen aside { transform: none; visibility: visible; }
 /* Dahinter die Seite abgedunkelt. Ein Tippen darauf schliesst die Schublade, ohne darunter etwas auszulösen. */
-body.schublade.verzeichnis-offen .schleier { display: block; position: fixed; inset: 0; z-index: 16; background: rgba(28, 25, 21, 0.3); }
+body.schublade.verzeichnis-offen .schleier { display: block; position: fixed; inset: 0; z-index: 16; background: rgba(var(--schatten-rgb), 0.3); }
 @media (min-width: 1101px) { body.schublade .redaktion { padding-left: 4.5rem; } }
 
 /* Schmaler: die Spalte liegt über der Seite statt daneben. */
 @media (max-width: 1100px) {
   body.mit-assistent { padding-right: 0; }
-  .assistent { box-shadow: -8px 0 32px rgba(28, 25, 21, 0.15); }
+  .assistent { box-shadow: -8px 0 32px rgba(var(--schatten-rgb), 0.15); }
 }
 
 /* Übersicht der Newsletter */
@@ -918,7 +1020,7 @@ input.suche {
 }
 :is(#briefe-karten, #papierkorb-karten) { list-style: none; padding: 0; margin: 1.2rem 0 3rem; }
 :is(#briefe-karten, #papierkorb-karten) li { padding: 1.1rem 1.4rem 1.2rem; margin-bottom: 0.9rem; }
-#briefe-karten li[data-entwurf="true"] { border-color: rgba(226, 200, 122, 0.9); }
+#briefe-karten li[data-entwurf="true"] { border-color: rgba(var(--gelb-rgb), 0.9); }
 :is(#briefe-karten, #papierkorb-karten) .kopfzeile { margin: 0; font-size: 0.82rem; color: var(--quiet); }
 :is(#briefe-karten, #papierkorb-karten) h2 { margin: 0.35rem 0 0.3rem; font-family: var(--serif); font-weight: 400; font-size: 1.4rem; line-height: 1.25; }
 #briefe-karten .titel-knopf { border: 0; padding: 0; text-align: left; font: inherit; }
@@ -941,8 +1043,8 @@ input.suche {
 .start-support h2 { margin: 0 0 0.25rem; font-size: 0.78rem; font-weight: 400; text-transform: uppercase; letter-spacing: 0.08em; color: var(--quiet); }
 .start-support p.leise { margin: 0; }
 /* Dieselbe gelbe Zahl wie im Verzeichnis, hier zum Anklicken. */
-.start-support .zahl { margin-left: 0.4rem; padding: 0.05rem 0.45rem; border: 0; border-radius: 999px; background: var(--gelb); color: var(--ink); font-size: 0.72rem; text-transform: none; letter-spacing: 0.02em; vertical-align: 0.05em; }
-.start-support .zahl:hover { background: var(--ink); color: var(--paper); }
+.start-support .zahl { margin-left: 0.4rem; padding: 0.05rem 0.45rem; border: 0; border-radius: 999px; background: var(--gelb); color: var(--auf-gelb); font-size: 0.72rem; text-transform: none; letter-spacing: 0.02em; vertical-align: 0.05em; }
+.start-support .zahl:hover { background: var(--haupt-hover); color: var(--paper); }
 #wuensche-seite { padding-top: 1.5rem; }
 #wuensche-seite .einleitung { max-width: 38rem; margin: 0 0 1.2rem; line-height: 1.5; }
 .neuer-wunsch {
@@ -965,7 +1067,7 @@ input.suche {
   font: inherit;
   line-height: 1.5;
   color: var(--ink);
-  background: #fff;
+  background: var(--weiss);
   border: 1px solid var(--rand);
   border-radius: var(--rund-mittel);
   padding: 0.6rem 0.7rem;
@@ -1013,7 +1115,7 @@ input.suche {
     right: 0.8rem;
     bottom: 0.8rem;
     z-index: 30;
-    background: #f6e4df;
+    background: var(--rot-flaeche);
     box-shadow: var(--schatten-hoch);
   }
   #editor { min-height: 45vh; }
@@ -1074,7 +1176,7 @@ input.suche {
   display: grid;
   gap: 0.9rem;
 }
-#blatt[data-stand="online"] .feld-gruppe { border-color: rgba(95, 107, 69, 0.4); }
+#blatt[data-stand="online"] .feld-gruppe { border-color: rgba(var(--olive-rgb), 0.4); }
 .feld-gruppe h2 { font-family: var(--serif); font-weight: 400; font-size: 1.3rem; margin: 0; }
 .feld-gruppe p.leise { margin: -0.4rem 0 0; }
 .feld-gruppe > button { justify-self: start; }
@@ -1123,6 +1225,17 @@ input.suche {
 .allgemein-felder { display: grid; gap: 1.1rem; margin: 1.2rem 0 3rem; }
 .allgemein-felder .feld.schmal input { max-width: 8rem; }
 .allgemein-leiste .aktionen { flex: 0 0 auto; }
+/* «Redaktion» unter Allgemein: Vorlieben, die sofort gelten. */
+.wahl { display: grid; gap: 0.35rem; justify-items: start; }
+.wahl-knoepfe { display: inline-flex; flex-wrap: wrap; gap: 0.25rem; padding: 0.2rem; border: 1px solid var(--rand); border-radius: 999px; background: var(--weiss); }
+.wahl-knoepfe button { border: 0; border-radius: 999px; padding: 0.35rem 0.95rem; background: transparent; color: var(--quiet); font: inherit; font-size: 0.9rem; cursor: pointer; }
+.wahl-knoepfe button:hover { color: var(--ink); background: var(--hover); }
+.wahl-knoepfe button:is([aria-pressed="true"], [aria-selected="true"]) { background: var(--olive); color: var(--paper); }
+/* «Website» und «Redaktion» unter Allgemein: zwei Teile einer Seite. */
+.wahl-knoepfe.reiter { margin: 0 0 1.4rem; }
+.wahl-knoepfe.reiter button { padding: 0.45rem 1.3rem; font-size: 0.95rem; }
+#allgemein-redaktion .allgemein-felder { margin-top: 0; }
+.wahl-knoepfe button:focus-visible { outline: 2px solid var(--olive); outline-offset: 2px; }
 .leistungen { display: grid; gap: 0.3rem; }
 .leistung { display: flex; align-items: flex-start; gap: 0.2rem; background: var(--flaeche-tief); border-radius: var(--rund-klein); }
 .leistung textarea { flex: 1; min-width: 0; padding-block: 0.35rem; }
@@ -1149,7 +1262,7 @@ input.suche {
 }
 .toast.sichtbar { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
 .toast.fehler { background: var(--rot); }
-.toast button { color: var(--paper); border-color: rgba(255, 255, 255, 0.5); padding: 0.15rem 0.6rem; font-size: 0.85rem; }
+.toast button { color: var(--paper); border-color: rgba(var(--paper-rgb), 0.5); padding: 0.15rem 0.6rem; font-size: 0.85rem; }
 
 /* Setzen */
 .setz-status { font-size: 0.78rem; color: var(--quiet); margin: 1.2rem 0.6rem 0; }

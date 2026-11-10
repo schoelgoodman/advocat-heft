@@ -89,11 +89,11 @@ export function probleme(doc: Pick<ContentDocument, "art" | "titel">, view: Page
 /** Eine Seite zu setzen kostet etwas. Unveränderte Seiten kommen aus dem Speicher. */
 const gemerkt = new Map<string, { schluessel: string; probleme: Problem[] }>();
 
-async function pruefe(doc: ContentDocument): Promise<Problem[]> {
+async function pruefe(doc: ContentDocument, alle: ContentDocument[]): Promise<Problem[]> {
   const schluessel = createHash("sha1").update(`${doc.titel}\n${doc.body}\n${JSON.stringify(doc.felder ?? null)}`).digest("hex");
   const alt = gemerkt.get(doc.rel);
   if (alt?.schluessel === schluessel) return alt.probleme;
-  const ergebnis = probleme(doc, await pageView(doc));
+  const ergebnis = probleme(doc, await pageView(doc, alle));
   gemerkt.set(doc.rel, { schluessel, probleme: ergebnis });
   return ergebnis;
 }
@@ -107,17 +107,19 @@ function gewicht(befund: Befund, nummer: number): number {
 
 /** Eine Seite, so wie sie gespeichert ist. Für die Hinweise über dem Text in der Redaktion. */
 export async function seitenCheck(rel: string): Promise<Problem[]> {
-  const doc = (await loadDocuments()).find((item) => item.rel === rel);
+  const alle = await loadDocuments();
+  const doc = alle.find((item) => item.rel === rel);
   if (!doc || doc.art === "recht") return [];
-  return pruefe(doc);
+  return pruefe(doc, alle);
 }
 
 /** Alle Seiten, die online sind und sich verbessern lassen. Das Rechtliche bleibt, wie es ist. */
 export async function websiteCheck(): Promise<Befund[]> {
-  const docs = (await loadDocuments()).filter((doc) => !doc.entwurf && doc.art !== "recht");
+  const alle = await loadDocuments();
+  const docs = alle.filter((doc) => !doc.entwurf && doc.art !== "recht");
   const befunde: { befund: Befund; nummer: number }[] = [];
   for (const doc of docs) {
-    const liste = await pruefe(doc);
+    const liste = await pruefe(doc, alle);
     if (!liste.length) continue;
     befunde.push({
       befund: { rel: doc.rel, titel: doc.titel, art: doc.art, href: publicPath(doc.rel), probleme: liste },
