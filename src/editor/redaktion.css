@@ -83,7 +83,7 @@ button.leise:hover { color: var(--ink); border-color: transparent; background: v
 p.leise { color: var(--quiet); font-size: 0.88rem; }
 
 /* Karten: überall dieselbe Fläche */
-:is(.aufgabe, .kachel, .neuer-wunsch, #editor, #vorschau, #anfragen-karten li, #briefe-karten li, #wuensche-karten li) {
+:is(.aufgabe, .kachel, .neuer-wunsch, #editor, #vorschau, #anfragen-karten li, #briefe-karten li, #wuensche-karten li, #papierkorb-karten li) {
   background: var(--flaeche);
   border: 1px solid var(--line);
   border-radius: var(--rund);
@@ -424,7 +424,7 @@ aside .unterseiten { margin: 0 0 0.1rem 1.05rem; padding-left: 0.1rem; border-le
 aside .papierkorb-leer { margin: 0.2rem 0 0.4rem 1.05rem; }
 
 /* Zahlen im Verzeichnis und auf den Karten der Startseite, und die Kontaktaufnahme */
-:is(aside summary, .aufgabe h2) .zahl:not(:empty) {
+:is(aside summary, aside .zeile-link, .aufgabe h2) .zahl:not(:empty) {
   margin-left: 0.3rem;
   padding: 0.05rem 0.45rem;
   border-radius: 999px;
@@ -438,7 +438,9 @@ aside .papierkorb-leer { margin: 0.2rem 0 0.4rem 1.05rem; }
  * Grau heisst liegt bereit, aber niemand wartet (Entwürfe, Papierkorb). Auf Gelb dunkle Schrift.
  */
 :is(aside summary, .aufgabe h2) .zahl.neu:not(:empty) { background: var(--rot); color: var(--paper); }
-:is(aside summary, .aufgabe h2) .zahl.offen:not(:empty) { background: var(--gelb); color: var(--ink); }
+:is(aside summary, aside .zeile-link, .aufgabe h2) .zahl.offen:not(:empty) { background: var(--gelb); color: var(--ink); }
+/* Die Zahl bleibt, wie sie ist, auch wenn die Zeile gewählt und darum fett und oliv ist. */
+aside .zeile-link .zahl { font-weight: 400; }
 .aufgabe h2 .zahl { margin-left: 0.4rem; font-size: 0.72rem; text-transform: none; letter-spacing: 0.02em; vertical-align: 0.05em; }
 .marke.entwurf { background: var(--line); color: var(--ink); }
 nav .ungelesen .thema { font-weight: 600; }
@@ -478,8 +480,31 @@ nav .ungelesen .thema { font-weight: 600; }
 .kachel[aria-pressed="true"] .wert { color: var(--olive); }
 .kachel .unter { font-size: 0.8rem; color: var(--quiet); }
 
-/* Startseite: die zwei Aufgaben nebeneinander */
-.aufgaben { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-top: 2rem; }
+/* Startseite: zuoberst das eine, was als Nächstes ansteht, mit einem Knopf */
+.naechstes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem 1.5rem;
+  margin-top: 1.6rem;
+  padding: 1.1rem 1.4rem;
+  border: 1px solid rgba(95, 107, 69, 0.4);
+  border-radius: var(--rund-mittel);
+  background: var(--olive-hauch);
+}
+.naechstes > div { flex: 1 1 16rem; min-width: 0; }
+.naechstes .kopf { margin: 0 0 0.3rem; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--olive); }
+.naechstes .gross { margin: 0; font-family: var(--serif); font-size: 1.6rem; line-height: 1.2; font-variant-numeric: lining-nums; overflow-wrap: anywhere; }
+.naechstes .leise { margin: 0.25rem 0 0; }
+.naechstes.dringend { border-color: rgba(154, 59, 42, 0.35); background: var(--rot-hauch); }
+.naechstes.dringend .kopf { color: var(--rot); }
+/* Nichts steht an: nur eine ruhige Zeile, kein Kasten, der nach Arbeit aussieht. */
+.naechstes.ruhig { border-color: var(--line); background: transparent; }
+.naechstes.ruhig .kopf { color: var(--quiet); }
+
+/* Darunter die zwei Aufgaben nebeneinander */
+.aufgaben { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-top: 1rem; }
 .aufgabe {
   display: flex;
   flex-direction: column;
@@ -494,14 +519,23 @@ nav .ungelesen .thema { font-weight: 600; }
 .aufgabe li button { display: grid; width: 100%; text-align: left; border: 0; padding: 0.5rem 0.6rem; font-size: 0.92rem; background: var(--flaeche-tief); }
 .aufgabe li button:hover { background: var(--olive-hauch); }
 .aufgabe li button span { font-size: 0.8rem; color: var(--quiet); }
+/* Der Anfang der Nachricht, eine Zeile. Der Rest steht in der Kontaktaufnahme. */
+.aufgabe li button .vorschau { margin-top: 0.15rem; font-size: 0.85rem; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .aufgabe > .aktionen { margin-top: auto; }
-/* Der Website-Check liegt über die ganze Breite unter den zwei Karten. */
+/* «Zuletzt bearbeitet» liegt über die ganze Breite unter den zwei Karten, die Einträge in zwei Spalten. */
 .aufgabe.breit { grid-column: 1 / -1; }
-/* Während der Website-Check lädt, pulsiert die Zahl leise statt leer zu sein. */
-.aufgabe.laedt .gross { animation: laedt 1.4s ease-in-out infinite; }
-@keyframes laedt { 50% { opacity: 0.4; } }
-@media (prefers-reduced-motion: reduce) { .aufgabe.laedt .gross { animation: none; } }
-@media (max-width: 1000px) { .aufgaben { grid-template-columns: 1fr; } }
+.aufgabe.breit ul { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.15rem 0.6rem; }
+@media (max-width: 1000px) {
+  .aufgaben { grid-template-columns: 1fr; }
+  .aufgabe.breit ul { grid-template-columns: 1fr; }
+  /* In einer Spalte steht eine neue Anfrage vor den Newslettern. */
+  .aufgabe.dringend { order: -1; }
+}
+
+/* Website-Check */
+#check-seite .einleitung { max-width: 42rem; margin: 0 0 1.2rem; line-height: 1.5; }
+.check-stand { margin: 0; font-family: var(--serif); font-size: 1.4rem; line-height: 1.3; font-variant-numeric: lining-nums; }
+.check-stand.gut { font-family: inherit; font-size: 1rem; color: var(--olive); }
 
 /* Assistent */
 .assistent {
@@ -882,19 +916,33 @@ input.suche {
   border-radius: var(--rund-mittel);
   box-shadow: var(--schatten);
 }
-#briefe-karten { list-style: none; padding: 0; margin: 1.2rem 0 3rem; }
-#briefe-karten li { padding: 1.1rem 1.4rem 1.2rem; margin-bottom: 0.9rem; }
+:is(#briefe-karten, #papierkorb-karten) { list-style: none; padding: 0; margin: 1.2rem 0 3rem; }
+:is(#briefe-karten, #papierkorb-karten) li { padding: 1.1rem 1.4rem 1.2rem; margin-bottom: 0.9rem; }
 #briefe-karten li[data-entwurf="true"] { border-color: rgba(226, 200, 122, 0.9); }
-#briefe-karten .kopfzeile { margin: 0; font-size: 0.82rem; color: var(--quiet); }
-#briefe-karten h2 { margin: 0.35rem 0 0.3rem; font-family: var(--serif); font-weight: 400; font-size: 1.4rem; line-height: 1.25; }
+:is(#briefe-karten, #papierkorb-karten) .kopfzeile { margin: 0; font-size: 0.82rem; color: var(--quiet); }
+:is(#briefe-karten, #papierkorb-karten) h2 { margin: 0.35rem 0 0.3rem; font-family: var(--serif); font-weight: 400; font-size: 1.4rem; line-height: 1.25; }
 #briefe-karten .titel-knopf { border: 0; padding: 0; text-align: left; font: inherit; }
 #briefe-karten .titel-knopf:hover { color: var(--olive); }
-#briefe-karten .auszug { margin: 0 0 0.9rem; font-size: 0.9rem; line-height: 1.55; color: var(--quiet); }
+:is(#briefe-karten, #papierkorb-karten) .auszug { margin: 0 0 0.9rem; font-size: 0.9rem; line-height: 1.55; color: var(--quiet); }
 
 /* Wünsche */
-.wunsch-hinweis { margin: 1.4rem 0 0; font-size: 0.9rem; color: var(--quiet); }
-.wunsch-hinweis + .wunsch-hinweis { margin-top: 0.3rem; }
-.wunsch-hinweis button { color: var(--olive); font-weight: 600; padding-inline: 0.4rem; }
+/* Startseite, ganz unten: der Weg zum Support. Eine ruhige Zeile unter einem Strich, keine vierte Karte. */
+.start-support {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem 1.5rem;
+  margin-top: 1.8rem;
+  padding: 1.2rem 0.2rem 0;
+  border-top: 1px solid var(--line);
+}
+.start-support > div:first-child { flex: 1 1 18rem; min-width: 0; }
+.start-support h2 { margin: 0 0 0.25rem; font-size: 0.78rem; font-weight: 400; text-transform: uppercase; letter-spacing: 0.08em; color: var(--quiet); }
+.start-support p.leise { margin: 0; }
+/* Dieselbe gelbe Zahl wie im Verzeichnis, hier zum Anklicken. */
+.start-support .zahl { margin-left: 0.4rem; padding: 0.05rem 0.45rem; border: 0; border-radius: 999px; background: var(--gelb); color: var(--ink); font-size: 0.72rem; text-transform: none; letter-spacing: 0.02em; vertical-align: 0.05em; }
+.start-support .zahl:hover { background: var(--ink); color: var(--paper); }
 #wuensche-seite { padding-top: 1.5rem; }
 #wuensche-seite .einleitung { max-width: 38rem; margin: 0 0 1.2rem; line-height: 1.5; }
 .neuer-wunsch {
