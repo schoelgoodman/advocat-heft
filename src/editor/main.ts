@@ -185,7 +185,7 @@ root.innerHTML = `
       <button type="button" class="zeile-link" id="medien-link">Medien</button>
       <button type="button" class="zeile-link" id="verlauf-link">Verlauf</button>
       <details id="papierkorb-gruppe">
-        <summary><span class="gruppe-titel">Papierkorb</span><span class="zahl" id="papierkorb-zahl"></span></summary>
+        <summary><button type="button" class="gruppe-titel" id="papierkorb-titel">Papierkorb</button><span class="zahl" id="papierkorb-zahl"></span></summary>
         <p class="leise" id="papierkorb-hinweis"></p>
         <nav id="papierkorb"></nav>
         <button type="button" class="leise mehr gefahr" id="papierkorb-leeren">Papierkorb leeren</button>
@@ -211,7 +211,16 @@ root.innerHTML = `
           <article class="aufgabe" id="start-anfragen"></article>
           <article class="aufgabe breit" id="start-zuletzt" hidden></article>
         </div>
-        <p class="wunsch-hinweis">Fehlt etwas, soll die Website anders aussehen oder funktioniert etwas nicht? <button type="button" class="leise" id="start-wunsch">An Support schreiben →</button> <button type="button" class="leise" id="start-fehler">Bug melden →</button> <button type="button" class="leise" id="start-support-offen" hidden></button></p>
+        <div class="start-support">
+          <div>
+            <h2>Support <button type="button" class="zahl offen" id="start-support-offen" title="Noch nicht erledigt. Zum Support." hidden></button></h2>
+            <p class="leise">Fehlt etwas in der Redaktion, soll die Website anders aussehen oder funktioniert etwas nicht?</p>
+          </div>
+          <div class="aktionen">
+            <button type="button" id="start-wunsch">An Support schreiben</button>
+            <button type="button" id="start-fehler">Bug melden</button>
+          </div>
+        </div>
       </section>
       <section id="anfragen" hidden>
         <h1>Kontaktaufnahme</h1>
@@ -229,6 +238,15 @@ root.innerHTML = `
         <input type="search" class="suche" id="briefe-suche" placeholder="Nach Thema oder Nummer suchen …" aria-label="Newsletter suchen">
         <p class="leise" id="briefe-text"></p>
         <ol id="briefe-karten"></ol>
+      </section>
+      <section id="papierkorb-seite" hidden>
+        <div class="seitenkopf">
+          <h1>Papierkorb</h1>
+          <button type="button" class="leise gefahr" id="papierkorb-seite-leeren" hidden>Papierkorb leeren</button>
+        </div>
+        <div class="kacheln" id="papierkorb-kacheln" role="group" aria-label="Papierkorb filtern"></div>
+        <p class="leise" id="papierkorb-text"></p>
+        <ol id="papierkorb-karten"></ol>
       </section>
       <section id="wuensche-seite" hidden>
         <h1>Support</h1>
@@ -306,10 +324,20 @@ const papierkorb = root.querySelector<HTMLElement>("#papierkorb")!;
 const papierkorbZahl = root.querySelector<HTMLElement>("#papierkorb-zahl")!;
 const papierkorbLeeren = root.querySelector<HTMLButtonElement>("#papierkorb-leeren")!;
 const papierkorbHinweis = root.querySelector<HTMLElement>("#papierkorb-hinweis")!;
+const papierkorbGruppe = root.querySelector<HTMLDetailsElement>("#papierkorb-gruppe")!;
+const papierkorbSeite = root.querySelector<HTMLElement>("#papierkorb-seite")!;
+const papierkorbSeiteLeeren = root.querySelector<HTMLButtonElement>("#papierkorb-seite-leeren")!;
+const papierkorbKacheln = root.querySelector<HTMLElement>("#papierkorb-kacheln")!;
+const papierkorbText = root.querySelector<HTMLElement>("#papierkorb-text")!;
+const papierkorbKarten = root.querySelector<HTMLOListElement>("#papierkorb-karten")!;
 let papierkorbAnzahl = 0;
-root.querySelector("#papierkorb-leeren")!.addEventListener("click", () => {
-  void deleteFromTrash(null, papierkorbAnzahl === 1 ? "Ein Eintrag" : `Alle ${papierkorbAnzahl} Einträge`);
-});
+let geloeschte: PageSummary[] = [];
+let papierkorbFilter: "alle" | "briefe" | "seiten" = "alle";
+for (const knopf of [papierkorbLeeren, papierkorbSeiteLeeren]) {
+  knopf.addEventListener("click", () => {
+    void deleteFromTrash(null, papierkorbAnzahl === 1 ? "Ein Eintrag" : `Alle ${papierkorbAnzahl} Einträge`);
+  });
+}
 const start = root.querySelector<HTMLElement>("#start")!;
 const anfragenGruppe = root.querySelector<HTMLDetailsElement>("#anfragen-gruppe")!;
 const anfragenListe = root.querySelector<HTMLElement>("#anfragen-liste")!;
@@ -749,12 +777,85 @@ function trashItem(page: PageSummary): HTMLElement {
   zeile.className = "eintrag geloescht";
   const text = document.createElement("span");
   text.className = "thema";
-  text.textContent = isBrief(page) ? `Nr. ${page.nummer ?? ""} · ${thema(page.titel) || "Ohne Thema"}` : page.titel;
+  const titel = trashTitel(page);
+  text.textContent = titel;
   if (page.geloeschtAm) text.append(h("small", { class: "geloescht-am" }, `Gelöscht am ${tagFormat.format(new Date(page.geloeschtAm))}`));
-  const titel = isBrief(page) ? `Nr. ${page.nummer ?? ""} · ${thema(page.titel) || "Ohne Thema"}` : page.titel;
   const loeschen = button("Endgültig löschen", "leise gefahr", () => void deleteFromTrash(page.rel, titel));
   zeile.append(text, button("Zurückholen", "leise", () => void restoreFromTrash(page.rel)), loeschen);
   return zeile;
+}
+
+function trashTitel(page: PageSummary): string {
+  return isBrief(page) ? `Nr. ${page.nummer ?? ""} · ${thema(page.titel) || "Ohne Thema"}` : page.titel;
+}
+
+/** Eine Karte in der Übersicht des Papierkorbs, gebaut wie die der Newsletter. */
+function trashKarte(page: PageSummary): HTMLElement {
+  const karte = document.createElement("li");
+  const brief = isBrief(page);
+  const kopf = document.createElement("p");
+  kopf.className = "kopfzeile";
+  kopf.innerHTML = `<span class="marke entwurf">${brief ? "Newsletter" : "Seite"}</span> ${brief ? `Nr. ${page.nummer ?? ""} · ` : ""}${
+    page.geloeschtAm ? `gelöscht am ${esc(tagFormat.format(new Date(page.geloeschtAm)))}` : "gelöscht"
+  }`;
+  const titel = document.createElement("h2");
+  titel.textContent = brief ? thema(page.titel) || "Noch ohne Thema" : page.titel;
+  const text = document.createElement("p");
+  text.className = "auszug";
+  text.textContent = page.auszug || "Noch kein Text.";
+  const knoepfe = document.createElement("div");
+  knoepfe.className = "aktionen";
+  knoepfe.append(
+    button("Zurückholen", "", () => void restoreFromTrash(page.rel)),
+    button("Endgültig löschen", "leise gefahr", () => void deleteFromTrash(page.rel, trashTitel(page))),
+  );
+  karte.append(kopf, titel, text, knoepfe);
+  return karte;
+}
+
+function papierkorbKachel(filter: typeof papierkorbFilter, wert: number, label: string, unter: string): HTMLButtonElement {
+  const element = document.createElement("button");
+  element.type = "button";
+  element.className = "kachel";
+  element.setAttribute("aria-pressed", String(papierkorbFilter === filter));
+  element.innerHTML = `<span class="label">${esc(label)}</span><span class="wert">${wert}</span><span class="unter">${esc(unter)}</span>`;
+  element.addEventListener("click", () => {
+    papierkorbFilter = filter;
+    renderPapierkorb();
+  });
+  return element;
+}
+
+/** Die Übersicht: Zahlen oben, darunter die gelöschten Entwürfe, der zuletzt gelöschte zuerst. */
+function renderPapierkorb(): void {
+  const briefeImKorb = geloeschte.filter(isBrief);
+  const seitenImKorb = geloeschte.filter((page) => !isBrief(page));
+  papierkorbKacheln.replaceChildren(
+    papierkorbKachel("alle", geloeschte.length, "Gesamt", "alle Einträge"),
+    papierkorbKachel("briefe", briefeImKorb.length, "Newsletter", "gelöschte Entwürfe"),
+    papierkorbKachel("seiten", seitenImKorb.length, "Seiten", "gelöschte Entwürfe"),
+  );
+  const sichtbare = papierkorbFilter === "briefe" ? briefeImKorb : papierkorbFilter === "seiten" ? seitenImKorb : geloeschte;
+  papierkorbSeiteLeeren.hidden = geloeschte.length === 0;
+  papierkorbText.textContent = !geloeschte.length
+    ? "Der Papierkorb ist leer. Gelöschte Entwürfe landen hier und lassen sich zurückholen."
+    : !sichtbare.length
+      ? "Hier ist nichts."
+      : "Gelöschte Entwürfe, der zuletzt gelöschte zuerst. Zurückgeholt sind sie wieder Entwürfe. «Endgültig löschen» lässt sich in der Redaktion nicht rückgängig machen.";
+  papierkorbKarten.replaceChildren(...sichtbare.map(trashKarte));
+}
+
+/** Die Übersicht des Papierkorbs, wie die der Newsletter. */
+async function showPapierkorb(): Promise<void> {
+  if (!(await flushCommit())) return;
+  current = null;
+  gewaehlt = null;
+  markCurrent();
+  zeigeNur(papierkorbSeite);
+  papierkorbGruppe.open = true;
+  merke("papierkorb");
+  renderPapierkorb();
+  nachOben();
 }
 
 /** Ein Eintrag oder (ohne rel) der ganze Papierkorb, nach einer Rückfrage. */
@@ -791,6 +892,8 @@ async function loadList(): Promise<void> {
     .then((res) => res.json())
     .catch(() => ({ pages: [] }))) as { pages: PageSummary[] };
   papierkorb.replaceChildren(...geloescht.pages.map(trashItem));
+  geloeschte = geloescht.pages;
+  if (!papierkorbSeite.hidden) renderPapierkorb();
   papierkorbAnzahl = geloescht.pages.length;
   papierkorbZahl.textContent = papierkorbAnzahl ? String(papierkorbAnzahl) : "";
   papierkorbLeeren.hidden = papierkorbAnzahl === 0;
@@ -1473,7 +1576,7 @@ function gruss(): string {
 
 /** Von den Ansichten rechts ist immer nur eine sichtbar. */
 function zeigeNur(ansicht: HTMLElement): void {
-  for (const el of [start, form, anfragenSeite, briefeSeite, wuenscheSeite, allgemeinSeite, medienSeite, verlaufSeite, checkSeite]) el.hidden = el !== ansicht;
+  for (const el of [start, form, anfragenSeite, briefeSeite, wuenscheSeite, allgemeinSeite, medienSeite, verlaufSeite, checkSeite, papierkorbSeite]) el.hidden = el !== ansicht;
   checkLink.toggleAttribute("aria-current", ansicht === checkSeite);
   allgemeinLink.toggleAttribute("aria-current", ansicht === allgemeinSeite);
   medienLink.toggleAttribute("aria-current", ansicht === medienSeite);
@@ -2547,7 +2650,7 @@ async function loadWuensche(): Promise<void> {
   const offene = alleWuensche.filter((w) => w.status === "offen").length;
   wuenscheZahl.textContent = offene ? `${offene} offen` : "";
   startSupportOffen.hidden = offene === 0;
-  startSupportOffen.textContent = `${offene === 1 ? "1 Support-Anfrage" : `${offene} Support-Anfragen`} offen →`;
+  startSupportOffen.textContent = `${offene} offen`;
   renderWuenscheListe();
   if (!wuenscheSeite.hidden) renderWuensche();
 }
@@ -2877,6 +2980,7 @@ for (const [gruppe, seite, zeige] of [
   [briefeGruppe, briefeSeite, showBriefe],
   [anfragenGruppe, anfragenSeite, showAnfragen],
   [wuenscheGruppe, wuenscheSeite, showWuensche],
+  [papierkorbGruppe, papierkorbSeite, showPapierkorb],
 ] as const) {
   gruppe.querySelector(":scope > summary")!.addEventListener("click", (event) => {
     event.preventDefault();
@@ -3110,6 +3214,7 @@ function lage(): Lage {
         : !medienSeite.hidden ? "medien"
         : !verlaufSeite.hidden ? "verlauf"
         : !checkSeite.hidden ? "check"
+        : !papierkorbSeite.hidden ? "papierkorb"
         : "start",
     };
   }
@@ -3249,6 +3354,7 @@ async function folge(): Promise<void> {
   else if (wanted === "medien") await showMedien();
   else if (wanted === "verlauf") await showVerlauf();
   else if (wanted === "check") await showCheck();
+  else if (wanted === "papierkorb") await showPapierkorb();
   else if (wanted) await openPage(wanted);
   else if (await flushCommit()) showStart();
 }

@@ -83,7 +83,7 @@ button.leise:hover { color: var(--ink); border-color: transparent; background: v
 p.leise { color: var(--quiet); font-size: 0.88rem; }
 
 /* Karten: überall dieselbe Fläche */
-:is(.aufgabe, .kachel, .neuer-wunsch, #editor, #vorschau, #anfragen-karten li, #briefe-karten li, #wuensche-karten li) {
+:is(.aufgabe, .kachel, .neuer-wunsch, #editor, #vorschau, #anfragen-karten li, #briefe-karten li, #wuensche-karten li, #papierkorb-karten li) {
   background: var(--flaeche);
   border: 1px solid var(--line);
   border-radius: var(--rund);
@@ -916,19 +916,33 @@ input.suche {
   border-radius: var(--rund-mittel);
   box-shadow: var(--schatten);
 }
-#briefe-karten { list-style: none; padding: 0; margin: 1.2rem 0 3rem; }
-#briefe-karten li { padding: 1.1rem 1.4rem 1.2rem; margin-bottom: 0.9rem; }
+:is(#briefe-karten, #papierkorb-karten) { list-style: none; padding: 0; margin: 1.2rem 0 3rem; }
+:is(#briefe-karten, #papierkorb-karten) li { padding: 1.1rem 1.4rem 1.2rem; margin-bottom: 0.9rem; }
 #briefe-karten li[data-entwurf="true"] { border-color: rgba(226, 200, 122, 0.9); }
-#briefe-karten .kopfzeile { margin: 0; font-size: 0.82rem; color: var(--quiet); }
-#briefe-karten h2 { margin: 0.35rem 0 0.3rem; font-family: var(--serif); font-weight: 400; font-size: 1.4rem; line-height: 1.25; }
+:is(#briefe-karten, #papierkorb-karten) .kopfzeile { margin: 0; font-size: 0.82rem; color: var(--quiet); }
+:is(#briefe-karten, #papierkorb-karten) h2 { margin: 0.35rem 0 0.3rem; font-family: var(--serif); font-weight: 400; font-size: 1.4rem; line-height: 1.25; }
 #briefe-karten .titel-knopf { border: 0; padding: 0; text-align: left; font: inherit; }
 #briefe-karten .titel-knopf:hover { color: var(--olive); }
-#briefe-karten .auszug { margin: 0 0 0.9rem; font-size: 0.9rem; line-height: 1.55; color: var(--quiet); }
+:is(#briefe-karten, #papierkorb-karten) .auszug { margin: 0 0 0.9rem; font-size: 0.9rem; line-height: 1.55; color: var(--quiet); }
 
 /* Wünsche */
-.wunsch-hinweis { margin: 1.4rem 0 0; font-size: 0.9rem; color: var(--quiet); }
-.wunsch-hinweis + .wunsch-hinweis { margin-top: 0.3rem; }
-.wunsch-hinweis button { color: var(--olive); font-weight: 600; padding-inline: 0.4rem; }
+/* Startseite, ganz unten: der Weg zum Support. Eine ruhige Zeile unter einem Strich, keine vierte Karte. */
+.start-support {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem 1.5rem;
+  margin-top: 1.8rem;
+  padding: 1.2rem 0.2rem 0;
+  border-top: 1px solid var(--line);
+}
+.start-support > div:first-child { flex: 1 1 18rem; min-width: 0; }
+.start-support h2 { margin: 0 0 0.25rem; font-size: 0.78rem; font-weight: 400; text-transform: uppercase; letter-spacing: 0.08em; color: var(--quiet); }
+.start-support p.leise { margin: 0; }
+/* Dieselbe gelbe Zahl wie im Verzeichnis, hier zum Anklicken. */
+.start-support .zahl { margin-left: 0.4rem; padding: 0.05rem 0.45rem; border: 0; border-radius: 999px; background: var(--gelb); color: var(--ink); font-size: 0.72rem; text-transform: none; letter-spacing: 0.02em; vertical-align: 0.05em; }
+.start-support .zahl:hover { background: var(--ink); color: var(--paper); }
 #wuensche-seite { padding-top: 1.5rem; }
 #wuensche-seite .einleitung { max-width: 38rem; margin: 0 0 1.2rem; line-height: 1.5; }
 .neuer-wunsch {

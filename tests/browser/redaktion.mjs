@@ -65,7 +65,7 @@ await p.click("#medien-link"); await sleep(900);
 ok("Verzeichnis: Medien öffnet ohne Sprung", await p.$eval("#medien-seite",e=>!e.hidden) && await p.$eval("#medien-link",e=>e.hasAttribute("aria-current")) && Math.abs(await p.$eval("#verlauf-link",e=>e.getBoundingClientRect().top)-vorDemKlick)<1);
 ok("Verzeichnis: Medien und Verlauf ohne Pfeil", await p.evaluate(()=>!document.querySelector("#medien-link").closest("details")&&!document.querySelector("#verlauf-link").closest("details")));
 ok("Verzeichnis: keine eigenen Übersicht-Links", await p.$$eval("aside button",l=>!l.some(x=>x.textContent.includes("Übersicht"))));
-for (const [gruppe,seite] of [["#briefe-gruppe","#briefe-seite"],["#anfragen-gruppe","#anfragen"],["#wuensche-gruppe","#wuensche-seite"]]) {
+for (const [gruppe,seite] of [["#briefe-gruppe","#briefe-seite"],["#anfragen-gruppe","#anfragen"],["#wuensche-gruppe","#wuensche-seite"],["#papierkorb-gruppe","#papierkorb-seite"]]) {
   const zeigt=()=>p.$eval(seite,e=>!e.hidden); const auf=()=>p.$eval(gruppe,d=>d.open);
   await p.click(`${gruppe} > summary`); await sleep(500);
   ok(`Verzeichnis: ${gruppe} öffnet die Übersicht`, await zeigt() && await auf());
@@ -75,6 +75,9 @@ for (const [gruppe,seite] of [["#briefe-gruppe","#briefe-seite"],["#anfragen-gru
   await p.click(`${gruppe} > summary`); await sleep(300);
   ok(`Verzeichnis: ${gruppe} zweiter Klick klappt zu`, await zeigt() && !(await auf()));
 }
+await p.click("#papierkorb-gruppe > summary"); await sleep(500);
+ok("Papierkorb: Übersicht mit drei Kacheln und einer Karte je Eintrag", await p.evaluate(()=>document.querySelectorAll("#papierkorb-kacheln .kachel").length===3&&document.querySelectorAll("#papierkorb-karten li").length===document.querySelectorAll("#papierkorb .eintrag").length&&location.hash==="#papierkorb"));
+await p.screenshot({path:`${shots}/papierkorb.png`});
 await p.click("#wuensche-gruppe > summary"); await sleep(500);
 await p.screenshot({path:`${shots}/support-gruppe.png`});
 await p.click("#medien-link"); await sleep(500);
