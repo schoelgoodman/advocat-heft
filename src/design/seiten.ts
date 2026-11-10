@@ -38,6 +38,14 @@ function ankerGeber(start: string[] = []): (text: string) => string {
 }
 
 const titelMitAnker = (anker: (text: string) => string, text: string) => `<h2 id="${esc(anker(text))}">${esc(text)}</h2>`;
+/** «https://www.advocat.ch/» wird zu «advocat.ch»: so steht der Link unter einem Partner. */
+function adresseKurz(link: string): string {
+  try {
+    return new URL(link).hostname.replace(/^www\./, "");
+  } catch {
+    return link;
+  }
+}
 const knopfSolid = (knopf: Knopf) => `<p class="aktionen"><a href="${esc(knopf.ziel)}" class="btn btn-solid">${esc(knopf.text)}</a></p>`;
 const knopfLeise = (knopf: Knopf) => `<p class="aktionen"><a href="${esc(knopf.ziel)}" class="btn btn-ghost">${esc(knopf.text)}</a></p>`;
 const band = (b: Band) => bandHtml(b.titel, b.text, b.knopf.text, b.knopf.ziel);
@@ -151,9 +159,10 @@ async function setzeUeberUns(input: SeitenInput, a: UeberUnsFelder, html: Html):
     const firmaText = await text(firma.text);
     fliesstext += firmaText;
     const logo = await html(`[![${firma.logo.alt}](${firma.logo.src})](${firma.link})`);
-    firmen += `<div class="spalte prosa">${titelMitAnker(anker, firma.name)}<h3>${esc(firma.untertitel)}</h3>${firmaText}${logo}</div>`;
+    const verweis = `<p class="partner-link"><a href="${esc(firma.link)}">${esc(adresseKurz(firma.link))}</a></p>`;
+    firmen += `<article class="partner"><div class="partner-logo prosa">${logo}</div><div class="partner-text prosa">${titelMitAnker(anker, firma.name)}<h3>${esc(firma.untertitel)}</h3>${firmaText}${verweis}</div></article>`;
   }
-  const partner = abschnitt(`${partnerTitel}<div class="spalten spalten-1-1">${firmen}</div>`, "");
+  const partner = abschnitt(`${partnerTitel}<div class="partner-raster">${firmen}</div>`, "");
   return { main: `${held(a.bild.src, input.titel)}${[einstieg, sparring, partner, band(a.band)].join("\n")}`, fliesstext };
 }
 

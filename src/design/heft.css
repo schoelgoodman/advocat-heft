@@ -1261,6 +1261,89 @@ h2[id] { scroll-margin-top: 96px; }
 
 .spalte-profil p { margin-bottom: 0.4em; }
 
+/* Partner auf «Über uns»: je eine Karte, das Logo oben auf getöntem Grund, der Link zur Website unten. */
+.partner-raster {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+}
+
+.partner {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--rund-gross);
+  background: #fff;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.partner:hover {
+  border-color: var(--gold);
+  box-shadow: 0 10px 30px rgba(20, 18, 15, 0.08);
+}
+
+.partner-logo {
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.partner-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  padding: 2rem 2.25rem 1.75rem;
+}
+
+.partner-logo p { margin: 0; }
+
+.partner-logo a {
+  display: flex;
+  align-items: center;
+  height: 8.5rem;
+  padding: 0 2.25rem;
+}
+
+/* Beide Logos sind liegend und etwa gleich lang: eine feste Höhe lässt sie gleich schwer wirken. */
+.prosa .partner-logo img {
+  width: auto;
+  max-width: 100%;
+  height: 2.75rem;
+  margin: 0;
+  object-fit: contain;
+  object-position: left center;
+}
+
+.partner-text h2 { margin-bottom: 0.35em; font-size: 1.6rem; }
+
+.partner-text h3 {
+  margin: 0 0 1.1rem;
+  color: var(--gold-dark);
+  font-family: var(--sans);
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+}
+
+.prosa .partner-link {
+  margin-top: auto;
+  margin-bottom: 0;
+  padding-top: 1rem;
+}
+
+.partner-link a {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px solid var(--gold);
+}
+
+.partner-link a::after { content: " \2192"; }
+
+.partner-link a:hover { color: var(--gold-dark); }
+
 /* Fuss */
 
 .fuss {
@@ -1350,12 +1433,17 @@ h2[id] { scroll-margin-top: 96px; }
 
   .kontakt-grid,
   .teaser-raster,
+  .partner-raster,
   .spalten,
   .archiv { grid-template-columns: minmax(0, 1fr); }
 
   .spalten { gap: 2rem; }
 
   .spalte-seite { padding-left: 1.25rem; }
+
+  .partner-logo a { height: 7rem; padding: 0 1.5rem; }
+
+  .partner-text { padding: 1.5rem 1.5rem 1.4rem; }
 
   .kontakt-grid { gap: 2.5rem; }
 
