@@ -37,10 +37,12 @@ test("Satz: Markdown wird zum abgelegten HTML", async () => {
   await vergleiche("newsletter.html", `${html}\n`);
 });
 
-test("Satz: Ein Newsletter wird zur abgelegten Seite", async () => {
+test("Satz: Ein Newsletter wird zur abgelegten Seite", async (t) => {
   // Ein leerer Ordner als Website: keine Bildfassungen, keine Masse. Der Vergleich hängt so nicht an Bildern.
-  process.env.SITE_DIR = await fs.mkdtemp(path.join(os.tmpdir(), "advocat-satz-"));
-  process.env.CONTENT_DIR = process.env.SITE_DIR;
+  const website = await fs.mkdtemp(path.join(os.tmpdir(), "advocat-satz-"));
+  t.after(() => fs.rm(website, { recursive: true, force: true }));
+  process.env.SITE_DIR = website;
+  process.env.CONTENT_DIR = website;
   process.env.SITE_URL = "https://beispiel.test";
   const markdown = await fs.readFile(path.join(ordner, "newsletter.md"), "utf8");
   const view = renderDocument({

@@ -10,8 +10,9 @@ async function foto(breite: number): Promise<Buffer> {
   return sharp({ create: { width: breite, height: 300, channels: 3, background: "#864" } }).jpeg().toBuffer();
 }
 
-test("Foto: Jede Breite gibt es als AVIF und als Ersatz, getrennt aufgelistet", async () => {
+test("Foto: Jede Breite gibt es als AVIF und als Ersatz, getrennt aufgelistet", async (t) => {
   const ordner = await fs.mkdtemp(path.join(os.tmpdir(), "advocat-media-"));
+  t.after(() => fs.rm(ordner, { recursive: true, force: true }));
   process.env.SITE_DIR = ordner;
   const quelle = path.join(ordner, "quelle.jpg");
   await fs.writeFile(quelle, await foto(1000));
@@ -23,8 +24,9 @@ test("Foto: Jede Breite gibt es als AVIF und als Ersatz, getrennt aufgelistet", 
   assert.ok(mediaVariants("/media/bild.jpg").every((fassung) => !fassung.url.endsWith(".avif")));
 });
 
-test("Foto: Fassungen von vor AVIF werden einmal neu gerechnet, die alten fehlen nie", async () => {
+test("Foto: Fassungen von vor AVIF werden einmal neu gerechnet, die alten fehlen nie", async (t) => {
   const ordner = await fs.mkdtemp(path.join(os.tmpdir(), "advocat-media-"));
+  t.after(() => fs.rm(ordner, { recursive: true, force: true }));
   const klein = path.join(ordner, "media", VARIANT_DIR);
   await fs.mkdir(klein, { recursive: true });
   const quelle = path.join(ordner, "quelle.jpg");
