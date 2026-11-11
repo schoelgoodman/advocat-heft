@@ -27,18 +27,18 @@ import { siteUrl } from "../design/seo.ts";
 import { legeAllgemeinAn, stelleSeitenUm } from "../content/migration.ts";
 import { istFesteMenueSeite, MENUE_DATEI, MENUE_NAME_MAX, menueOrt, menueReihe } from "../content/menue.ts";
 import { bereinigeFelder, EINMALIG, neueSeite, pruefeFelder, VORLAGE_VON, type Felder, type KontaktFelder } from "../content/seiten.ts";
-import { commitIfChanged, ensureContentGit, gibtEsInFassung, holeDateiZurueck, logAlles, logFile, restoreFile, showFile } from "../git/history.ts";
+import { commitIfChanged, ensureContentGit, gibtEsInFassung, holeDateiZurueck, leereVerlauf, logAlles, logFile, restoreFile, showFile, zaehleFassungen } from "../git/history.ts";
 import { anfragenDir, contentDir, repoRoot, siteDir } from "../paths.ts";
 import { buildSite, previewPage, rebuildDocuments, textHtml } from "../render/build.ts";
 import { publishMedia, pruneVariants } from "../render/media.ts";
-import { AUFBEWAHRUNG_MONATE, erinnereAnOffene, handleAnfrage, listAnfragen, loescheAlteAnfragen, meldeNachtraeglich, setAnfrageStatus } from "./anfrage.ts";
+import { AUFBEWAHRUNG_MONATE, erinnereAnOffene, handleAnfrage, listAnfragen, loescheAlleAnfragen, loescheAlteAnfragen, meldeNachtraeglich, setAnfrageStatus } from "./anfrage.ts";
 import { verarbeiteBild } from "./bilder.ts";
 import { bilderIn, freiGeworden, listeMedien, medienName, pruefeLoeschbar, sendeVorschau } from "./medien.ts";
 import { leseStatus, schreibeStatus } from "./status.ts";
 import { importWord } from "./word.ts";
 import { seitenCheck, websiteCheck } from "./pruefung.ts";
 import { assistentBereit, clearVerlauf, handleChat, readVerlauf } from "./chat.ts";
-import { aendereWunsch, leseAnhang, listWuensche, neuerWunsch, speichereAnhang } from "./wuensche.ts";
+import { aendereWunsch, leseAnhang, listWuensche, loescheWuensche, neuerWunsch, speichereAnhang } from "./wuensche.ts";
 import { fremdeHerkunft, kanonischerHost, ohneEndSchraegstrich, schluesselPasst } from "./zugang.ts";
 
 // Lokal stehen Schlüssel wie XAI_API_KEY in .env (gitignoriert). Auf Neo setzt sie der Container.
@@ -554,6 +554,11 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     return;
   }
 
+  if (req.method === "DELETE" && url.pathname === "/api/anfragen") {
+    sendJson(res, 200, { geloescht: await loescheAlleAnfragen() });
+    return;
+  }
+
   if (req.method === "PUT" && url.pathname === "/api/anfragen") {
     const payload = JSON.parse((await readBody(req)).toString("utf8")) as { id?: string; status?: string };
     await setAnfrageStatus(String(payload.id ?? ""), String(payload.status ?? ""));
@@ -620,6 +625,30 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
     const seite = 50;
     const eintraege = await logAlles(seite + 1, Number(url.searchParams.get("skip")) || 0);
     sendJson(res, 200, { eintraege: eintraege.slice(0, seite), mehr: eintraege.length > seite });
+    return;
+  }
+
+  // Den Verlauf endgültig leeren: Der heutige Stand wird zur einzigen Fassung. Erst sichern, was noch wartet.
+  if (req.method === "DELETE" && url.pathname === "/api/verlauf") {
+    await flushPending();
+    const fassungen = await leereVerlauf();
+    console.log(`Verlauf geleert (${fassungen} Fassungen)`);
+    sendJson(res, 200, { geloescht: fassungen });
+    return;
+  }
+
+  // Was sich unter «Allgemein», «Redaktion», «Daten löschen» leeren lässt, in Zahlen für die Rückfrage.
+  if (req.method === "GET" && url.pathname === "/api/daten") {
+    res.setHeader("cache-control", "no-store");
+    const [wuensche, anfragen, korb, fassungen, chat] = await Promise.all([listWuensche(), listAnfragen(), loadPapierkorb(), zaehleFassungen(), readVerlauf()]);
+    sendJson(res, 200, {
+      support: { anzahl: wuensche.length, offen: wuensche.filter((w) => w.status === "offen").length },
+      anfragen: { anzahl: anfragen.length, offen: anfragen.filter((a) => a.status !== "erledigt").length },
+      papierkorb: { anzahl: korb.length },
+      // Eine Fassung ist der heutige Stand: Da gibt es nichts zu leeren.
+      verlauf: { anzahl: Math.max(0, fassungen - 1) },
+      chat: { anzahl: chat.length },
+    });
     return;
   }
 
@@ -737,6 +766,11 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
   if (req.method === "GET" && url.pathname === "/api/wuensche") {
     res.setHeader("cache-control", "no-store");
     sendJson(res, 200, { wuensche: await listWuensche() });
+    return;
+  }
+
+  if (req.method === "DELETE" && url.pathname === "/api/wuensche") {
+    sendJson(res, 200, { geloescht: await loescheWuensche() });
     return;
   }
 

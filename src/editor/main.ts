@@ -3304,7 +3304,18 @@ root.querySelector("#bild-aus-medien")!.addEventListener("click", async () => {
   crepe.editor.action(insert(`\n\n![1](/media/${name})\n\n`));
 });
 
-const allgemeinVerwaltung = allgemeinAnsicht(allgemeinSeite);
+const allgemeinVerwaltung = allgemeinAnsicht(allgemeinSeite, {
+  frage: ask,
+  // Nach «Daten löschen»: alles neu holen, was eben geleert wurde, samt den Zählern im Verzeichnis.
+  geleert: async (arten) => {
+    if (arten.includes("chat")) window.dispatchEvent(new Event("redaktion:chat-geleert"));
+    await Promise.all([
+      arten.includes("papierkorb") ? loadList() : null,
+      arten.includes("support") ? loadWuensche() : null,
+      arten.includes("anfragen") ? loadAnfragen(true) : null,
+    ]);
+  },
+});
 const ladeMedien = medienAnsicht(medienSeite, (rel) => void openPage(rel), uploadImage);
 const ladeVerlauf = verlaufAnsicht(verlaufSeite, {
   frage: ask,

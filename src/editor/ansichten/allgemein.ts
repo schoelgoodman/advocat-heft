@@ -1,6 +1,7 @@
 import { allgemeinAus, pruefeAllgemein, type Allgemein, type AllgemeinFehler } from "../../content/allgemein.ts";
 import { assistentBeimStart, merkeAssistentBeimStart } from "../assistent.ts";
 import { fehlerText, h, toast } from "../dom.ts";
+import { datenLoeschen, type LoeschAnschluss } from "./loeschen.ts";
 import { schrift, setzeSchrift, setzeThema, thema, type Schrift, type Thema } from "../einstellungen.ts";
 
 /**
@@ -82,7 +83,8 @@ function schreibe(daten: Allgemein, pfad: string, wert: string): void {
   (teile.reduce((obj: any, teil) => obj[teil], daten) as Record<string, string>)[letzter] = wert;
 }
 
-export function allgemeinAnsicht(host: HTMLElement): AllgemeinAnsicht {
+export function allgemeinAnsicht(host: HTMLElement, anschluss: LoeschAnschluss): AllgemeinAnsicht {
+  const loeschen = datenLoeschen(anschluss);
   let gespeichert: Allgemein | null = null;
   let daten: Allgemein | null = null;
   let version = "";
@@ -184,6 +186,7 @@ export function allgemeinAnsicht(host: HTMLElement): AllgemeinAnsicht {
           h("small", { class: "feld-hinweis" }, "Ohne Haken wartet er hinter dem Knopf «Assistent» unten rechts. Auf dem Telefon und in schmalen Fenstern ist das immer so."),
         ),
       ),
+      loeschen.element,
     ];
   }
 
@@ -264,7 +267,7 @@ export function allgemeinAnsicht(host: HTMLElement): AllgemeinAnsicht {
   const teilRedaktion = h(
     "div",
     { id: "allgemein-redaktion", role: "tabpanel", "aria-labelledby": "reiter-redaktion", hidden: true },
-    h("p", { class: "leise einleitung" }, "Wie die Redaktion für dich aussieht und sich verhält. Jede Wahl gilt sofort, ohne «Speichern», und nur in diesem Browser: Auf dem Telefon oder an einem anderen Computer wählst du für sich. An der Website ändert sich dadurch nichts."),
+    h("p", { class: "leise einleitung" }, "Wie die Redaktion für dich aussieht und sich verhält. Jede Wahl gilt sofort, ohne «Speichern», und nur in diesem Browser: Auf dem Telefon oder an einem anderen Computer wählst du für sich. An der Website ändert sich dadurch nichts. Zuunterst: «Daten löschen»."),
     h("div", { class: "allgemein-felder" }, ...redaktionGruppen()),
   );
   const reiter = ([["website", "Website", teilWebsite], ["redaktion", "Redaktion", teilRedaktion]] as const).map(([wert, text, teil]) => {
@@ -297,6 +300,8 @@ export function allgemeinAnsicht(host: HTMLElement): AllgemeinAnsicht {
       version = json.version;
       fehler = {};
       zeichne();
+      // Die Zahlen für «Daten löschen» kommen nach; die Angaben warten nicht auf sie.
+      void loeschen.lade();
     },
     ungespeichert: geaendert,
     verwirf() {

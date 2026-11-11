@@ -345,3 +345,25 @@ export function setAnfrageStatus(id: string, status: string): Promise<void> {
   statusQueue = next.catch(() => {});
   return next;
 }
+
+/**
+ * Löscht alle Anfragen und ihren Stand, auch ungelesene. Nur auf Patricks ausdrücklichen Wunsch
+ * («Allgemein», «Redaktion», «Daten löschen»): die eine Stelle, an der die Redaktion Anfragen selbst
+ * löscht. Trifft im selben Augenblick eine neue ein, kann sie stehen bleiben; sie ist dann einfach neu.
+ */
+export function loescheAlleAnfragen(): Promise<number> {
+  const next = statusQueue.then(async () => {
+    const names = await fs.readdir(anfragenDir()).catch(() => [] as string[]);
+    let geloescht = 0;
+    for (const name of names) {
+      if (!name.endsWith(".json") || !ID.test(name.slice(0, -".json".length))) continue;
+      await fs.rm(path.join(anfragenDir(), name), { force: true });
+      geloescht += 1;
+    }
+    await fs.rm(path.join(anfragenDir(), STATUS_FILE), { force: true });
+    if (geloescht) console.log(`Anfragen: alle ${geloescht} auf Wunsch gelöscht.`);
+    return geloescht;
+  });
+  statusQueue = next.catch(() => {});
+  return next;
+}

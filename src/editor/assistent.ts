@@ -941,6 +941,13 @@ export async function mountAssistent(anschluss: Anschluss, bereit: boolean): Pro
     eingabe.focus();
   });
 
+  // «Allgemein», «Redaktion», «Daten löschen» hat den Chat auf dem Server geleert.
+  window.addEventListener("redaktion:chat-geleert", () => {
+    if (laeuft) laeuft.abort();
+    verlauf = [];
+    zeichne();
+  });
+
   if (!bereit) eingabe.disabled = true;
   pruefeSenden();
   const wuensche = (await fetch("/api/wuensche", { cache: "no-store" })

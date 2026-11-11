@@ -299,3 +299,18 @@ export async function wuenscheText(): Promise<string> {
     })
     .join("\n");
 }
+
+/**
+ * Löscht alle Wünsche samt ihren Anhängen, auch offene. Nur auf Patricks ausdrücklichen Wunsch
+ * («Allgemein», «Redaktion», «Daten löschen»). Was schon per Telegram hinausging, bleibt dort.
+ */
+export function loescheWuensche(): Promise<number> {
+  return aendere(async (liste) => {
+    const anzahl = liste.length;
+    for (const anhang of liste.flatMap((w) => w.anhaenge ?? [])) {
+      if (ANHANG_ID.test(anhang.id)) await fs.rm(path.join(anhangOrdner(), anhang.id), { force: true });
+    }
+    liste.length = 0;
+    return anzahl;
+  });
+}

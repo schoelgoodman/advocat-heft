@@ -85,11 +85,21 @@ export async function logFile(rel: string): Promise<Revision[]> {
 /** Ab so vielen Seiten in einer Fassung ist es eine Umstellung (Übernahme, Felder), keine Änderung am Text. */
 const SEITEN_EINER_UMSTELLUNG = 5;
 
-/** Aus `git log --format=%x1e%as --name-only`, die neueste Fassung zuerst: der letzte Tag je Seite. */
+/**
+ * Die Tage der letzten Änderung, gemerkt, bevor der Verlauf geleert wurde. Ohne sie gälte danach
+ * jede Seite als heute geändert, und die Sitemap meldete Google eine ganz neue Website.
+ */
+export const AENDERUNGEN_DATEI = "aenderungen.json";
+
+/**
+ * Aus `git log --format=%x1e%as --name-only`, die neueste Fassung zuerst: der letzte Tag je Seite.
+ * Die Fassung «Verlauf geleert» (sie trägt als einzige die gemerkten Tage) ist keine Änderung am Text.
+ */
 export function letzteTage(log: string): Map<string, string> {
   const tage = new Map<string, string>();
   for (const eintrag of log.split("\x1e")) {
     const [tag = "", ...zeilen] = eintrag.split("\n").map((zeile) => zeile.trim()).filter(Boolean);
+    if (zeilen.includes(AENDERUNGEN_DATEI)) continue;
     const seiten = zeilen.filter((zeile) => zeile.endsWith(".md"));
     if (seiten.length > SEITEN_EINER_UMSTELLUNG) continue;
     for (const seite of seiten) if (!tage.has(seite)) tage.set(seite, tag);
@@ -103,13 +113,58 @@ export function letzteTage(log: string): Map<string, string> {
  * als heute (die Fassung kommt erst nach 20 Sekunden). Nur lesen: Die Seite sieht den Inhalt read-only.
  */
 export async function letzteAenderungen(heute = new Date().toISOString().slice(0, 10)): Promise<Map<string, string>> {
-  const tage = letzteTage(await git().raw(["log", "--format=%x1e%as", "--name-only"]));
+  const tage = await tageAusFassungen();
   const stand = await git().raw(["--no-optional-locks", "status", "--porcelain", "--no-renames", "--", "briefe", "kapitel", "recht"]);
   for (const zeile of stand.split("\n")) {
     const pfad = zeile.slice(3).trim();
     if (pfad.endsWith(".md")) tage.set(pfad, heute);
   }
   return tage;
+}
+
+/** Was die Fassungen sagen, und für Seiten, die seit dem Leeren des Verlaufs unverändert sind, die gemerkten Tage. */
+async function tageAusFassungen(): Promise<Map<string, string>> {
+  const tage = letzteTage(await git().raw(["log", "--format=%x1e%as", "--name-only"]));
+  const gemerkt = await fs.readFile(path.join(contentDir(), AENDERUNGEN_DATEI), "utf8").then(
+    (raw) => JSON.parse(raw) as Record<string, unknown>,
+    () => ({}) as Record<string, unknown>,
+  );
+  for (const [seite, tag] of Object.entries(gemerkt)) {
+    if (!tage.has(seite) && typeof tag === "string" && /^\d{4}-\d\d-\d\d$/.test(tag)) tage.set(seite, tag);
+  }
+  return tage;
+}
+
+/** Wie viele Fassungen der Verlauf hat. Ohne Inhalts-Git oder ohne erste Fassung: keine. */
+export async function zaehleFassungen(): Promise<number> {
+  await ensureContentGit();
+  return git().raw(["rev-list", "--count", "HEAD"]).then((zahl) => Number(zahl.trim()) || 0, () => 0);
+}
+
+/**
+ * Leert den Verlauf endgültig: Der heutige Stand wird zur einzigen Fassung, alle früheren sind danach
+ * auch auf der Platte weg (kein Zurückholen, auch nicht von Hand mit git). Die Dateien selbst bleiben,
+ * wie sie sind. Vorher die Tage der letzten Änderung merken, die Sitemap braucht sie weiter.
+ * Gibt zurück, wie viele Fassungen es waren.
+ */
+export function leereVerlauf(): Promise<number> {
+  return nacheinander(async () => {
+    const vorher = await zaehleFassungen();
+    if (vorher === 0) return 0;
+    const repo = git();
+    const tage = await tageAusFassungen();
+    const sortiert = Object.fromEntries([...tage].sort(([a], [b]) => a.localeCompare(b)));
+    await schreibeAtomar(path.join(contentDir(), AENDERUNGEN_DATEI), `${JSON.stringify(sortiert, null, 2)}\n`);
+    await commitNow("Tage der letzten Änderung gemerkt", [AENDERUNGEN_DATEI]);
+    // Eine neue Fassung ohne Vorgänger mit genau dem Stand der letzten. Index und Dateien bleiben unberührt.
+    const neu = (await repo.raw(["commit-tree", "HEAD^{tree}", "-m", "Verlauf geleert"])).trim();
+    if (!/^[0-9a-f]{40,64}$/.test(neu)) throw new Error("Der Verlauf liess sich nicht leeren.");
+    await repo.raw(["update-ref", "HEAD", neu]);
+    // Erst jetzt sind die alten Fassungen wirklich weg, nicht nur unsichtbar.
+    await repo.raw(["reflog", "expire", "--expire=now", "--all"]);
+    await repo.raw(["gc", "--prune=now", "--quiet"]);
+    return vorher;
+  });
 }
 
 export async function showFile(rel: string, rev: string): Promise<string> {

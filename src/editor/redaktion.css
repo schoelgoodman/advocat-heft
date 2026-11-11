@@ -1270,6 +1270,12 @@ dialog.kamera video { display: block; width: 100%; max-height: 60vh; margin: 0 0
 .wahl-knoepfe button { border: 0; border-radius: 999px; padding: 0.35rem 0.95rem; background: transparent; color: var(--quiet); font: inherit; font-size: 0.9rem; cursor: pointer; }
 .wahl-knoepfe button:hover { color: var(--ink); background: var(--hover); }
 .wahl-knoepfe button:is([aria-pressed="true"], [aria-selected="true"]) { background: var(--olive); color: var(--paper); }
+/* «Daten löschen» unter Allgemein, Redaktion: je Zeile, was weg ist, und rechts der Knopf. */
+.loesch-zeile { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.6rem 1.2rem; padding-top: 0.9rem; border-top: 1px solid var(--line); }
+.loesch-zeile > div { display: grid; gap: 0.2rem; flex: 1 1 16rem; min-width: 0; }
+.loesch-stand { font-weight: 600; }
+dialog.loesch-bestaetigung input { display: block; width: 100%; box-sizing: border-box; margin: 0 0 1.4rem; padding: 0.55rem 0.7rem; border: 1px solid var(--rand); border-radius: var(--rund-klein); background: var(--weiss); color: var(--ink); font: inherit; }
+dialog.loesch-bestaetigung input:focus { outline: none; border-color: var(--olive); box-shadow: 0 0 0 3px var(--olive-ring); }
 /* «Website» und «Redaktion» unter Allgemein: zwei Teile einer Seite. */
 .wahl-knoepfe.reiter { margin: 0 0 1.4rem; }
 .wahl-knoepfe.reiter button { padding: 0.45rem 1.3rem; font-size: 0.95rem; }

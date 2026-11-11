@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
-import { erinnereAnOffene, meldeNachtraeglich } from "./anfrage.ts";
+import { erinnereAnOffene, listAnfragen, loescheAlleAnfragen, meldeNachtraeglich } from "./anfrage.ts";
 
 let ordner = "";
 
@@ -136,4 +136,15 @@ test("Erinnerung: scheitert Telegram, kommt sie beim nächsten Versuch", async (
   await lege(A, "2026-11-02T08:00:00Z", "gesendet");
   assert.equal(await erinnereAnOffene(MITTWOCH, bote("fehler").senden), false);
   assert.equal(await erinnereAnOffene(MITTWOCH, bote().senden), true);
+});
+
+test("Alle löschen: Anfragen und ihr Stand sind weg, auch ungelesene; anderes im Ordner bleibt", async () => {
+  await lege(A, "2026-11-02T08:00:00Z", "gesendet");
+  await lege(B, "2026-11-02T09:00:00Z", "gesendet");
+  await stand({ [A]: "erledigt" });
+  await fs.writeFile(path.join(ordner, "_erinnerung.json"), "{}");
+  assert.equal(await loescheAlleAnfragen(), 2);
+  assert.deepEqual(await listAnfragen(), []);
+  assert.deepEqual(await fs.readdir(ordner), ["_erinnerung.json"]);
+  assert.equal(await loescheAlleAnfragen(), 0);
 });
