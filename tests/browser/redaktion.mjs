@@ -105,6 +105,34 @@ await p.click("#papierkorb-gruppe > summary"); await sleep(500);
 ok("Papierkorb: Übersicht mit drei Kacheln und einer Karte je Eintrag", await p.evaluate(()=>document.querySelectorAll("#papierkorb-kacheln .kachel").length===3&&document.querySelectorAll("#papierkorb-karten li").length===document.querySelectorAll("#papierkorb .eintrag").length&&location.hash==="#papierkorb"));
 await p.screenshot({path:`${shots}/papierkorb.png`});
 await p.click("#wuensche-gruppe > summary"); await sleep(500);
+// Support mit Anhängen: ein Bildschirmfoto und ein PDF anhängen, eines wieder entfernen, senden.
+{
+  const png=path.join(arbeit,"bildschirmfoto.png"); fs.writeFileSync(png,Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEUlEQVQImWPYEiqHFTEMLQkA9uxJwaTKvQ0AAAAASUVORK5CYII=","base64"));
+  const pdf=path.join(arbeit,"beleg.pdf"); fs.writeFileSync(pdf,"%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n");
+  const txt=path.join(arbeit,"notiz.txt"); fs.writeFileSync(txt,"kein Bild");
+  const wahl=await p.$("#wunsch-datei-input");
+  await wahl.uploadFile(png,pdf,txt); await sleep(400);
+  ok("Support: Bild und PDF hängen an, anderes nicht", await p.evaluate(()=>document.querySelectorAll("#wunsch-anhaenge li").length===2&&!!document.querySelector("#wunsch-anhaenge img")&&/weder ein Bild noch ein PDF/.test(document.querySelector("#wunsch-meldung").textContent)));
+  await wahl.uploadFile(pdf); await sleep(300);
+  await p.click("#wunsch-anhaenge li:last-child button.weg"); await sleep(300);
+  ok("Support: ein Anhang lässt sich vor dem Senden entfernen", await p.$$eval("#wunsch-anhaenge li",l=>l.length)===2);
+  await p.screenshot({path:`${shots}/support-anhaenge.png`});
+  await p.click("#wunsch-senden"); await sleep(300);
+  ok("Support: Anhänge allein reichen nicht, der Text fehlt", await p.$eval("#wunsch-meldung",e=>/dazuschreiben/.test(e.textContent)));
+  await p.type("#wunsch-text","Der Knopf «Speichern» fehlt, siehe Bildschirmfoto.");
+  await p.click("#wunsch-senden");
+  await p.waitForFunction(()=>/Gespeichert|Gesendet/.test(document.querySelector("#wunsch-meldung").textContent),{timeout:15000}); await sleep(600);
+  ok("Support: gesendet, Formular ist wieder leer", await p.evaluate(()=>document.querySelector("#wunsch-text").value===""&&document.querySelector("#wunsch-anhaenge").hidden));
+  ok("Support: die Karte zeigt Bild und PDF zum Öffnen", await p.evaluate(async()=>{
+    const links=[...document.querySelectorAll("#wuensche-karten li:first-child .anhaenge a")];
+    const bild=links[0]?.querySelector("img"); if(links.length!==2||!bild) return false;
+    await bild.decode().catch(()=>{});
+    const antwort=await fetch(links[1].href);
+    return bild.naturalWidth===8&&antwort.ok&&antwort.headers.get("content-type")==="application/pdf";
+  }));
+  ok("Support: Anhänge liegen neben den Wünschen, nicht in den Medien", fs.readdirSync(path.join(arbeit,"chat","wuensche-anhaenge")).length===2&&!fs.readdirSync(path.join(content,"media")).some(n=>/bildschirmfoto|beleg/.test(n)));
+  await p.screenshot({path:`${shots}/support-karte.png`});
+}
 await p.screenshot({path:`${shots}/support-gruppe.png`});
 await p.click("#medien-link"); await sleep(500);
 await p.screenshot({path:`${shots}/verwaltung.png`});

@@ -38,7 +38,7 @@ import { leseStatus, schreibeStatus } from "./status.ts";
 import { importWord } from "./word.ts";
 import { seitenCheck, websiteCheck } from "./pruefung.ts";
 import { assistentBereit, clearVerlauf, handleChat, readVerlauf } from "./chat.ts";
-import { aendereWunsch, listWuensche, neuerWunsch } from "./wuensche.ts";
+import { aendereWunsch, leseAnhang, listWuensche, neuerWunsch, speichereAnhang } from "./wuensche.ts";
 import { fremdeHerkunft, kanonischerHost, ohneEndSchraegstrich, schluesselPasst } from "./zugang.ts";
 
 // Lokal stehen Schlüssel wie XAI_API_KEY in .env (gitignoriert). Auf Neo setzt sie der Container.
@@ -742,6 +742,27 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
 
   if (req.method === "POST" && url.pathname === "/api/wuensche") {
     sendJson(res, 200, await neuerWunsch(JSON.parse((await readBody(req)).toString("utf8"))));
+    return;
+  }
+
+  // Ein Anhang zu einem Wunsch: erst hochladen, dann nennt ihn der Wunsch beim Senden.
+  if (req.method === "POST" && url.pathname === "/api/wuensche/anhang") {
+    const nameHeader = req.headers["x-filename"];
+    const name = dateiname((Array.isArray(nameHeader) ? nameHeader[0] : nameHeader) ?? "");
+    sendJson(res, 200, await speichereAnhang(await readBody(req), name));
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/wuensche/anhang") {
+    const anhang = await leseAnhang(url.searchParams.get("id") ?? "");
+    res.writeHead(200, {
+      "content-type": anhang.typ,
+      "content-length": anhang.daten.length,
+      // Ein HEIC zeigt kaum ein Browser: lieber herunterladen.
+      "content-disposition": `${anhang.typ === "image/heic" ? "attachment" : "inline"}; filename*=UTF-8''${encodeURIComponent(anhang.name)}`,
+      "cache-control": "private, max-age=86400",
+    });
+    res.end(anhang.daten);
     return;
   }
 

@@ -120,6 +120,14 @@ interface Wunsch {
   status: "offen" | "erledigt";
   erledigtAm?: string;
   telegram: "gesendet" | "fehler" | "aus";
+  anhaenge?: Anhang[];
+}
+/** Eine Datei zu einem Wunsch, wie sie der Server nach dem Hochladen nennt. */
+interface Anhang {
+  id: string;
+  name: string;
+  typ: string;
+  groesse: number;
 }
 let alleWuensche: Wunsch[] = [];
 let gewaehlt: string | null = null;
@@ -264,7 +272,15 @@ root.innerHTML = `
             </select>
           </label>
           <textarea id="wunsch-text" rows="4" placeholder="Was fehlt oder soll anders sein, und wozu?"></textarea>
-          <p class="leise telegram-hinweis">Bitte keine vertraulichen Angaben wie Kundennamen, Beträge oder Vertragsdetails: Support-Nachrichten gehen über Telegram, also über Server im Ausland.</p>
+          <ul class="anhaenge" id="wunsch-anhaenge" aria-label="Anhänge" hidden></ul>
+          <div class="anhang-knoepfe">
+            <button type="button" id="wunsch-foto">Foto aufnehmen</button>
+            <button type="button" id="wunsch-datei">Datei anhängen</button>
+            <span class="leise">Bildschirmfoto, Foto oder PDF. Höchstens 5 Dateien, je 10 MB.</span>
+            <input type="file" id="wunsch-foto-input" accept="image/*" capture="environment" hidden>
+            <input type="file" id="wunsch-datei-input" accept="image/*,application/pdf" multiple hidden>
+          </div>
+          <p class="leise telegram-hinweis">Bitte keine vertraulichen Angaben wie Kundennamen, Beträge oder Vertragsdetails, auch nicht auf Bildschirmfotos und Fotos: Support-Nachrichten gehen über Telegram, also über Server im Ausland.</p>
           <div class="aktionen">
             <button type="submit" class="haupt" id="wunsch-senden">An Support senden</button>
             <p class="leise" id="wunsch-meldung" aria-live="polite"></p>
@@ -304,6 +320,14 @@ root.innerHTML = `
       </form>
     </main>
   </div>
+  <dialog id="kamera" class="kamera">
+    <h2>Foto aufnehmen</h2>
+    <video id="kamera-bild" autoplay playsinline muted></video>
+    <div class="aktionen">
+      <button type="button" id="kamera-zu">Abbrechen</button>
+      <button type="button" id="kamera-los" class="haupt">Aufnehmen</button>
+    </div>
+  </dialog>
   <dialog id="frage">
     <form method="dialog">
       <h2 id="frage-titel"></h2>
@@ -364,6 +388,11 @@ const wunschForm = root.querySelector<HTMLFormElement>("#wunsch-form")!;
 const wunschArt = root.querySelector<HTMLSelectElement>("#wunsch-art")!;
 const wunschText = root.querySelector<HTMLTextAreaElement>("#wunsch-text")!;
 const wunschMeldung = root.querySelector<HTMLElement>("#wunsch-meldung")!;
+const wunschAnhaenge = root.querySelector<HTMLUListElement>("#wunsch-anhaenge")!;
+const wunschFotoInput = root.querySelector<HTMLInputElement>("#wunsch-foto-input")!;
+const wunschDateiInput = root.querySelector<HTMLInputElement>("#wunsch-datei-input")!;
+const kamera = root.querySelector<HTMLDialogElement>("#kamera")!;
+const kameraBild = root.querySelector<HTMLVideoElement>("#kamera-bild")!;
 const anfragenText = root.querySelector<HTMLElement>("#anfragen-text")!;
 const anfragenFrist = root.querySelector<HTMLElement>("#anfragen-frist")!;
 const anfragenKacheln = root.querySelector<HTMLElement>("#anfragen-kacheln")!;
@@ -2651,6 +2680,169 @@ function wunschHtml(text: string): string {
     .replace(/\n/g, "<br>");
 }
 
+const MAX_ANHAENGE = 5;
+const MAX_ANHANG = 10 * 1024 * 1024;
+
+/** Eine Datei, die Patrick an die Nachricht gehängt hat. Hochgeladen wird sie erst beim Senden. */
+interface WartenderAnhang {
+  datei: File;
+  /** Die Vorschau für ein Bild, sonst leer. */
+  vorschau: string;
+  /** Schon auf dem Server: Scheitert das Senden danach, lädt ein zweiter Versuch sie nicht nochmals hoch. */
+  oben?: Anhang;
+}
+let wartendeAnhaenge: WartenderAnhang[] = [];
+
+function dateiGroesse(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1).replace(".", ",")} MB`;
+}
+
+function anhangUrl(anhang: Anhang): string {
+  return `/api/wuensche/anhang?id=${encodeURIComponent(anhang.id)}`;
+}
+
+/** Das Zeichen für eine Datei ohne Vorschau: ihre Endung. */
+function dateiZeichen(name: string): HTMLElement {
+  const zeichen = document.createElement("span");
+  zeichen.className = "datei";
+  zeichen.textContent = (name.match(/\.([A-Za-z0-9]{1,5})$/)?.[1] ?? "Datei").toUpperCase();
+  return zeichen;
+}
+
+/** Ein Anhang auf der Karte eines gesendeten Wunsches: Ein Klick öffnet ihn in einem neuen Tab. */
+function anhangAufKarte(anhang: Anhang): HTMLElement {
+  const zeile = document.createElement("li");
+  const link = document.createElement("a");
+  link.href = anhangUrl(anhang);
+  link.target = "_blank";
+  link.rel = "noopener";
+  link.title = `${anhang.name} öffnen`;
+  if (["image/jpeg", "image/png", "image/webp", "image/gif"].includes(anhang.typ)) {
+    const bild = document.createElement("img");
+    bild.src = anhangUrl(anhang);
+    bild.alt = "";
+    bild.loading = "lazy";
+    link.append(bild);
+  } else link.append(dateiZeichen(anhang.name));
+  const name = document.createElement("span");
+  name.className = "name";
+  name.textContent = anhang.name;
+  const groesse = document.createElement("span");
+  groesse.className = "groesse";
+  groesse.textContent = dateiGroesse(anhang.groesse);
+  link.append(name, groesse);
+  zeile.append(link);
+  return zeile;
+}
+
+function renderWartendeAnhaenge(): void {
+  wunschAnhaenge.hidden = wartendeAnhaenge.length === 0;
+  wunschAnhaenge.replaceChildren(
+    ...wartendeAnhaenge.map((anhang) => {
+      const zeile = document.createElement("li");
+      const kasten = document.createElement("div");
+      if (anhang.vorschau) {
+        const bild = document.createElement("img");
+        bild.alt = "";
+        // Ein HEIC etwa zeigt nicht jeder Browser: dann steht die Endung da.
+        bild.addEventListener("error", () => bild.replaceWith(dateiZeichen(anhang.datei.name)), { once: true });
+        bild.src = anhang.vorschau;
+        kasten.append(bild);
+      } else kasten.append(dateiZeichen(anhang.datei.name));
+      const name = document.createElement("span");
+      name.className = "name";
+      name.textContent = anhang.datei.name;
+      const groesse = document.createElement("span");
+      groesse.className = "groesse";
+      groesse.textContent = dateiGroesse(anhang.datei.size);
+      kasten.append(name, groesse);
+      const weg = button("×", "leise weg", () => {
+        if (anhang.vorschau) URL.revokeObjectURL(anhang.vorschau);
+        wartendeAnhaenge = wartendeAnhaenge.filter((a) => a !== anhang);
+        wunschMeldung.textContent = "";
+        renderWartendeAnhaenge();
+      });
+      weg.setAttribute("aria-label", `${anhang.datei.name} entfernen`);
+      weg.title = "Entfernen";
+      zeile.append(kasten, weg);
+      return zeile;
+    }),
+  );
+}
+
+/** Hängt Dateien an die Nachricht. Was nicht passt, bleibt draussen, und die Meldung sagt warum. */
+function haengeAn(dateien: Iterable<File>): void {
+  const abgelehnt: string[] = [];
+  for (const datei of dateien) {
+    const bild = datei.type.startsWith("image/") || /\.(heic|heif)$/i.test(datei.name);
+    const pdf = datei.type === "application/pdf" || /\.pdf$/i.test(datei.name);
+    if (!bild && !pdf) abgelehnt.push(`«${datei.name}» ist weder ein Bild noch ein PDF.`);
+    else if (datei.size > MAX_ANHANG) abgelehnt.push(`«${datei.name}» ist zu gross (höchstens 10 MB).`);
+    else if (wartendeAnhaenge.length >= MAX_ANHAENGE) {
+      abgelehnt.push(`Höchstens ${MAX_ANHAENGE} Dateien pro Nachricht.`);
+      break;
+    } else wartendeAnhaenge.push({ datei, vorschau: bild ? URL.createObjectURL(datei) : "" });
+  }
+  wunschMeldung.textContent = abgelehnt.join(" ");
+  renderWartendeAnhaenge();
+}
+
+function leereAnhaenge(): void {
+  for (const anhang of wartendeAnhaenge) if (anhang.vorschau) URL.revokeObjectURL(anhang.vorschau);
+  wartendeAnhaenge = [];
+  renderWartendeAnhaenge();
+}
+
+/** Lädt hoch, was noch nicht oben ist. Wirft mit einer Meldung für Patrick. */
+async function ladeAnhaengeHoch(): Promise<Anhang[]> {
+  for (const [i, anhang] of wartendeAnhaenge.entries()) {
+    if (anhang.oben) continue;
+    wunschMeldung.textContent = wartendeAnhaenge.length > 1 ? `Datei ${i + 1} von ${wartendeAnhaenge.length} wird hochgeladen …` : "Datei wird hochgeladen …";
+    const response = await fetch("/api/wuensche/anhang", {
+      method: "POST",
+      headers: { "content-type": "application/octet-stream", "x-filename": encodeURIComponent(anhang.datei.name) },
+      body: anhang.datei,
+    }).catch(() => null);
+    if (!response) throw new Error("Keine Verbindung zum Server.");
+    if (!response.ok) throw new Error(`«${anhang.datei.name}»: ${await errorText(response, "Hochladen ging nicht.")}`);
+    anhang.oben = (await response.json()) as Anhang;
+  }
+  return wartendeAnhaenge.map((anhang) => anhang.oben!);
+}
+
+let kameraStrom: MediaStream | null = null;
+
+/**
+ * «Foto aufnehmen». Auf dem Telefon öffnet der Browser gleich die Kamera. Am Computer zeigt ein
+ * Fenster das Bild der Webcam; gibt es keine oder ist sie nicht erlaubt, bleibt die Dateiauswahl.
+ */
+async function nimmFotoAuf(): Promise<void> {
+  const telefon = window.matchMedia("(pointer: coarse)").matches;
+  if (telefon || !navigator.mediaDevices?.getUserMedia) {
+    wunschFotoInput.click();
+    return;
+  }
+  try {
+    kameraStrom = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } } });
+  } catch (error) {
+    const verboten = error instanceof DOMException && (error.name === "NotAllowedError" || error.name === "SecurityError");
+    wunschMeldung.textContent = verboten
+      ? "Die Kamera ist für diese Seite nicht erlaubt. Im Browser neben der Adresse freigeben oder ein Bild als Datei anhängen."
+      : "Keine Kamera gefunden. Bitte ein Bild als Datei anhängen.";
+    return;
+  }
+  kameraBild.srcObject = kameraStrom;
+  kamera.showModal();
+}
+
+function schliesseKamera(): void {
+  for (const spur of kameraStrom?.getTracks() ?? []) spur.stop();
+  kameraStrom = null;
+  kameraBild.srcObject = null;
+  if (kamera.open) kamera.close();
+}
+
 async function loadWuensche(): Promise<void> {
   const json = (await fetch("/api/wuensche", { cache: "no-store" })
     .then((res) => res.json())
@@ -2751,7 +2943,15 @@ function wunschKarte(wunsch: Wunsch): HTMLElement {
     hinweis.textContent = wunsch.telegram === "aus" ? "Telegram ist nicht eingerichtet." : "Telegram hat nicht geklappt.";
     knoepfe.append(hinweis, button("Nochmals senden", "leise", () => void aendereWunsch(wunsch.id, { aktion: "senden" })));
   }
-  karte.append(kopf, text, knoepfe);
+  karte.append(kopf, text);
+  if (wunsch.anhaenge?.length) {
+    const liste = document.createElement("ul");
+    liste.className = "anhaenge";
+    liste.setAttribute("aria-label", "Anhänge");
+    liste.append(...wunsch.anhaenge.map(anhangAufKarte));
+    karte.append(liste);
+  }
+  karte.append(knoepfe);
   return karte;
 }
 
@@ -2950,20 +3150,82 @@ try {
 } catch {
   wuenscheNeu.hidden = true;
 }
+root.querySelector("#wunsch-foto")!.addEventListener("click", () => void nimmFotoAuf());
+root.querySelector("#wunsch-datei")!.addEventListener("click", () => wunschDateiInput.click());
+for (const input of [wunschFotoInput, wunschDateiInput]) {
+  input.addEventListener("change", () => {
+    haengeAn(input.files ?? []);
+    // Sonst meldet der Browser dieselbe Datei kein zweites Mal.
+    input.value = "";
+  });
+}
+// Ein Bildschirmfoto aus der Zwischenablage (Cmd+V) oder aus dem Finder hineingezogen.
+wunschForm.addEventListener("paste", (event) => {
+  const dateien = [...(event.clipboardData?.files ?? [])];
+  if (!dateien.length) return;
+  event.preventDefault();
+  haengeAn(dateien);
+});
+wunschForm.addEventListener("dragover", (event) => {
+  if (!event.dataTransfer?.types.includes("Files")) return;
+  event.preventDefault();
+  wunschForm.classList.add("zieht");
+});
+wunschForm.addEventListener("dragleave", (event) => {
+  if (!wunschForm.contains(event.relatedTarget as Node | null)) wunschForm.classList.remove("zieht");
+});
+wunschForm.addEventListener("drop", (event) => {
+  wunschForm.classList.remove("zieht");
+  const dateien = [...(event.dataTransfer?.files ?? [])];
+  if (!dateien.length) return;
+  event.preventDefault();
+  haengeAn(dateien);
+});
+root.querySelector("#kamera-zu")!.addEventListener("click", schliesseKamera);
+// Esc schliesst das Fenster selbst. Die Kamera muss trotzdem ausgehen.
+kamera.addEventListener("close", schliesseKamera);
+root.querySelector("#kamera-los")!.addEventListener("click", () => {
+  const breite = kameraBild.videoWidth;
+  const hoehe = kameraBild.videoHeight;
+  if (!breite || !hoehe) return;
+  const flaeche = document.createElement("canvas");
+  flaeche.width = breite;
+  flaeche.height = hoehe;
+  flaeche.getContext("2d")!.drawImage(kameraBild, 0, 0, breite, hoehe);
+  flaeche.toBlob(
+    (blob) => {
+      schliesseKamera();
+      if (!blob) return;
+      const zeit = new Date().toISOString().slice(0, 19).replaceAll(":", "-").replace("T", "-");
+      haengeAn([new File([blob], `foto-${zeit}.jpg`, { type: "image/jpeg" })]);
+    },
+    "image/jpeg",
+    0.9,
+  );
+});
 wunschForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const text = wunschText.value.trim();
   if (!text) {
+    if (wartendeAnhaenge.length) wunschMeldung.textContent = "Bitte in ein, zwei Sätzen dazuschreiben, worum es geht.";
     wunschText.focus();
     return;
   }
   const knopf = wunschForm.querySelector<HTMLButtonElement>('button[type="submit"]')!;
   knopf.disabled = true;
+  let anhaenge: Anhang[];
+  try {
+    anhaenge = await ladeAnhaengeHoch();
+  } catch (error) {
+    knopf.disabled = false;
+    wunschMeldung.textContent = error instanceof Error ? error.message : "Hochladen ging nicht.";
+    return;
+  }
   wunschMeldung.textContent = "Wird gesendet …";
   const response = await fetch("/api/wuensche", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ art: wunschArt.value, text, seite: "", ...(wunschArt.value === "fehler" ? { geraet: geraet() } : {}) }),
+    body: JSON.stringify({ art: wunschArt.value, text, seite: "", anhaenge, ...(wunschArt.value === "fehler" ? { geraet: geraet() } : {}) }),
   }).catch(() => null);
   knopf.disabled = false;
   if (!response?.ok) {
@@ -2972,6 +3234,7 @@ wunschForm.addEventListener("submit", async (event) => {
   }
   const wunsch = (await response.json()) as Wunsch;
   wunschText.value = "";
+  leereAnhaenge();
   wunschMeldung.textContent =
     wunsch.telegram === "gesendet"
       ? "Gesendet ✓"

@@ -1074,6 +1074,45 @@ input.suche {
 }
 .neuer-wunsch textarea:focus { outline: none; border-color: var(--olive); box-shadow: 0 0 0 3px var(--olive-ring); }
 .neuer-wunsch .aktionen p { margin: 0; }
+.neuer-wunsch.zieht { outline: 2px dashed var(--olive); outline-offset: 3px; }
+.anhang-knoepfe { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.6rem; }
+.anhang-knoepfe .leise { font-size: 0.8rem; }
+/* Anhänge: im Formular zum Entfernen, auf der Karte zum Öffnen. */
+.anhaenge { list-style: none; display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 0; padding: 0; }
+#wuensche-karten .anhaenge { margin: 0 0 1rem; }
+#wuensche-karten .anhaenge li, .neuer-wunsch .anhaenge li {
+  position: relative;
+  width: 7.5rem;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--rand);
+  border-radius: var(--rund-klein);
+  background: var(--flaeche);
+  box-shadow: none;
+  overflow: hidden;
+}
+.anhaenge li > a, .anhaenge li > div { display: grid; color: inherit; text-decoration: none; }
+.anhaenge li > a:hover .name { text-decoration: underline; }
+.anhaenge img, .anhaenge .datei { width: 100%; height: 5rem; object-fit: cover; background: var(--weiss); border-bottom: 1px solid var(--rand); }
+.anhaenge .datei { display: grid; place-items: center; font-size: 0.8rem; letter-spacing: 0.06em; color: var(--quiet); }
+.anhaenge .name { padding: 0.3rem 0.45rem 0; font-size: 0.75rem; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.anhaenge .groesse { padding: 0 0.45rem 0.35rem; font-size: 0.7rem; color: var(--quiet); }
+.anhaenge button.weg {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  width: 1.6rem;
+  height: 1.6rem;
+  padding: 0;
+  line-height: 1;
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--rand);
+}
+.anhaenge button.weg:hover { border-color: var(--ink); background: var(--paper); }
+dialog.kamera { width: min(40rem, calc(100vw - 2rem)); }
+dialog.kamera video { display: block; width: 100%; max-height: 60vh; margin: 0 0 1.2rem; border-radius: var(--rund-klein); background: #000; }
 #wuensche-karten { list-style: none; padding: 0; margin: 1.2rem 0 3rem; }
 #wuensche-karten li { padding: 1.1rem 1.4rem; margin-bottom: 0.9rem; }
 #wuensche-karten li[data-status="erledigt"] { opacity: 0.8; }
