@@ -212,6 +212,7 @@ root.innerHTML = `
       <section id="check-seite" hidden>
         <h1>Website-Check</h1>
         <p class="leise einleitung">Was Google von den Seiten liest: ein Thema, einen Einstiegsabsatz und Bilder mit Beschreibung. Die wichtigsten Seiten zuerst. Seite öffnen und im Assistenten «Seite prüfen» klicken, er schlägt die Verbesserung vor.</p>
+        <p class="leise einleitung">Geprüft werden die Seiten, die online sind. Entwürfe zeigen ihre Hinweise beim Bearbeiten und nochmals vor dem Veröffentlichen.</p>
         <p class="check-stand" id="check-stand" aria-live="polite">Wird geprüft …</p>
         <ol class="aenderungen" id="check-liste"></ol>
       </section>
@@ -1342,6 +1343,14 @@ async function loadSeitenCheck(): Promise<void> {
   renderSeitenCheck(rel, json.probleme);
 }
 
+/** Was der gespeicherten Seite für Google fehlt, in Kurzform. Antwortet der Server nicht, hält das nichts auf. */
+async function offeneHinweise(rel: string): Promise<string[]> {
+  const json = (await fetch(`/api/check?rel=${encodeURIComponent(rel)}`, { cache: "no-store" })
+    .then((res) => (res.ok ? res.json() : null))
+    .catch(() => null)) as { probleme?: Problem[] } | null;
+  return (json?.probleme ?? []).map((problem) => problem.text);
+}
+
 /** Nach dem Speichern nachsehen, ob ein Hinweis erledigt ist. Nicht bei jedem Tastendruck. */
 function spaeterSeitenCheck(): void {
   if (hinweiseTimer != null) window.clearTimeout(hinweiseTimer);
@@ -2110,14 +2119,21 @@ async function publish(rel = current?.rel, ohneFrage = false): Promise<boolean> 
     await ask({ titel: "Noch ohne Thema", text: "Bitte den Newsletter öffnen und zuerst ein Thema eingeben.", ja: "OK" });
     return false;
   }
-  const ja = ohneFrage || await ask({
-    titel: "Jetzt veröffentlichen?",
-    text: isBrief(page)
-      ? `„${page.titel}“ erscheint sofort auf der Website und auf der Startseite.`
-      : `„${page.titel}“ erscheint sofort auf der Website${page.menue ? " und im Menü" : ""}.`,
-    ja: "Veröffentlichen",
-    nein: "Noch nicht",
-  });
+  // Solange die Seite ein Entwurf ist, sieht Google ihre Lücken nicht. Ab jetzt schon: vorher sagen.
+  const hinweise = ohneFrage ? [] : await offeneHinweise(rel);
+  const erscheint = isBrief(page)
+    ? `„${page.titel}“ erscheint sofort auf der Website und auf der Startseite.`
+    : `„${page.titel}“ erscheint sofort auf der Website${page.menue ? " und im Menü" : ""}.`;
+  const ja = ohneFrage || await ask(
+    hinweise.length
+      ? {
+          titel: hinweise.length === 1 ? "Mit einem Hinweis für Google veröffentlichen?" : `Mit ${hinweise.length} Hinweisen für Google veröffentlichen?`,
+          text: `Noch offen: ${hinweise.join(" · ")}. ${erscheint} Die Hinweise stehen danach im Website-Check.`,
+          ja: "Trotzdem veröffentlichen",
+          nein: "Noch nicht",
+        }
+      : { titel: "Jetzt veröffentlichen?", text: erscheint, ja: "Veröffentlichen", nein: "Noch nicht" },
+  );
   if (!ja) return false;
   if (offen) setSaved("Veröffentlicht …", "busy");
   const response = await post("/api/publish", { rel });
